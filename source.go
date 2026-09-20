@@ -50,7 +50,7 @@ type server struct {
 	defaultFile   string
 	watchInterval float64
 	assets        assetURLs
-	offline       bool
+	online        bool
 }
 
 // unescapePath decodes the percent escapes in a URL path, leaving it unchanged when it holds

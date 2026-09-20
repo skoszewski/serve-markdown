@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-// assetRoute is the URL prefix the embedded libraries are served under in offline mode.
+// assetRoute is the URL prefix the embedded libraries are served under.
 const assetRoute = "/" + routeNamespace + "/assets/"
 
 //go:embed assets/vendor

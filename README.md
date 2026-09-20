@@ -45,7 +45,7 @@ Flags must precede the path.
 | `--listen-address` | `127.0.0.1` | Address for the local web server to listen on |
 | `--port` | `8000` | Port for the local web server |
 | `--watch-interval` | `1`, or `15` for `ado://` | Seconds between the browser page's checks for changes |
-| `--offline` | off | Serve the browser-side libraries from inside the binary rather than from their CDNs |
+| `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
 
 The path names what to serve:
@@ -113,9 +113,11 @@ sanitises it with [DOMPurify](https://github.com/cure53/DOMPurify), highlights c
 [github-markdown-css](https://github.com/sindresorhus/github-markdown-css), following the
 browser's light or dark preference.
 
-These are loaded from their CDNs. With `--offline` they are served from copies built into the
-binary instead, and the page then references no external host. The copies and their licences
-are listed in [assets/vendor/LICENSES.md](assets/vendor/LICENSES.md).
+They are served from copies built into the binary, so the page references no external host and
+the server needs no network of its own. The copies and their licences are listed in
+[assets/vendor/LICENSES.md](assets/vendor/LICENSES.md).
+
+`--online` loads the same builds from their CDNs instead, leaving the embedded copies unused.
 
 ## Licence
 

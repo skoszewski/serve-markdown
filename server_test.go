@@ -26,7 +26,7 @@ func get(t *testing.T, handler *server, target string) (*http.Response, string) 
 
 func TestServeRootReturnsThePageShell(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	response, body := get(t, handler, "/")
 	if response.StatusCode != http.StatusOK {
@@ -35,7 +35,7 @@ func TestServeRootReturnsThePageShell(t *testing.T) {
 	if contentType := response.Header.Get("Content-Type"); contentType != "text/html; charset=utf-8" {
 		t.Errorf("Content-Type = %q", contentType)
 	}
-	for _, want := range []string{"<title>README.md</title>", cdnAssets.markedJS, `fetch("/content?path=%2F")`, "setInterval(poll, 1000)"} {
+	for _, want := range []string{"<title>README.md</title>", embeddedAssets.markedJS, `fetch("/content?path=%2F")`, "setInterval(poll, 1000)"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page does not hold %q", want)
 		}
@@ -44,7 +44,7 @@ func TestServeRootReturnsThePageShell(t *testing.T) {
 
 func TestServeContentReturnsTheDocument(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	response, body := get(t, handler, "/content?path=/docs/guide.md")
 	if response.StatusCode != http.StatusOK {
@@ -74,7 +74,7 @@ func TestServeContentReturnsTheDocument(t *testing.T) {
 
 func TestServeContentReportsAMissingDocument(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	_, body := get(t, handler, "/content?path=/nowhere.md")
 	var payload contentPayload
@@ -91,7 +91,7 @@ func TestServeContentReportsAMissingDocument(t *testing.T) {
 
 func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 	writeFile(t, filepath.Join(root, "styled.md"), "---\ncss: 'p { margin: 0; }'\n---\n# Styled\n")
 
 	_, body := get(t, handler, "/content?path=/styled.md")
@@ -109,7 +109,7 @@ func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 
 func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	response, body := get(t, handler, "/nowhere.md")
 	if response.StatusCode != http.StatusNotFound {
@@ -126,15 +126,15 @@ func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 	}
 }
 
-func TestServeOfflineAssets(t *testing.T) {
+func TestServeEmbeddedAssetsByDefault(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
-		assets: offlineAssets, offline: true}
+		assets: embeddedAssets}
 
 	_, page := get(t, handler, "/")
 	for _, host := range []string{"cdn.jsdelivr.net", "cdnjs.cloudflare.com", "http://", "https://"} {
 		if strings.Contains(page, host) {
-			t.Errorf("the offline page references %q", host)
+			t.Errorf("the default page references %q", host)
 		}
 	}
 
@@ -150,10 +150,20 @@ func TestServeOfflineAssets(t *testing.T) {
 	}
 }
 
-func TestServeAssetsOnlyInOfflineMode(t *testing.T) {
+func TestServeOnlineReferencesTheCDNs(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+		assets: cdnAssets, online: true}
 
+	_, page := get(t, handler, "/")
+	for _, want := range []string{cdnAssets.markedJS, cdnAssets.domPurifyJS, cdnAssets.highlightJS,
+		cdnAssets.markdownCSS, cdnAssets.highlightCSSLite, cdnAssets.highlightCSSDark} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the online page does not reference %q", want)
+		}
+	}
+
+	// The embedded copies are not served once the page loads them from the CDNs.
 	response, _ := get(t, handler, assetRoute+"marked.min.js")
 	if response.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", response.StatusCode)
@@ -162,7 +172,7 @@ func TestServeAssetsOnlyInOfflineMode(t *testing.T) {
 
 func TestServeDirSourceListsTheDirectory(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	response, page := get(t, handler, "/docs")
 	if response.StatusCode != http.StatusOK {
@@ -184,7 +194,7 @@ func TestServeDirSourceListsTheDirectory(t *testing.T) {
 
 func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1, assets: cdnAssets}
+	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	_, body := get(t, handler, "/content?path=/_/file/docs/guide.md")
 	var payload contentPayload
@@ -199,7 +209,7 @@ func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 func TestServeRejectsTraversal(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindFile}, rootDir: filepath.Join(root, "docs"),
-		watchInterval: 1, assets: cdnAssets}
+		watchInterval: 1, assets: embeddedAssets}
 
 	response, _ := get(t, handler, "/../notes.md")
 	if response.StatusCode != http.StatusNotFound {

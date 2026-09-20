@@ -66,8 +66,8 @@ func run() error {
 		"Seconds between checks for changes to the file, polled by the browser page "+
 			"(default %g, or %g for an %s URL, which is read over the network)",
 		defaultWatchInterval, defaultADOWatchSecond, adoScheme))
-	offline := flag.Bool("offline", false,
-		"Serve the Markdown and highlighting libraries from inside this binary instead of from their CDNs")
+	online := flag.Bool("online", false,
+		"Load the Markdown and highlighting libraries from their CDNs instead of from inside this binary")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 
 	flag.Usage = func() {
@@ -85,9 +85,9 @@ func run() error {
 		return nil
 	}
 
-	handler := &server{assets: cdnAssets, offline: *offline}
-	if *offline {
-		handler.assets = offlineAssets
+	handler := &server{assets: embeddedAssets, online: *online}
+	if *online {
+		handler.assets = cdnAssets
 	}
 
 	sourceDescription, err := handler.resolveStartupSource(flag.Arg(0))
@@ -199,7 +199,7 @@ func (s *server) serve(listener net.Listener) error {
 // ServeHTTP serves a page shell for every route, and the document that route addresses at
 // /content.
 func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	if s.offline && strings.HasPrefix(request.URL.Path, assetRoute) {
+	if !s.online && strings.HasPrefix(request.URL.Path, assetRoute) {
 		vendorHandler().ServeHTTP(writer, request)
 		return
 	}

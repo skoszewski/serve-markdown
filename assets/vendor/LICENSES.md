@@ -1,8 +1,8 @@
 # Vendored libraries
 
 These files are the browser-side libraries the page shell loads. They are served from inside
-the binary when `--offline` is given, and are otherwise unused: the page then loads the same
-builds from their CDNs. Each is redistributed under its own licence, reproduced upstream.
+the binary, and are unused when `--online` is given: the page then loads the same builds from
+their CDNs. Each is redistributed under its own licence, reproduced upstream.
 
 | File | Library | Version | Licence |
 |---|---|---|---|

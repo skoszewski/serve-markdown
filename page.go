@@ -15,7 +15,7 @@ type assetURLs struct {
 	highlightJS      string
 }
 
-// cdnAssets loads the libraries from their public CDNs.
+// cdnAssets loads the libraries from their public CDNs, as --online asks for.
 var cdnAssets = assetURLs{
 	markdownCSS:      "https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown.min.css",
 	highlightCSSLite: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css",
@@ -25,8 +25,8 @@ var cdnAssets = assetURLs{
 	highlightJS:      "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js",
 }
 
-// offlineAssets loads the same libraries from the copies embedded in the binary.
-var offlineAssets = assetURLs{
+// embeddedAssets loads the same libraries from the copies built into the binary.
+var embeddedAssets = assetURLs{
 	markdownCSS:      assetRoute + "github-markdown.min.css",
 	highlightCSSLite: assetRoute + "github.min.css",
 	highlightCSSDark: assetRoute + "github-dark.min.css",
