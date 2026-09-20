@@ -1,0 +1,5 @@
+/serve-markdown
+/serve-markdown.exe
+/serve-markdown-*
+/dist/
+/tmp/
