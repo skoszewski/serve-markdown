@@ -125,6 +125,33 @@ repositories when nothing else was there to browse. A folder stands for one docu
 the one it is read as, so a folder holding both an `index.md` and a `README.md` is listed once
 rather than twice.
 
+## One file says what the server was told
+
+`config.go` is where the settings are named, defaulted, read and decided between: the flags
+and their help, the defaults each falls back to, the file's keys, and the rule that a flag
+written on the command line stands above the file. It answers with one `configuration`, which
+the rest of the server reads; nothing else opens a file or looks at a flag to find out what to
+do, and no default is written twice.
+
+The seconds between the page's checks are asked of it rather than computed where the server is
+built, since the default depends on the kind of source: `watchInterval(kind)` is the
+configuration's own answer.
+
+## A configuration file is the flags, written down
+
+The file carries one key per flag, named as the flag is, so there is nothing to learn twice
+and nothing to keep in step but the names. A flag taking a settings list is a mapping of those
+settings, or `true` for its own, and each setting is handed to the flag's own reader - a file
+is refused for the same reasons a command line is, with the same words.
+
+The command line stands above the file: a file belongs to a directory and is read by everyone
+who serves it, while a flag belongs to one run. Which flags were written is read from the flag
+package itself rather than by comparing against defaults, so writing a flag's own default
+still counts as having written it.
+
+Unknown keys are refused rather than passed over. A file that quietly ignores `outlyne: true`
+teaches the reader that the setting does not work, and says nothing about why.
+
 ## The version a repository is read at travels with the source
 
 Azure Repos reads an item at a version, defaulting to the repository's branch. `--ado` names

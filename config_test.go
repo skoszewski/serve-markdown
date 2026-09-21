@@ -1,0 +1,207 @@
+package main
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// writeConfig writes a configuration file into directory and returns its path.
+func writeConfig(t *testing.T, directory, name, content string) string {
+	t.Helper()
+	path := filepath.Join(directory, name)
+	writeFile(t, path, content)
+	return path
+}
+
+func TestReadConfig(t *testing.T) {
+	root := documentRoot(t)
+	writeConfig(t, root, configName, "index-only: true\nlist: true\nport: 9000\n"+
+		"outline:\n  style: numbered-hierarchical\n  justify: right\n")
+
+	config, name, err := readConfigFile("", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != filepath.Join(root, configName) {
+		t.Errorf("name = %q, want the file beside the source", name)
+	}
+	if config.IndexOnly == nil || !*config.IndexOnly {
+		t.Errorf("index-only = %v, want true", config.IndexOnly)
+	}
+	if config.Port == nil || *config.Port != 9000 {
+		t.Errorf("port = %v, want 9000", config.Port)
+	}
+	if config.List == nil || !config.List.on || len(config.List.settings) != 0 {
+		t.Errorf("list = %+v, want it drawn with its own settings", config.List)
+	}
+	if config.Outline == nil || config.Outline.settings["justify"] != "right" {
+		t.Errorf("outline = %+v, want the settings the file names", config.Outline)
+	}
+	// A key the file says nothing about leaves the command line to say it.
+	if config.Mermaid != nil || config.ListenAddress != nil {
+		t.Errorf("config = %+v, want nothing where the file is silent", config)
+	}
+}
+
+func TestReadConfigFindsTheFileBesideTheSource(t *testing.T) {
+	root := documentRoot(t)
+	writeConfig(t, root, configName, "mermaid: true\n")
+
+	// A path naming a file is the file's own directory; one naming a directory is itself.
+	for _, path := range []string{root, filepath.Join(root, "README.md")} {
+		t.Run(path, func(t *testing.T) {
+			config, name, err := readConfigFile("", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if name == "" || config.Mermaid == nil || !*config.Mermaid {
+				t.Errorf("config = %+v from %q, want the file beside the source", config, name)
+			}
+		})
+	}
+
+	// A directory holding no file leaves everything to the command line, and says so quietly.
+	empty := filepath.Join(root, "empty")
+	config, name, err := readConfigFile("", empty)
+	if err != nil || name != "" || config.Mermaid != nil {
+		t.Errorf("readConfigFile(%q) = %+v, %q, %v; want nothing at all", empty, config, name, err)
+	}
+
+	// A file named on the command line must be there.
+	if _, _, err := readConfigFile(filepath.Join(root, "nowhere.yaml"), root); err == nil {
+		t.Error("a file that is not there was read")
+	}
+}
+
+func TestReadConfigRefusesWhatItCannotRead(t *testing.T) {
+	root := documentRoot(t)
+
+	tests := map[string]string{
+		"outlyne: true\n":            "'outlyne' is not a setting",
+		"outline: sideways\n":        "expected true, false or a mapping of settings",
+		"port: many\n":               "cannot unmarshal",
+		"outline:\n  - style: nh\n":  "expected true, false or a mapping of settings",
+		"index-only: true\n  bad:\n": "yaml",
+	}
+	for content, want := range tests {
+		t.Run(content, func(t *testing.T) {
+			name := writeConfig(t, root, "given.yaml", content)
+			_, _, err := readConfigFile(name, root)
+			if err == nil {
+				t.Fatalf("readConfigFile(%q) raised no error", content)
+			}
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want one holding %q", err, want)
+			}
+		})
+	}
+}
+
+func TestParseSettings(t *testing.T) {
+	var colour, size string
+	readers := map[string]func(string) error{
+		"colour": settingFrom("a colour", []string{"red", "green"}, &colour),
+		"size":   settingFrom("a size", []string{"small", "large"}, &size),
+	}
+
+	if err := parseSettings("colour:red,size:large", readers); err != nil {
+		t.Fatal(err)
+	}
+	if colour != "red" || size != "large" {
+		t.Errorf("colour, size = %q, %q, want \"red\", \"large\"", colour, size)
+	}
+
+	if err := parseSettings("size:small", readers); err != nil {
+		t.Fatal(err)
+	}
+	if colour != "red" || size != "small" {
+		t.Errorf("colour, size = %q, %q, want \"red\", \"small\"", colour, size)
+	}
+
+	if err := parseSettings("", readers); err != nil {
+		t.Errorf("an empty list raised %v", err)
+	}
+
+	tests := map[string]string{
+		"colour":       "expected key:value",
+		"shape:round":  "expected one of colour, size",
+		"colour:mauve": "expected one of red, green",
+	}
+	for given, want := range tests {
+		t.Run(given, func(t *testing.T) {
+			err := parseSettings(given, readers)
+			if err == nil {
+				t.Fatalf("parseSettings(%q) raised no error", given)
+			}
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want one holding %q", err, want)
+			}
+		})
+	}
+}
+
+func TestWatchInterval(t *testing.T) {
+	// A source read over the network is read less often, unless the seconds were asked for.
+	tests := []struct {
+		settings configuration
+		kind     string
+		want     float64
+	}{
+		{configuration{}, kindLocal, defaultWatchInterval},
+		{configuration{}, kindADO, defaultADOWatchSecond},
+		{configuration{watch: 0.5}, kindLocal, 0.5},
+		{configuration{watch: 0.5}, kindADO, 0.5},
+	}
+	for _, test := range tests {
+		if got := test.settings.watchInterval(test.kind); got != test.want {
+			t.Errorf("watchInterval(%q) with %+v = %g, want %g",
+				test.kind, test.settings, got, test.want)
+		}
+	}
+}
+
+func TestChooseSettings(t *testing.T) {
+	off := outlineSettings{Justify: "left"}
+
+	tests := map[string]struct {
+		given         string
+		onCommandLine bool
+		fromFile      *settingsValue
+		want          outlineSettings
+	}{
+		"neither says anything": {"", false, nil, off},
+		"the command line alone": {"style:nh", true,
+			nil, outlineSettings{Style: "numbered-hierarchical", Justify: "left"}},
+		"the file alone": {"", false,
+			&settingsValue{on: true, settings: map[string]string{"style": "plain", "justify": "right"}},
+			outlineSettings{Style: "plain", Justify: "right"}},
+		"the file drawing it with its own settings": {"", false,
+			&settingsValue{on: true}, defaultOutline},
+		"the file turning it off": {"", false, &settingsValue{}, off},
+		// The command line stands above the file, written or written empty.
+		"the command line over the file": {"style:numbered", true,
+			&settingsValue{on: true, settings: map[string]string{"style": "plain"}},
+			outlineSettings{Style: "numbered", Justify: "left"}},
+		"the command line turning it off": {"", true,
+			&settingsValue{on: true, settings: map[string]string{"style": "plain"}}, off},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := chooseSettings(test.given, test.onCommandLine, test.fromFile,
+				off, defaultOutline, parseOutline)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Errorf("settings = %+v, want %+v", got, test.want)
+			}
+		})
+	}
+
+	// A setting a file names is refused for the same reasons the command line's is.
+	asked := &settingsValue{on: true, settings: map[string]string{"scope": "current"}}
+	if _, err := chooseSettings("", false, asked, off, defaultOutline, parseOutline); err == nil {
+		t.Error("a setting the flag does not know was read from a file")
+	}
+}

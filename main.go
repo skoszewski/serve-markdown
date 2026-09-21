@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"math"
 	"net"
@@ -18,107 +17,6 @@ import (
 	"strings"
 	"time"
 )
-
-const (
-	defaultListenAddress  = "127.0.0.1"
-	defaultServePort      = 8000
-	defaultWatchInterval  = 1.0
-	defaultADOWatchSecond = 15.0
-)
-
-const pathUsage = "Markdown file or directory to serve; defaults to the current directory. " +
-	"A directory is served at its own URL path, resolving to index.md or README.md within it " +
-	"and listing its Markdown files when it holds neither. An " +
-	"'ado://<organization>/<project>/<repository>/<path to file>' URL serves a file from an " +
-	"Azure Repos Git repository, under its own /_/ado/ route rather than at the root. " +
-	"Whichever is given, the /_/local/ and /_/ado/ routes reach both while the server runs."
-
-// outlineStyles are the values --outline takes, each with the shorthand that also names it:
-// an outline without numbers, one numbered within each level, and one numbered as 1., 1.1.,
-// 1.1.1. down the levels.
-var outlineStyles = []struct{ name, shorthand string }{
-	{"plain", "p"},
-	{"numbered", "n"},
-	{"numbered-hierarchical", "nh"},
-}
-
-// outlineNone is the value that asks for no outline at all.
-const outlineNone = "none"
-
-// outlineJustifications are the sides of the document the outline stands on.
-var outlineJustifications = []string{"left", "right"}
-
-// defaultOutline is what an outline is drawn with before --outline or the query names
-// anything else.
-var defaultOutline = outlineSettings{Style: "plain", Justify: "left"}
-
-// outlineStyle returns the style given names, by its name, its shorthand or outlineNone for
-// no outline. The second result is false when it names none of them.
-func outlineStyle(given string) (string, bool) {
-	if given == outlineNone {
-		return "", true
-	}
-	for _, style := range outlineStyles {
-		if given == style.name || given == style.shorthand {
-			return style.name, true
-		}
-	}
-	return "", false
-}
-
-// outlineStyleList names the styles with their shorthands, for the flag's help and its errors.
-func outlineStyleList() string {
-	names := make([]string, 0, len(outlineStyles)+1)
-	for _, style := range outlineStyles {
-		names = append(names, fmt.Sprintf("%s (%s)", style.name, style.shorthand))
-	}
-	return strings.Join(append(names, outlineNone), ", ")
-}
-
-// parseOutline reads the "style" and "justify" settings onto the ones it is given, and
-// returns the outline the list asks for.
-func parseOutline(given string, settings outlineSettings) (outlineSettings, error) {
-	err := parseSettings(given, map[string]func(string) error{
-		"style": func(value string) error {
-			style, known := outlineStyle(value)
-			if !known {
-				return fmt.Errorf("'%s' is not an outline style; expected one of %s",
-					value, outlineStyleList())
-			}
-			settings.Style = style
-			return nil
-		},
-		"justify": settingFrom("an outline justification", outlineJustifications, &settings.Justify),
-	})
-	return settings, err
-}
-
-// listScopes are how much of the source the directory list reaches: the documents of the
-// folder the document is in, those and the folders below it, or every document under the
-// source, nested by folder.
-var listScopes = []string{"current", "subfolders", "tree"}
-
-// defaultList is what a directory list is drawn with before --list or the query names
-// anything else.
-var defaultList = listSettings{Style: "plain", Scope: "current"}
-
-// parseList reads the "style" and "scope" settings onto the ones it is given, and returns the
-// list the settings ask for.
-func parseList(given string, settings listSettings) (listSettings, error) {
-	err := parseSettings(given, map[string]func(string) error{
-		"style": func(value string) error {
-			style, known := outlineStyle(value)
-			if !known {
-				return fmt.Errorf("'%s' is not a list style; expected one of %s",
-					value, outlineStyleList())
-			}
-			settings.Style = style
-			return nil
-		},
-		"scope": settingFrom("a list scope", listScopes, &settings.Scope),
-	})
-	return settings, err
-}
 
 // contentPayload is the JSON the page polls for. Its mtime, text, css and base are null when
 // the document could not be read.
@@ -149,104 +47,31 @@ func main() {
 	}
 }
 
-// run parses the command line, resolves the source to serve, and serves it until interrupted.
+// run reads what the server is to do, resolves the source to serve, and serves it until
+// interrupted.
 func run() error {
-	listenAddress := flag.String("listen-address", defaultListenAddress,
-		"Address for the local web server to listen on")
-	port := flag.Int("port", defaultServePort, "Port for the local web server")
-	watchInterval := flag.Float64("watch-interval", 0, fmt.Sprintf(
-		"Seconds between checks for changes to the file, polled by the browser page "+
-			"(default %g, or %g for an %s URL, which is read over the network)",
-		defaultWatchInterval, defaultADOWatchSecond, adoScheme))
-	online := flag.Bool("online", false,
-		"Load the Markdown and highlighting libraries from their CDNs instead of from inside this binary")
-	outline := flag.String("outline", "", fmt.Sprintf(
-		"Show an outline of the document's headings beside it, as a comma separated list of "+
-			"settings: style:%s, justify:%s. A page takes an 'outline' query parameter of the "+
-			"same settings, which overrides this one",
-		outlineStyleList(), strings.Join(outlineJustifications, "|")))
-	list := flag.String("list", "", fmt.Sprintf(
-		"List the documents around the one on the page, on its left, as a comma separated list "+
-			"of settings: style:%s, scope:%s. It takes the outline to the right, and a page "+
-			"takes a 'list' query parameter of the same settings",
-		outlineStyleList(), strings.Join(listScopes, "|")))
-	ado := flag.String("ado", "", fmt.Sprintf(
-		"Read Azure Repos at the version named by a comma separated list of settings: %s. "+
-			"One of them at a time, the repository's default branch without any; a page takes "+
-			"an 'ado' query parameter of the same settings",
-		strings.Join(adoVersionKinds, ":<name>, ")+":<name>"))
-	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
-	indexOnly := flag.Bool("index-only", false, fmt.Sprintf(
-		"Read a folder as the first of %s it holds and look no further; a folder holding "+
-			"neither is served as one holding no Markdown at all, rather than as a listing of "+
-			"the files it does hold",
-		strings.Join(localCandidates, " or ")))
-	showVersion := flag.Bool("version", false, "Print the version and exit")
-
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(),
-			"Usage: %s [flags] [path]\n\n"+
-				"Render Markdown from local files or Azure Repos as GitHub-styled pages.\n\n"+
-				"  path\n    \t%s\n\n"+
-				"Flags stand before the path, which ends them; a flag written after it is not read:\n\n"+
-				"  %s --list style:plain docs/\n    \tthe list is drawn\n"+
-				"  %s docs/ --list style:plain\n    \tthe flag is ignored\n\nFlags:\n",
-			filepath.Base(os.Args[0]), pathUsage,
-			filepath.Base(os.Args[0]), filepath.Base(os.Args[0]))
-		flag.PrintDefaults()
+	settings, err := readConfiguration()
+	if err != nil {
+		return err
 	}
-	flag.Parse()
-
-	if *showVersion {
+	if settings.showVersion {
 		logInfo("%s %s", filepath.Base(os.Args[0]), version())
 		return nil
 	}
 
-	// Without an outline the style is empty and the side still stands, for a query to turn
-	// the outline on without naming one.
-	outlineOf := outlineSettings{Justify: defaultOutline.Justify}
-	if *outline != "" {
-		parsed, err := parseOutline(*outline, defaultOutline)
-		if err != nil {
-			return err
-		}
-		outlineOf = parsed
-	}
-
-	listOf := listSettings{Scope: defaultList.Scope}
-	if *list != "" {
-		parsed, err := parseList(*list, defaultList)
-		if err != nil {
-			return err
-		}
-		listOf = parsed
-	}
-
-	adoOf, err := parseADO(*ado, adoSettings{})
-	if err != nil {
-		return err
-	}
-
-	handler := &server{assets: embeddedAssets, online: *online, outline: outlineOf,
-		list: listOf, ado: adoOf, mermaid: *mermaid, indexOnly: *indexOnly}
-	if *online {
+	handler := &server{assets: embeddedAssets, online: settings.online, outline: settings.outline,
+		list: settings.list, ado: settings.ado, mermaid: settings.mermaid, indexOnly: settings.indexOnly}
+	if settings.online {
 		handler.assets = cdnAssets
 	}
 
-	sourceDescription, err := handler.resolveStartupSource(flag.Arg(0))
+	sourceDescription, err := handler.resolveStartupSource(settings.path)
 	if err != nil {
 		return err
 	}
+	handler.watchInterval = settings.watchInterval(handler.defaultSource.kind)
 
-	handler.watchInterval = *watchInterval
-	if handler.watchInterval <= 0 {
-		handler.watchInterval = defaultWatchInterval
-		if handler.defaultSource.kind == kindADO {
-			handler.watchInterval = defaultADOWatchSecond
-		}
-	}
-
-	address := net.JoinHostPort(*listenAddress, strconv.Itoa(*port))
+	address := net.JoinHostPort(settings.listenAddress, strconv.Itoa(settings.port))
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("could not start server on %s (%v); try a different --listen-address/--port", address, err)
@@ -254,6 +79,9 @@ func run() error {
 
 	printBanner("Serving Markdown")
 	logInfo("  Source:   %s", sourceDescription)
+	if settings.file != "" {
+		logInfo("  Config:   '%s'", settings.file)
+	}
 	logInfo("  Watching: every %gs", handler.watchInterval)
 	logInfo("  URL:      %shttp://%s%s%s", colorCyan, address, handler.sourceRoute(), colorReset)
 	logInfo("")

@@ -55,6 +55,7 @@ serve-markdown docs/ --list style:plain     # the flag is ignored
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
+| `--config` | `serve-markdown.yaml` beside the path | Read the flags from a YAML file |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
 
@@ -92,6 +93,38 @@ serve-markdown --port 9000 docs/
 serve-markdown --outline style:nh --mermaid docs/
 serve-markdown ado://myorg/myproject/myrepo/README.md
 ```
+
+## Configuration file
+
+The flags may be written in a YAML file instead, one key per flag, named as the flag is. A
+`serve-markdown.yaml` beside the path is read when there is one - the directory the path
+names, the directory of the file it names, or the directory the server was started in for an
+`ado://` source - and `--config` names another file, which must be there.
+
+```yaml
+index-only: true
+list: true
+outline:
+  style: numbered-hierarchical
+  justify: right
+port: 9000
+```
+
+A flag taking settings - `outline`, `list`, `ado` - is written as a mapping of those settings,
+as `true` to draw it with its own, or as `false` to leave it out. Every other flag takes the
+value its kind asks for: a string, a number, or `true` and `false`.
+
+A flag written on the command line stands above what the file says, so a file can serve a
+directory while one run tweaks a setting:
+
+```sh
+serve-markdown --outline style:plain docs/     # the file's outline settings are set aside
+serve-markdown --config ~/reading.yaml docs/   # another file, read instead of the one beside
+```
+
+A key no flag is named after, a setting a flag does not know, or a value of the wrong kind
+stops the server with a message naming it and the line it stands on. The file that was read is
+printed at startup.
 
 ## Outline
 
