@@ -220,6 +220,63 @@ func TestADOListLink(t *testing.T) {
 	}
 }
 
+func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
+	src := source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/"}
+	found := []gitItem{
+		{Path: "/docs", IsFolder: true},
+		{Path: "/index.md"},
+		{Path: "/README.md"},
+		{Path: "/CHANGELOG.md"},
+		{Path: "/.hidden.md"},
+		{Path: "/picture.png"},
+	}
+
+	names := func(items []treeItem) []string {
+		var read []string
+		for _, item := range items {
+			read = append(read, item.name)
+		}
+		return read
+	}
+
+	all := adoTree{src: src}.items(found, "/")
+	if got := strings.Join(names(all), ","); got != "docs,index.md,README.md,CHANGELOG.md" {
+		t.Errorf("items = %s, want the folders and every document", got)
+	}
+
+	// Under --index-only a document the page will never open is left out, and a folder holds
+	// the one document it is read as - the README.md of an Azure Repos folder - and no other,
+	// so a repository holding those two documents lists nothing to browse.
+	indexed := adoTree{src: src, indexOnly: true}.items(found, "/")
+	if got := strings.Join(names(indexed), ","); got != "docs,README.md" {
+		t.Errorf("items = %s, want the folders and the one document each is read as", got)
+	}
+
+	// The choice is made within each folder, the tree scope answering with all of them at once.
+	nested := []gitItem{
+		{Path: "/docs", IsFolder: true},
+		{Path: "/docs/index.md"},
+		{Path: "/docs/README.md"},
+		{Path: "/docs/guide.md"},
+		{Path: "/notes", IsFolder: true},
+		{Path: "/notes/index.md"},
+	}
+	tree := adoTree{src: src, indexOnly: true}
+	held := map[string]bool{}
+	for _, item := range tree.items(nested, "/") {
+		held[item.path] = true
+	}
+	want := []string{"/docs", "/docs/README.md", "/notes", "/notes/index.md"}
+	if len(held) != len(want) {
+		t.Errorf("items = %v, want %v", held, want)
+	}
+	for _, path := range want {
+		if !held[path] {
+			t.Errorf("the items do not hold %q: %v", path, held)
+		}
+	}
+}
+
 func TestHoldsNothingToBrowse(t *testing.T) {
 	tests := map[string]struct {
 		entries []listEntry

@@ -309,11 +309,13 @@ func adoRoute(src source, itemPath string) string {
 // adoTree reads an Azure Repos repository as the tree the directory list is built from.
 //
 // folderPath is the folder the page stands in once it has been resolved, kept so that the
-// repository is asked about it once. isFolder tells whether a repository path names a folder,
-// and is the repository's own answer unless a test gives another.
+// repository is asked about it once. indexOnly leaves out the documents a folder is never
+// read as. isFolder tells whether a repository path names a folder, and is the repository's
+// own answer unless a test gives another.
 type adoTree struct {
 	src        source
 	folderPath string
+	indexOnly  bool
 	isFolder   func(source, string) bool
 }
 
@@ -354,18 +356,51 @@ func (t adoTree) read(folder string, recursive bool) []treeItem {
 		logInfo("  %scannot list %s: %v%s", colorYellow, folder, err, colorReset)
 		return nil
 	}
+	return t.items(found, folder)
+}
 
+// items keeps of what the repository answered with the folders and the documents that can be
+// opened from folder, leaving out the hidden names and the files that are not Markdown.
+//
+// Under --index-only a folder holds the one document it is read as and no other, so a folder
+// naming both index.md and README.md contributes the one that is read first.
+func (t adoTree) items(found []gitItem, folder string) []treeItem {
 	var items []treeItem
+	documents := map[string]gitItem{}
+
 	for _, found := range found {
+		name := path.Base(found.Path)
 		switch {
-		case found.Path == "" || found.Path == folder || strings.HasPrefix(path.Base(found.Path), "."):
+		case found.Path == "" || found.Path == folder || strings.HasPrefix(name, "."):
 		case found.IsFolder:
-			items = append(items, treeItem{path: found.Path, name: path.Base(found.Path), isFolder: true})
-		case markdownExtensions[strings.ToLower(path.Ext(found.Path))]:
-			items = append(items, treeItem{path: found.Path, name: path.Base(found.Path)})
+			items = append(items, treeItem{path: found.Path, name: name, isFolder: true})
+		case !markdownExtensions[strings.ToLower(path.Ext(found.Path))]:
+		case !t.indexOnly:
+			items = append(items, treeItem{path: found.Path, name: name})
+		case isIndexName(name):
+			within := path.Dir(found.Path)
+			held, taken := documents[within]
+			if !taken || adoIndexRank(name) < adoIndexRank(path.Base(held.Path)) {
+				documents[within] = found
+			}
 		}
 	}
+
+	for _, document := range documents {
+		items = append(items, treeItem{path: document.Path, name: path.Base(document.Path)})
+	}
 	return items
+}
+
+// adoIndexRank returns how early name stands among the names an Azure Repos folder is read
+// as, for choosing between them when a folder holds more than one.
+func adoIndexRank(name string) int {
+	for rank, candidate := range adoCandidates {
+		if strings.EqualFold(name, candidate) {
+			return rank
+		}
+	}
+	return len(adoCandidates)
 }
 
 // adoItemIsFolder reports whether itemPath names a folder in the repository source names.
@@ -487,16 +522,17 @@ func listingDocument(title, held string, names []string) document {
 // a local directory.
 //
 // A repository root whose list leads nowhere - holding no document at all, or the one already
-// on the page and nothing else - carries the project's repositories instead, the one on the
-// page marked. The link above them leads where it always does, under the label that names
+// on the page and nothing else, as it does under --index-only once the documents that are
+// never read are left out - carries the project's repositories instead, the one on the page
+// marked. The link above them leads where it always does, under the label that names
 // what the list now holds. A folder below the root keeps its own list, however short, since
 // the folder above it is where the way out lies.
-func adoList(src source, scope string) ([]listEntry, listLink) {
+func adoList(src source, scope string, indexOnly bool) ([]listEntry, listLink) {
 	if src.repository == "" {
 		return adoProjectEntries(src, scope), listLink{}
 	}
 
-	tree := adoTree{src: src}
+	tree := adoTree{src: src, indexOnly: indexOnly}
 	tree.folderPath = tree.folder()
 
 	entries := documentTree(tree, scope)
@@ -581,11 +617,14 @@ func holdsNothingToBrowse(entries []listEntry) bool {
 	if len(entries) != 1 || len(entries[0].Children) != 0 {
 		return false
 	}
-	if entries[0].Current {
-		return true
-	}
+	return entries[0].Current || isIndexName(entries[0].Name)
+}
+
+// isIndexName reports whether name is one a folder's own document goes by, whatever its
+// letters' case, the repository answering paths without regard to it.
+func isIndexName(name string) bool {
 	for _, candidate := range indexNames {
-		if strings.EqualFold(entries[0].Name, candidate) {
+		if strings.EqualFold(name, candidate) {
 			return true
 		}
 	}

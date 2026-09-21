@@ -116,9 +116,14 @@ is the source's, not a setting, so a folder resolves to the same document howeve
 reached.
 
 `--index-only` stops the search at those two names: a folder is the document it holds or a
-page saying none was found, and the listing of whatever else stands there is left out. It
-decides the page alone - the list beside it still reaches every document, since browsing is
-what that list is for.
+page saying none was found, and the listing of whatever else stands there is left out.
+
+Within an Azure Repos repository the list beside the page follows it as well, naming the
+folders and their index documents alone: an entry the page would never open leads nowhere,
+and counting such entries kept a repository root from falling back to the project's
+repositories when nothing else was there to browse. A folder stands for one document at most,
+the one it is read as, so a folder holding both an `index.md` and a `README.md` is listed once
+rather than twice.
 
 ## The version a repository is read at travels with the source
 

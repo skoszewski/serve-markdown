@@ -74,8 +74,14 @@ folder usually names it.
 
 `--index-only` stops the looking there: a folder is its index document or nothing, and a
 folder holding neither is served as the page saying no Markdown files were found, whatever
-else stands in it. The list beside the page is not affected - it still reaches every document
-it finds - so the flag decides what a folder's own page shows, not what can be browsed to.
+else stands in it.
+
+Within an `ado://` repository the list beside the page follows that rule too, holding the
+folders and their index documents alone, since a document the page will never open is not
+somewhere to browse. A folder contributes one document at most - the one it is read as, which
+is its `README.md` where both it and an `index.md` stand there - or none. A repository root left with nothing to browse then falls back to the
+project's repositories, the way it does for a repository holding a `README.md` alone. A local
+directory's list still names every Markdown file it finds.
 
 An `ado://` source is reached through its own route alone, since the repository is named by
 the route itself, and the server prints that route at startup.

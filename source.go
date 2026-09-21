@@ -285,7 +285,7 @@ func (s *server) documentList(src source, scope string) ([]listEntry, listLink) 
 		return documentTree(tree, scope), listLink{}
 
 	case kindADO:
-		return adoList(src, scope)
+		return adoList(src, scope, s.indexOnly)
 	}
 	return nil, listLink{}
 }
