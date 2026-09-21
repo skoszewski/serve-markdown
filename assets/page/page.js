@@ -211,5 +211,9 @@ async function poll() {
   }
 }
 
+// The document is read once, and again on every check the page was given one to make; a page
+// without one is read again when the browser is asked to refresh it.
 poll();
-setInterval(poll, pageConfig.watchIntervalMS);
+if (pageConfig.watchIntervalMS > 0) {
+  setInterval(poll, pageConfig.watchIntervalMS);
+}

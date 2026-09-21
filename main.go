@@ -69,7 +69,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	handler.watchInterval = settings.watchInterval(handler.defaultSource.kind)
+	// The seconds a local page checks at; a page reading Azure Repos checks for nothing.
+	handler.watchInterval = settings.watchInterval(kindLocal)
 
 	address := net.JoinHostPort(settings.listenAddress, strconv.Itoa(settings.port))
 	listener, err := net.Listen("tcp", address)
@@ -82,7 +83,11 @@ func run() error {
 	if settings.file != "" {
 		logInfo("  Config:   '%s'", settings.file)
 	}
-	logInfo("  Watching: every %gs", handler.watchInterval)
+	if settings.watchInterval(handler.defaultSource.kind) > 0 {
+		logInfo("  Watching: every %gs", handler.watchInterval)
+	} else {
+		logInfo("  Watching: on the browser's refresh")
+	}
 	logInfo("  URL:      %shttp://%s%s%s", colorCyan, address, handler.sourceRoute(), colorReset)
 	logInfo("")
 
@@ -207,7 +212,8 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		query += "&ado=" + url.QueryEscape(given)
 	}
 
-	page := renderPage(title, query, int(math.Round(s.watchInterval*1000)), s.assets,
+	watch := watchIntervalFor(src.kind, s.watchInterval)
+	page := renderPage(title, query, int(math.Round(watch*1000)), s.assets,
 		s.sidebarsFor(request, src), s.mermaid)
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.Write(page)

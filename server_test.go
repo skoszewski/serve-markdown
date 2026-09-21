@@ -643,6 +643,21 @@ func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 	}
 }
 
+func TestServePageShellChecksLocalDocumentsAlone(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets}
+
+	// A local page re-reads its document on its own; one reading Azure Repos waits for the
+	// browser's refresh, the document being read over the network.
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `"watchIntervalMS":1000`) {
+		t.Errorf("the local page does not check for changes: %q", page)
+	}
+	if _, page := get(t, handler, "/_/ado/myorg/myproject/repo"); !strings.Contains(page, `"watchIntervalMS":0`) {
+		t.Errorf("the ado page checks for changes: %q", page)
+	}
+}
+
 func TestServePageShellCarriesTheADOVersion(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,

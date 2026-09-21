@@ -142,20 +142,21 @@ func TestParseSettings(t *testing.T) {
 }
 
 func TestWatchInterval(t *testing.T) {
-	// A source read over the network is read less often, unless the seconds were asked for.
+	// A page reading Azure Repos checks for nothing, whatever seconds were asked for; a local
+	// page checks at the seconds it was given, or at the default.
 	tests := []struct {
 		settings configuration
-		kind     string
+		kind     sourceKind
 		want     float64
 	}{
 		{configuration{}, kindLocal, defaultWatchInterval},
-		{configuration{}, kindADO, defaultADOWatchSecond},
+		{configuration{}, kindADO, 0},
 		{configuration{watch: 0.5}, kindLocal, 0.5},
-		{configuration{watch: 0.5}, kindADO, 0.5},
+		{configuration{watch: 0.5}, kindADO, 0},
 	}
 	for _, test := range tests {
 		if got := test.settings.watchInterval(test.kind); got != test.want {
-			t.Errorf("watchInterval(%q) with %+v = %g, want %g",
+			t.Errorf("watchInterval(%v) with %+v = %g, want %g",
 				test.kind, test.settings, got, test.want)
 		}
 	}

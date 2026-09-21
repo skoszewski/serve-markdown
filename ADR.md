@@ -152,6 +152,17 @@ still counts as having written it.
 Unknown keys are refused rather than passed over. A file that quietly ignores `outlyne: true`
 teaches the reader that the setting does not work, and says nothing about why.
 
+## An ado:// page is read on refresh, not on a timer
+
+A local file changes while it is being written, which is what the page's checks are for: an
+editor and a browser side by side. A repository changes when someone pushes to it, and every
+check costs a REST request - for the document, and for the list beside it - against a quota
+that is not the reader's alone.
+
+So a page reading Azure Repos makes no checks: it is read once, and read again when the
+browser is refreshed, which builds the sidebar afresh as well. `--watch-interval` keeps its
+meaning for local pages, and says nothing for these.
+
 ## The version a repository is read at travels with the source
 
 Azure Repos reads an item at a version, defaulting to the repository's branch. `--ado` names

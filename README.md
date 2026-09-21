@@ -49,7 +49,7 @@ serve-markdown docs/ --list style:plain     # the flag is ignored
 |---|---|---|
 | `--listen-address` | `127.0.0.1` | Address for the local web server to listen on |
 | `--port` | `8000` | Port for the local web server |
-| `--watch-interval` | `1`, or `15` for `ado://` | Seconds between the browser page's checks for changes |
+| `--watch-interval` | `1` | Seconds between a local page's checks for changes; an `ado://` page makes none |
 | `--outline` | off | Show an outline of the document's headings beside it; takes `style` and `justify` as a comma separated list, e.g. `style:plain,justify:right` |
 | `--list` | off | List the documents around the page's own on its left; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
@@ -237,8 +237,12 @@ directory, and an `ado://` document's pictures over the same REST API as the doc
 
 An `ado://` source reads the file over the Azure DevOps REST API, and takes its access token
 from the Azure CLI, so `az login` must have been run. A path naming a folder, or ending in a
-slash, resolves to the `README.md` or `index.md` within it, in that order. The change marker
-is the file's Git object ID, so the page re-renders on every commit that touches it.
+slash, resolves to the `README.md` or `index.md` within it, in that order.
+
+An `ado://` page does not check for changes on its own: a local file changes as it is written,
+while a repository changes when someone pushes to it, so the page is read once and read again
+when the browser is refreshed. The document, the sidebar and the pictures are all read afresh
+then. A local page keeps checking every `--watch-interval` seconds.
 
 With `--index-only`, a folder holding neither is served as the page saying no Markdown files
 were found, rather than with the error the read raises.

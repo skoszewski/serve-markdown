@@ -295,7 +295,7 @@ func readADORepositories(src source) ([]string, error) {
 // adoRoute returns the route that addresses itemPath in what source names: the organization,
 // one of its projects, or a repository holding the item.
 func adoRoute(src source, itemPath string) string {
-	route := "/" + routeNamespace + "/" + kindADO + "/" + url.PathEscape(src.organization)
+	route := "/" + routeNamespace + "/" + adoRouteName + "/" + url.PathEscape(src.organization)
 	if src.project == "" {
 		return route
 	}

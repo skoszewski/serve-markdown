@@ -25,10 +25,9 @@ const configName = "serve-markdown.yaml"
 
 // What the server does when it is told nothing.
 const (
-	defaultListenAddress  = "127.0.0.1"
-	defaultServePort      = 8000
-	defaultWatchInterval  = 1.0
-	defaultADOWatchSecond = 15.0
+	defaultListenAddress = "127.0.0.1"
+	defaultServePort     = 8000
+	defaultWatchInterval = 1.0
 )
 
 // defaultOutline is what an outline is drawn with before --outline or a page names anything
@@ -62,7 +61,7 @@ const pathUsage = "Markdown file or directory to serve; defaults to the current 
 	"and listing its Markdown files when it holds neither. An " +
 	"'ado://<organization>/<project>/<repository>/<path to file>' URL serves a file from an " +
 	"Azure Repos Git repository, under its own /_/ado/ route rather than at the root. " +
-	"Whichever is given, the /_/local/ and /_/ado/ routes reach both while the server runs."
+	"Whichever is given, the /_/ado/ routes reach a repository while the server runs."
 
 // configuration is everything the server was told, the command line and the file read into
 // one answer.
@@ -84,16 +83,27 @@ type configuration struct {
 	file          string
 }
 
-// watchInterval returns the seconds between the page's checks for changes: what was asked
-// for, or what a source of this kind is read at, one over the network being read less often.
-func (c configuration) watchInterval(kind string) float64 {
-	switch {
-	case c.watch > 0:
-		return c.watch
-	case kind == kindADO:
-		return defaultADOWatchSecond
+// watchInterval returns the seconds between a page's checks for changes to its document, for
+// a source of the kind given.
+func (c configuration) watchInterval(kind sourceKind) float64 {
+	local := defaultWatchInterval
+	if c.watch > 0 {
+		local = c.watch
 	}
-	return defaultWatchInterval
+	return watchIntervalFor(kind, local)
+}
+
+// watchIntervalFor returns the seconds a page reading a source of this kind checks for
+// changes at, local being the seconds a local page checks at.
+//
+// A page reading Azure Repos checks for none: the document is read over the network, and a
+// repository changes when someone pushes to it rather than while it is being written, so the
+// browser's own refresh is what reads it again.
+func watchIntervalFor(kind sourceKind, local float64) float64 {
+	if kind == kindADO {
+		return 0
+	}
+	return local
 }
 
 // readConfiguration reads the command line and the configuration file into what the server is
@@ -106,9 +116,9 @@ func readConfiguration() (configuration, error) {
 		"Address for the local web server to listen on")
 	port := flag.Int("port", defaultServePort, "Port for the local web server")
 	watchInterval := flag.Float64("watch-interval", 0, fmt.Sprintf(
-		"Seconds between checks for changes to the file, polled by the browser page "+
-			"(default %g, or %g for an %s URL, which is read over the network)",
-		defaultWatchInterval, defaultADOWatchSecond, adoScheme))
+		"Seconds between checks for changes to the file, polled by the browser page (default "+
+			"%g). A page reading %s checks for none, the browser's own refresh reading it again",
+		defaultWatchInterval, adoScheme))
 	online := flag.Bool("online", false,
 		"Load the Markdown and highlighting libraries from their CDNs instead of from inside this binary")
 	outline := flag.String("outline", "", fmt.Sprintf(

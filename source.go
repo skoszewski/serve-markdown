@@ -18,12 +18,20 @@ import (
 // Routes under this first path segment name the kind of source to read, e.g. "/_/ado/...".
 const routeNamespace = "_"
 
+// sourceKind tells what a document is read from.
+type sourceKind int
+
 const (
-	kindLocal = "local"
-	kindADO   = "ado"
+	kindLocal sourceKind = iota
+	kindADO
 )
 
-const adoScheme = "ado://"
+// adoRouteName is the segment naming Azure Repos in a route, and adoScheme the URL naming it
+// on the command line.
+const (
+	adoRouteName = "ado"
+	adoScheme    = "ado://"
+)
 
 // A folder is read as the first of these documents it holds: a local directory names its
 // index first, an Azure Repos folder its README, as each is usually written.
@@ -50,7 +58,7 @@ neither; an organization and a project are always listed.`
 // version and versionType name the branch, tag or commit an "ado" path is read at; empty,
 // they read the repository's default branch.
 type source struct {
-	kind         string
+	kind         sourceKind
 	route        string
 	organization string
 	project      string
@@ -250,7 +258,7 @@ func readLocalFile(path string) (document, error) {
 func resolveSource(route string, defaultSource source) (source, bool) {
 	namespace, remainder, _ := strings.Cut(strings.TrimLeft(route, "/"), "/")
 	if namespace == routeNamespace {
-		if scheme, rest, _ := strings.Cut(remainder, "/"); scheme == kindADO {
+		if scheme, rest, _ := strings.Cut(remainder, "/"); scheme == adoRouteName {
 			return parseADOLocation(rest)
 		}
 		return source{}, false
