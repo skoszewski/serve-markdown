@@ -136,6 +136,28 @@ func TestNamedEntries(t *testing.T) {
 	}
 }
 
+func TestADOListLink(t *testing.T) {
+	src := source{kind: kindADO, organization: "org", project: "my proj", repository: "repo"}
+
+	tests := map[string]listLink{
+		// At the repository's root the way out is the repositories of its project.
+		"/":              {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
+		"":               {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
+		"/docs":          {Label: "Up", Route: "/_/ado/org/my%20proj/repo/"},
+		"/docs/deep":     {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs"},
+		"/docs/deep/深い":  {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs/deep"},
+		"/a folder":      {Label: "Up", Route: "/_/ado/org/my%20proj/repo/"},
+		"/docs/a folder": {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs"},
+	}
+	for folder, want := range tests {
+		t.Run(folder, func(t *testing.T) {
+			if got := adoListLink(src, folder); got != want {
+				t.Errorf("adoListLink(%q) = %+v, want %+v", folder, got, want)
+			}
+		})
+	}
+}
+
 func TestHoldsNothingToBrowse(t *testing.T) {
 	tests := map[string]struct {
 		entries []listEntry

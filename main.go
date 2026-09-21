@@ -171,6 +171,11 @@ func run() error {
 			"takes a 'list' query parameter of the same settings",
 		outlineStyleList(), strings.Join(listScopes, "|")))
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
+	indexOnly := flag.Bool("index-only", false, fmt.Sprintf(
+		"Read a folder as the first of %s it holds and look no further; a folder holding "+
+			"neither is served as one holding no Markdown at all, rather than as a listing of "+
+			"the files it does hold",
+		strings.Join(localCandidates, " or ")))
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 
 	flag.Usage = func() {
@@ -213,7 +218,7 @@ func run() error {
 	}
 
 	handler := &server{assets: embeddedAssets, online: *online, outline: outlineOf,
-		list: listOf, mermaid: *mermaid}
+		list: listOf, mermaid: *mermaid, indexOnly: *indexOnly}
 	if *online {
 		handler.assets = cdnAssets
 	}

@@ -53,6 +53,7 @@ serve-markdown docs/ --list style:plain     # the flag is ignored
 | `--outline` | off | Show an outline of the document's headings beside it; takes `style` and `justify` as a comma separated list, e.g. `style:plain,justify:right` |
 | `--list` | off | List the documents around the page's own on its left; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
+| `--index-only` | off | Read a folder as its index document alone, looking no further |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
 
@@ -65,8 +66,15 @@ The path names what to serve:
 - nothing, which serves the current directory.
 
 A directory - the one the server was started with or any below it - is the `index.md` or
-`README.md` within it; a directory holding neither is served as a list of its Markdown files,
-and one holding no Markdown file at all as a page saying so.
+`README.md` within it, looked for in that order; a directory holding neither is served as a
+list of its Markdown files, and one holding no Markdown file at all as a page saying so. An
+`ado://` folder is read the same way, with `README.md` looked for first, as an Azure Repos
+folder usually names it.
+
+`--index-only` stops the looking there: a folder is its index document or nothing, and a
+folder holding neither is served as the page saying no Markdown files were found, whatever
+else stands in it. The list beside the page is not affected - it still reaches every document
+it finds - so the flag decides what a folder's own page shows, not what can be browsed to.
 
 An `ado://` source is reached through its own route alone, since the repository is named by
 the route itself, and the server prints that route at startup.
@@ -189,8 +197,11 @@ directory, and an `ado://` document's pictures over the same REST API as the doc
 
 An `ado://` source reads the file over the Azure DevOps REST API, and takes its access token
 from the Azure CLI, so `az login` must have been run. A path naming a folder, or ending in a
-slash, resolves to the `README.md` or `index.md` within it. The change marker is the file's
-Git object ID, so the page re-renders on every commit that touches it.
+slash, resolves to the `README.md` or `index.md` within it, in that order. The change marker
+is the file's Git object ID, so the page re-renders on every commit that touches it.
+
+With `--index-only`, a folder holding neither is served as the page saying no Markdown files
+were found, rather than with the error the read raises.
 
 A URL may stop short of a file:
 
@@ -212,7 +223,8 @@ above the page, so the way back is always beside the way down:
 |---|---|
 | an organization | the organization's projects |
 | a project | the same, the one on the page marked |
-| a repository | the repository's documents, under a **Browse to repositories** link back to the project |
+| a repository's root | the repository's documents, under a **Browse to repositories** link back to the project |
+| a folder within it | the folder's documents, under an **Up** link to the folder above |
 
 The `scope` says how far the sidebar reaches below its entries, above a repository as within
 one:
@@ -223,11 +235,12 @@ one:
 | `subfolders` | the projects, with the repositories of the one on the page below it |
 | `tree` | the projects, each with its repositories - one read of the repositories per project |
 
-A repository whose list would hold nothing but the document already on the page - a repository
+A repository whose root would list nothing but the document already on the page - a repository
 with a `README.md` and no other Markdown - carries the project's repositories instead, the one
 on the page marked, and the link above them reads **Back to projects**, leading to the project
 the way it always does. A repository holding one document under another name keeps it, since
-that entry is the only way to reach it.
+that entry is the only way to reach it, and a folder within a repository always keeps its own
+list, however short, the **Up** link being the way out of it.
 
 ## Rendering
 

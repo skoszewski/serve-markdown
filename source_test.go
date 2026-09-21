@@ -33,6 +33,9 @@ func documentRoot(t *testing.T) string {
 		"plain/README.md":  "# Plain\n",
 		"listing/one.md":   "# One\n",
 		"listing/two.md":   "# Two\n",
+		// A directory holding both documents, for the order they are looked for in.
+		"both/index.md":  "# Both index\n",
+		"both/README.md": "# Both readme\n",
 	}
 	for name, content := range files {
 		writeFile(t, filepath.Join(root, filepath.FromSlash(name)), content)
@@ -86,7 +89,7 @@ func TestResolveRouteServesTheDefaultFileAtTheRoot(t *testing.T) {
 
 func TestRenderDirectoryListing(t *testing.T) {
 	root := documentRoot(t)
-	listing, err := renderDirectoryListing(root)
+	names, err := markdownFilesIn(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,20 +98,25 @@ func TestRenderDirectoryListing(t *testing.T) {
 		"- [beta.markdown](beta.markdown)\n" +
 		"- [notes.md](notes.md)\n" +
 		"- [README.md](README.md)\n"
-	if listing != want {
+	if listing := renderDirectoryListing(root, names); listing != want {
 		t.Errorf("listing = %q, want %q", listing, want)
+	}
+
+	// --index-only asks for the listing with no names, having stopped looking for them.
+	if listing := renderDirectoryListing(root, nil); listing != "# "+filepath.Base(root)+"\n\nNo Markdown files found.\n" {
+		t.Errorf("listing = %q, want the one saying none were found", listing)
 	}
 }
 
 func TestRenderDirectoryListingWithoutDocuments(t *testing.T) {
 	root := documentRoot(t)
 	empty := filepath.Join(root, "empty")
-	listing, err := renderDirectoryListing(empty)
+	names, err := markdownFilesIn(empty)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "# empty\n\nNo Markdown files found.\n"; listing != want {
-		t.Errorf("listing = %q, want %q", listing, want)
+	if listing := renderDirectoryListing(empty, names); listing != "# empty\n\nNo Markdown files found.\n" {
+		t.Errorf("listing = %q, want the one saying none were found", listing)
 	}
 }
 
@@ -167,9 +175,10 @@ func TestLoadDocumentReadsADirectory(t *testing.T) {
 		text string
 	}{
 		// A directory is the document it holds, and the listing of its documents when it holds
-		// neither README.md nor index.md.
+		// neither index.md nor README.md. A local directory names its index first.
 		"/docs":    {"index.md", "# Docs\n"},
 		"/plain":   {"README.md", "# Plain\n"},
+		"/both":    {"index.md", "# Both index\n"},
 		"/listing": {"", "# listing\n\n- [one.md](one.md)\n- [two.md](two.md)\n"},
 		"/empty":   {"", "# empty\n\nNo Markdown files found.\n"},
 	}
@@ -189,6 +198,49 @@ func TestLoadDocumentReadsADirectory(t *testing.T) {
 				t.Errorf("text = %q, want %q", read.text, want.text)
 			}
 		})
+	}
+}
+
+func TestLoadDocumentReadsOnlyTheIndex(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, indexOnly: true}
+
+	tests := map[string]struct {
+		name string
+		text string
+	}{
+		// The index is still read; a directory holding none is answered as holding no Markdown
+		// at all, whatever else stands in it.
+		"/docs":    {"index.md", "# Docs\n"},
+		"/plain":   {"README.md", "# Plain\n"},
+		"/listing": {"", "# listing\n\nNo Markdown files found.\n"},
+		"/empty":   {"", "# empty\n\nNo Markdown files found.\n"},
+	}
+	for route, want := range tests {
+		t.Run(route, func(t *testing.T) {
+			read, err := handler.loadDocument(source{kind: kindLocal, route: route})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if read.name != want.name || read.text != want.text {
+				t.Errorf("document = %q, %q, want %q, %q", read.name, read.text, want.name, want.text)
+			}
+		})
+	}
+
+	// The document beside the index is still served when the route names it.
+	read, err := handler.loadDocument(source{kind: kindLocal, route: "/listing/one.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.text != "# One\n" {
+		t.Errorf("text = %q, want the document the route names", read.text)
+	}
+
+	// The list beside the page still reaches every document, the flag being the page's own.
+	entries, _ := handler.documentList(source{kind: kindLocal, route: "/listing"}, "current")
+	if len(entries) != 2 {
+		t.Errorf("the list holds %+v, want both documents of the folder", entries)
 	}
 }
 
@@ -262,8 +314,9 @@ func TestDocumentTreeListsALocalDirectory(t *testing.T) {
 	tests := map[string][]string{
 		"current":    {"guide.md", "index.md"},
 		"subfolders": {"..", "guide.md", "index.md"},
-		"tree": {"docs", "docs/guide.md", "docs/index.md", "listing", "listing/one.md", "listing/two.md",
-			"plain", "plain/README.md", "Alpha.md", "beta.markdown", "notes.md", "README.md"},
+		"tree": {"both", "both/index.md", "both/README.md", "docs", "docs/guide.md", "docs/index.md",
+			"listing", "listing/one.md", "listing/two.md", "plain", "plain/README.md",
+			"Alpha.md", "beta.markdown", "notes.md", "README.md"},
 	}
 	for scope, want := range tests {
 		t.Run(scope, func(t *testing.T) {

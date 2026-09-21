@@ -25,7 +25,15 @@ const (
 
 const adoScheme = "ado://"
 
-var defaultCandidates = []string{"README.md", "index.md"}
+// A folder is read as the first of these documents it holds: a local directory names its
+// index first, an Azure Repos folder its README, as each is usually written.
+var (
+	localCandidates = []string{"index.md", "README.md"}
+	adoCandidates   = []string{"README.md", "index.md"}
+)
+
+// indexNames are the names a folder's own document goes by, whichever source it is read from.
+var indexNames = []string{"index.md", "README.md"}
 
 const routeHelp = `Routes:
   /<path>                                              a local file or directory under the server's directory
@@ -58,6 +66,7 @@ type server struct {
 	outline       outlineSettings
 	list          listSettings
 	mermaid       bool
+	indexOnly     bool
 }
 
 // Files with these suffixes are served as the bytes they hold rather than read as documents.
@@ -121,10 +130,10 @@ func isDir(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// findIndexFile returns the first of defaultCandidates that exists as a file under directory,
+// findIndexFile returns the first of localCandidates that exists as a file under directory,
 // or "" when none does.
 func findIndexFile(directory string) string {
-	for _, candidate := range defaultCandidates {
+	for _, candidate := range localCandidates {
 		path := filepath.Join(directory, candidate)
 		if isFile(path) {
 			return path
@@ -154,15 +163,14 @@ func resolveRoute(route, rootDir, defaultFile string) string {
 	return ""
 }
 
-// renderDirectoryListing returns a Markdown document listing the Markdown files found
-// directly under directory, or saying that it holds none.
+// markdownFilesIn returns the names of the Markdown files directly under directory, ordered
+// by name.
 //
-// It is the document of a directory holding neither README.md nor index.md. Subdirectories
-// are not scanned; the directory list beside the page reaches those.
-func renderDirectoryListing(directory string) (string, error) {
+// Subdirectories are not scanned; the directory list beside the page reaches those.
+func markdownFilesIn(directory string) ([]string, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var names []string
@@ -175,7 +183,15 @@ func renderDirectoryListing(directory string) (string, error) {
 	sort.SliceStable(names, func(i, j int) bool {
 		return strings.ToLower(names[i]) < strings.ToLower(names[j])
 	})
+	return names, nil
+}
 
+// renderDirectoryListing returns the Markdown document listing names as the files directory
+// holds, or saying that it holds none.
+//
+// It is the document of a directory holding neither index.md nor README.md; --index-only asks
+// for it with no names at all, having stopped looking for the rest.
+func renderDirectoryListing(directory string, names []string) string {
 	lines := []string{"# " + filepath.Base(directory), ""}
 	if len(names) == 0 {
 		lines = append(lines, "No Markdown files found.")
@@ -183,7 +199,7 @@ func renderDirectoryListing(directory string) (string, error) {
 	for _, name := range names {
 		lines = append(lines, fmt.Sprintf("- [%s](%s)", name, name))
 	}
-	return strings.Join(lines, "\n") + "\n", nil
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // readLocalFile reads a local file as the document it holds.
@@ -398,9 +414,12 @@ type document struct {
 }
 
 // loadDocument reads the document source addresses.
+//
+// A directory is the index.md or README.md within it; holding neither, it is the listing of
+// the Markdown files it does hold, which --index-only leaves out, having stopped looking.
 func (s *server) loadDocument(src source) (document, error) {
 	if src.kind == kindADO {
-		return readADOSource(src)
+		return readADOSource(src, s.indexOnly)
 	}
 
 	path := resolveRoute(src.route, s.rootDir, s.defaultFile)
@@ -418,11 +437,14 @@ func (s *server) loadDocument(src source) (document, error) {
 	if err != nil {
 		return document{}, err
 	}
-	listing, err := renderDirectoryListing(path)
-	if err != nil {
-		return document{}, err
+	var names []string
+	if !s.indexOnly {
+		if names, err = markdownFilesIn(path); err != nil {
+			return document{}, err
+		}
 	}
-	return document{marker: strconv.FormatInt(info.ModTime().UnixNano(), 10), text: listing}, nil
+	return document{marker: strconv.FormatInt(info.ModTime().UnixNano(), 10),
+		text: renderDirectoryListing(path, names)}, nil
 }
 
 // documentBase returns the route relative links in the document are resolved against: the

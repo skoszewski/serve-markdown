@@ -260,11 +260,13 @@ func adoRoute(src source, itemPath string) string {
 
 // adoTree reads an Azure Repos repository as the tree the directory list is built from.
 //
-// isFolder tells whether a repository path names a folder, and is the repository's own answer
-// unless a test gives another.
+// folderPath is the folder the page stands in once it has been resolved, kept so that the
+// repository is asked about it once. isFolder tells whether a repository path names a folder,
+// and is the repository's own answer unless a test gives another.
 type adoTree struct {
-	src      source
-	isFolder func(source, string) bool
+	src        source
+	folderPath string
+	isFolder   func(source, string) bool
 }
 
 func (t adoTree) root() string { return "/" }
@@ -275,6 +277,9 @@ func (t adoTree) root() string { return "/" }
 // A path ending in a slash, or carrying a Markdown suffix, says which it is on its own; any
 // other is looked up, since a route reaching a folder is written without a trailing slash.
 func (t adoTree) folder() string {
+	if t.folderPath != "" {
+		return t.folderPath
+	}
 	suffix := strings.ToLower(path.Ext(t.src.path))
 	if strings.HasSuffix(t.src.path, "/") || markdownExtensions[suffix] {
 		return path.Dir(t.src.path)
@@ -325,11 +330,17 @@ func adoItemIsFolder(src source, itemPath string) bool {
 	return err == nil && item.IsFolder
 }
 
+// errNoIndexDocument reports that a folder holds none of the documents a folder is read as.
+var errNoIndexDocument = errors.New("no index document")
+
 // readADODocument reads the document source addresses, resolving a folder to its index file.
 //
-// A folder is read the way a local directory is: the defaultCandidates are tried in order and
-// the first one that exists is the document. A path that does not end in a slash is read
+// A folder is read the way a local directory is: the adoCandidates are tried in order and the
+// first one that exists is the document. A path that does not end in a slash is read
 // directly, and looked up as a folder only if the repository says it is one.
+//
+// A folder holding none of them raises errNoIndexDocument, which the caller answers as the
+// scope holding no Markdown at all.
 func readADODocument(src source) (itemPath, content, objectID string, err error) {
 	itemPath = src.path
 	if !strings.HasSuffix(itemPath, "/") {
@@ -344,14 +355,15 @@ func readADODocument(src source) (itemPath, content, objectID string, err error)
 		itemPath += "/"
 	}
 
-	for _, candidate := range defaultCandidates {
+	for _, candidate := range adoCandidates {
 		item, readErr := readADOItem(src, itemPath+candidate, true)
 		if readErr != nil {
 			continue
 		}
 		return itemPath + candidate, item.Content, item.ObjectID, nil
 	}
-	return "", "", "", fmt.Errorf("none of %s found in '%s'", strings.Join(defaultCandidates, ", "), itemPath)
+	return "", "", "", fmt.Errorf("%w: none of %s found in '%s'",
+		errNoIndexDocument, strings.Join(adoCandidates, ", "), itemPath)
 }
 
 // readADOSource reads the document source addresses in Azure DevOps.
@@ -359,7 +371,10 @@ func readADODocument(src source) (itemPath, content, objectID string, err error)
 // An organization and a project hold no document of their own, so each is read as a listing:
 // of the organization's projects, and of the project's repositories. A repository is read as
 // the file the path names.
-func readADOSource(src source) (document, error) {
+//
+// With indexOnly, a folder holding neither of the documents a folder is read as is answered
+// as one holding no Markdown at all, rather than with the error the read raised.
+func readADOSource(src source, indexOnly bool) (document, error) {
 	switch {
 	case src.project == "":
 		names, err := readADOProjects(src)
@@ -378,6 +393,13 @@ func readADOSource(src source) (document, error) {
 
 	itemPath, content, objectID, err := readADODocument(src)
 	if err != nil {
+		if indexOnly && errors.Is(err, errNoIndexDocument) {
+			folder := strings.TrimSuffix(src.path, "/")
+			if folder == "" {
+				folder = src.repository
+			}
+			return listingDocument(path.Base(folder), "Markdown files", nil), nil
+		}
 		return document{}, err
 	}
 	name := itemPath
@@ -416,22 +438,36 @@ func listingDocument(title, held string, names []string) document {
 // its project. The scope says how far below the entries the list reaches, the way it does for
 // a local directory.
 //
-// A repository whose list leads nowhere - holding no document at all, or the one already on
-// the page and nothing else - carries the project's repositories instead, the one on the page
-// marked. The link above them leads where it always does, under the label that names what the
-// list now holds.
+// A repository root whose list leads nowhere - holding no document at all, or the one already
+// on the page and nothing else - carries the project's repositories instead, the one on the
+// page marked. The link above them leads where it always does, under the label that names
+// what the list now holds. A folder below the root keeps its own list, however short, since
+// the folder above it is where the way out lies.
 func adoList(src source, scope string) ([]listEntry, listLink) {
 	if src.repository == "" {
 		return adoProjectEntries(src, scope), listLink{}
 	}
 
-	entries := documentTree(adoTree{src: src}, scope)
-	up := adoUpLink(src)
-	if holdsNothingToBrowse(entries) {
+	tree := adoTree{src: src}
+	tree.folderPath = tree.folder()
+
+	entries := documentTree(tree, scope)
+	up := adoListLink(src, tree.folderPath)
+	if tree.folderPath == tree.root() && holdsNothingToBrowse(entries) {
 		entries = adoRepositoryEntries(src, src.project)
 		up.Label = "Back to projects"
 	}
 	return entries, up
+}
+
+// adoListLink returns the link standing above a repository's documents: the folder above the
+// one the page stands in, or the repositories of the project once the page stands at the
+// repository's root.
+func adoListLink(src source, folder string) listLink {
+	if folder != "" && folder != "/" {
+		return listLink{Label: "Up", Route: adoRoute(src, path.Dir(folder))}
+	}
+	return adoUpLink(src)
 }
 
 // adoProjectEntries lists the projects of the organization source names, the one on the page
@@ -500,7 +536,7 @@ func holdsNothingToBrowse(entries []listEntry) bool {
 	if entries[0].Current {
 		return true
 	}
-	for _, candidate := range defaultCandidates {
+	for _, candidate := range indexNames {
 		if strings.EqualFold(entries[0].Name, candidate) {
 			return true
 		}

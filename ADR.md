@@ -108,6 +108,18 @@ An Azure Repos picture is read as the item's own stream rather than through the 
 the documents are read with, since a binary file does not survive being carried as a JSON
 string.
 
+## A folder's document is looked for the way its source writes it
+
+A local directory is read as its `index.md` before its `README.md`, and an Azure Repos folder
+the other way round, since that is the name each is usually given where it stands. The order
+is the source's, not a setting, so a folder resolves to the same document however it is
+reached.
+
+`--index-only` stops the search at those two names: a folder is the document it holds or a
+page saying none was found, and the listing of whatever else stands there is left out. It
+decides the page alone - the list beside it still reaches every document, since browsing is
+what that list is for.
+
 ## An organization and a project are folders
 
 Azure DevOps nests an organization, a project, a repository and then the files, so the two
@@ -133,6 +145,11 @@ A repository holding a `README.md` and nothing else would list that one document
 document the reader is already looking at. The list is then the project's repositories, the
 one on the page marked, so the sidebar always offers somewhere to go. The link above them
 leads to the project as it always does, under a label naming what the list now holds.
+
+That swap belongs to the repository's root alone. A folder within a repository keeps its own
+list however short it is, since the folder above it is a step the reader will want, and the
+link above the list is the one that takes it: **Up** below the root, **Browse to
+repositories** at it.
 
 Telling that case apart takes more than the entry's mark: a repository's own route addresses
 the document inside it without naming it, so nothing in the list is marked. An only entry
