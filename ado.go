@@ -411,45 +411,62 @@ func listingDocument(title, held string, names []string) document {
 
 // adoList returns the directory list beside a page of an Azure DevOps source.
 //
-// An organization holds the listing of its projects in the page itself, so it carries none. A
-// project carries the organization's projects, the one on the page marked, since the page is
-// the repositories below it. A repository carries its own documents, under the link back to
-// the repositories of its project.
+// An organization and a project carry the organization's projects, the one on the page
+// marked; a repository carries its own documents, under the link back to the repositories of
+// its project. The scope says how far below the entries the list reaches, the way it does for
+// a local directory.
 //
 // A repository whose list holds nothing but the document already on the page carries the
 // project's repositories instead, the one on the page marked, since a list of that one
 // document says nothing the page does not.
 func adoList(src source, scope string) ([]listEntry, listLink) {
-	project := source{kind: kindADO, organization: src.organization, project: src.project}
-
-	switch {
-	case src.project == "":
-		return nil, listLink{}
-
-	case src.repository == "":
-		names, err := readADOProjects(src)
-		if err != nil {
-			logInfo("  %scannot list the projects of %s: %v%s", colorYellow, src.organization, err, colorReset)
-			return nil, listLink{}
-		}
-		return namedEntries(names, src.project, func(name string) string {
-			return adoRoute(source{kind: kindADO, organization: src.organization, project: name}, "")
-		}), listLink{}
+	if src.repository == "" {
+		return adoProjectEntries(src, scope), listLink{}
 	}
 
 	entries := documentTree(adoTree{src: src}, scope)
 	if holdsOnlyTheCurrentDocument(entries) {
-		names, err := readADORepositories(project)
-		if err != nil {
-			logInfo("  %scannot list the repositories of %s: %v%s", colorYellow, src.project, err, colorReset)
-			return entries, adoUpLink(src)
-		}
-		entries = namedEntries(names, src.repository, func(name string) string {
-			return adoRoute(source{kind: kindADO, organization: src.organization,
-				project: src.project, repository: name}, "")
-		})
+		entries = adoRepositoryEntries(src, src.project)
 	}
 	return entries, adoUpLink(src)
+}
+
+// adoProjectEntries lists the projects of the organization source names, the one on the page
+// marked, with the repositories of the projects the scope reaches nested below them.
+//
+// The scope reaches the project on the page below "subfolders", and every project below
+// "tree", which reads the repositories of each in turn.
+func adoProjectEntries(src source, scope string) []listEntry {
+	names, err := readADOProjects(src)
+	if err != nil {
+		logInfo("  %scannot list the projects of %s: %v%s", colorYellow, src.organization, err, colorReset)
+		return nil
+	}
+
+	entries := namedEntries(names, src.project, func(name string) string {
+		return adoRoute(source{kind: kindADO, organization: src.organization, project: name}, "")
+	})
+	for index, entry := range entries {
+		if scope == "tree" || (scope == "subfolders" && entry.Current) {
+			entries[index].Children = adoRepositoryEntries(src, entry.Name)
+		}
+	}
+	return entries
+}
+
+// adoRepositoryEntries lists the Git repositories of one project of the organization source
+// names, the repository on the page marked.
+func adoRepositoryEntries(src source, project string) []listEntry {
+	within := source{kind: kindADO, organization: src.organization, project: project}
+	names, err := readADORepositories(within)
+	if err != nil {
+		logInfo("  %scannot list the repositories of %s: %v%s", colorYellow, project, err, colorReset)
+		return nil
+	}
+	return namedEntries(names, src.repository, func(name string) string {
+		return adoRoute(source{kind: kindADO, organization: src.organization,
+			project: project, repository: name}, "")
+	})
 }
 
 // namedEntries turns names into list entries addressing the route each name names, marking

@@ -205,9 +205,18 @@ the way down:
 
 | Page | Sidebar |
 |---|---|
-| an organization | nothing; the page is the list of its projects |
-| a project | the organization's projects, the one on the page marked |
+| an organization | the organization's projects |
+| a project | the same, the one on the page marked |
 | a repository | the repository's documents, under a **Browse to repositories** link back to the project |
+
+The `scope` says how far the sidebar reaches below its entries, above a repository as within
+one:
+
+| Scope | An organization or a project shows |
+|---|---|
+| `current` | the projects alone |
+| `subfolders` | the projects, with the repositories of the one on the page below it |
+| `tree` | the projects, each with its repositories - one read of the repositories per project |
 
 A repository whose list would hold nothing but the document already on the page - a repository
 with a `README.md` and no other Markdown - carries the project's repositories instead, the one
