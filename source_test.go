@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+// The bytes of the files served as raw assets rather than as documents.
+const (
+	pictureContent = "\x89PNG\r\n\x1a\nnot a real picture\n"
+	drawingContent = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>\n"
+)
+
 // documentRoot builds a directory tree the route tests resolve against.
 func documentRoot(t *testing.T) string {
 	t.Helper()
@@ -15,14 +21,15 @@ func documentRoot(t *testing.T) string {
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"README.md":       "# Root\n",
-		"notes.md":        "# Notes\n",
-		"Alpha.md":        "# Alpha\n",
-		"beta.markdown":   "# Beta\n",
-		"picture.png":     "not markdown\n",
-		"docs/index.md":   "# Docs\n",
-		"docs/guide.md":   "# Guide\n",
-		"plain/README.md": "# Plain\n",
+		"README.md":        "# Root\n",
+		"notes.md":         "# Notes\n",
+		"Alpha.md":         "# Alpha\n",
+		"beta.markdown":    "# Beta\n",
+		"picture.png":      pictureContent,
+		"docs/drawing.svg": drawingContent,
+		"docs/index.md":    "# Docs\n",
+		"docs/guide.md":    "# Guide\n",
+		"plain/README.md":  "# Plain\n",
 	}
 	for name, content := range files {
 		writeFile(t, filepath.Join(root, filepath.FromSlash(name)), content)
@@ -143,6 +150,12 @@ func TestResolveSource(t *testing.T) {
 		{"an unknown namespace", "/_/pydoc/module", fileSource, source{}, false},
 		{"the root of an ado source", "/", adoSource, adoSource, true},
 		{"a path below an ado source", "/docs/guide.md", adoSource,
+			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"}, true},
+		{"a path beside an ado document", "/diagram.png",
+			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"},
+			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/diagram.png"}, true},
+		{"a path below an ado folder", "/guide.md",
+			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/"},
 			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"}, true},
 	}
 

@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"mime"
+	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -51,6 +54,27 @@ type server struct {
 	watchInterval float64
 	assets        assetURLs
 	online        bool
+	outline       outlineSettings
+	mermaid       bool
+}
+
+// Files with these suffixes are served as the bytes they hold rather than read as documents.
+var rawAssetExtensions = map[string]bool{
+	".avif": true, ".bmp": true, ".gif": true, ".ico": true, ".jpeg": true,
+	".jpg": true, ".pdf": true, ".png": true, ".svg": true, ".webp": true,
+}
+
+// isRawAsset reports whether path names a file served as its own bytes.
+func isRawAsset(path string) bool {
+	return rawAssetExtensions[strings.ToLower(filepath.Ext(path))]
+}
+
+// contentTypeFor returns the media type path's suffix names, falling back to a byte stream.
+func contentTypeFor(path string) string {
+	if mediaType := mime.TypeByExtension(strings.ToLower(filepath.Ext(path))); mediaType != "" {
+		return mediaType
+	}
+	return "application/octet-stream"
 }
 
 // unescapePath decodes the percent escapes in a URL path, leaving it unchanged when it holds
@@ -200,6 +224,9 @@ func readLocalFile(path string) (string, string, string, error) {
 // whatever the server was started with. Any other route is read from the source the server
 // was started with, addressing a document below it.
 //
+// A route below an "ado" default source addresses a path beside the document the server was
+// started with.
+//
 // The second result is false when the route names a scheme but no document within it.
 func resolveSource(route string, defaultSource source) (source, bool) {
 	namespace, remainder, _ := strings.Cut(strings.TrimLeft(route, "/"), "/")
@@ -223,8 +250,35 @@ func resolveSource(route string, defaultSource source) (source, bool) {
 		return defaultSource, true
 	}
 	addressed := defaultSource
-	addressed.path = "/" + relative
+	addressed.path = path.Join(path.Dir(defaultSource.path), relative)
 	return addressed, true
+}
+
+// sendRawAsset answers with the bytes of the picture or other binary file src addresses,
+// sandboxed.
+func (s *server) sendRawAsset(writer http.ResponseWriter, request *http.Request, src source) {
+	writer.Header().Set("Content-Security-Policy", "sandbox")
+
+	if src.kind == kindADO {
+		content, err := readADORawItem(src)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusNotFound)
+			return
+		}
+		writer.Header().Set("Content-Type", contentTypeFor(src.path))
+		writer.Write(content)
+		return
+	}
+
+	file := resolveRoute(src.route, s.rootDir, s.defaultFile)
+	if src.kind == kindDir {
+		file = resolveDirRoute(src.route, s.rootDir)
+	}
+	if file == "" || !isFile(file) {
+		http.Error(writer, fmt.Sprintf("no such file for route '%s'", src.route), http.StatusNotFound)
+		return
+	}
+	http.ServeFile(writer, request, file)
 }
 
 // sourceRoute returns the URL route that addresses source, for the server to print at startup.

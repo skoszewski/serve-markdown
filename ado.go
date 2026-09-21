@@ -189,6 +189,51 @@ func readADOItem(src source, itemPath string, includeContent bool) (gitItem, err
 	return item, nil
 }
 
+// readADORawItem reads the file source addresses as the bytes it holds, for a picture or
+// another file that is not text.
+//
+// The item itself is read rather than JSON holding its content, and a Git LFS pointer is
+// resolved to the file it stands for.
+func readADORawItem(src source) ([]byte, error) {
+	token, err := accessTokenFromAZ()
+	if err != nil {
+		return nil, err
+	}
+
+	query := url.Values{}
+	query.Set("path", src.path)
+	query.Set("resolveLfs", "true")
+	query.Set("api-version", adoGitAPIVersion)
+	requestURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?%s",
+		url.PathEscape(src.organization), url.PathEscape(src.project),
+		url.PathEscape(src.repository), query.Encode())
+
+	description := fmt.Sprintf("reading %s from %s", src.path, src.repository)
+
+	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Accept", "application/octet-stream")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, &adoRequestError{fmt.Sprintf("%s failed: %d %s", description,
+			response.StatusCode, adoErrorMessage(body, response.Status))}
+	}
+	return body, nil
+}
+
 // adoErrorMessage extracts the Azure DevOps error text from a failed response body, falling
 // back to the HTTP status.
 func adoErrorMessage(body []byte, status string) string {

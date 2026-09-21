@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="{{.Assets.MarkdownCSS}}">
+<link rel="stylesheet" href="{{.Assets.HighlightCSSLite}}" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="{{.Assets.HighlightCSSDark}}" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="{{.PageCSS}}">
+<script src="{{.Assets.MarkedJS}}"></script>
+<script src="{{.Assets.DOMPurifyJS}}"></script>
+<script src="{{.Assets.HighlightJS}}"></script>
+<script>
+  const pageConfig = {{.Config}};
+</script>
+<script src="{{.PageJS}}" defer></script>
+<style id="_document-css"></style>
+</head>
+<body{{if .Outline.Style}} class="with-outline outline-{{.Outline.Justify}}"{{end}}>
+{{if .Outline.Style}}<nav id="_outline" class="outline-{{.Outline.Style}}"></nav>
+{{end}}<article id="_content" class="markdown-body">Loading...</article>
+</body>
+</html>

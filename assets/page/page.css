@@ -1,0 +1,150 @@
+body {
+  margin: 0;
+  background-color: #ffffff;
+}
+
+.markdown-body {
+  box-sizing: border-box;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 45px;
+}
+
+.markdown-body pre {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.markdown-body img {
+  max-width: 100%;
+}
+
+.markdown-body .mermaid {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.markdown-body .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* The outline stands beside the document, scrolling on its own. */
+body.with-outline {
+  display: flex;
+  align-items: flex-start;
+}
+
+body.outline-right {
+  flex-direction: row-reverse;
+}
+
+/* The document keeps its own width, centred in what the outline leaves it. */
+body.with-outline .markdown-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 auto;
+}
+
+#_outline {
+  position: sticky;
+  top: 0;
+  flex: 0 0 320px;
+  max-height: 100vh;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 45px 20px;
+  border-right: 1px solid #d0d7de;
+  color: #1f2328;
+  font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+body.outline-right #_outline {
+  border-right: none;
+  border-left: 1px solid #d0d7de;
+}
+
+#_outline ol {
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+#_outline > ol {
+  padding-left: 0;
+}
+
+#_outline li {
+  margin: 3px 0;
+}
+
+#_outline a {
+  color: inherit;
+  text-decoration: none;
+}
+
+#_outline a:hover {
+  text-decoration: underline;
+}
+
+/* Each style numbers the outline in CSS alone. */
+#_outline.outline-plain ol {
+  list-style: none;
+  padding-left: 1em;
+}
+
+#_outline.outline-plain > ol {
+  padding-left: 0;
+}
+
+#_outline.outline-numbered ol {
+  list-style: decimal;
+}
+
+#_outline.outline-numbered-hierarchical ol {
+  list-style: none;
+  counter-reset: section;
+}
+
+#_outline.outline-numbered-hierarchical li::before {
+  counter-increment: section;
+  content: counters(section, ".") ". ";
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #0d1117;
+  }
+
+  #_outline {
+    border-right-color: #30363d;
+    color: #c9d1d9;
+  }
+
+  body.outline-right #_outline {
+    border-left-color: #30363d;
+  }
+}
+
+/* Too narrow to stand beside the document, the outline goes above it. */
+@media (max-width: 900px) {
+  body.with-outline {
+    display: block;
+  }
+
+  #_outline,
+  body.outline-right #_outline {
+    position: static;
+    flex: none;
+    max-height: none;
+    padding: 20px;
+    border-right: none;
+    border-left: none;
+    border-bottom: 1px solid #d0d7de;
+  }
+}
+
+@media (max-width: 900px) and (prefers-color-scheme: dark) {
+  #_outline {
+    border-bottom-color: #30363d;
+  }
+}

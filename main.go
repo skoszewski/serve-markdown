@@ -33,6 +33,66 @@ const pathUsage = "Markdown file or directory to serve; defaults to the current 
 	"a file from an Azure Repos Git repository. Whichever is given, the /_/<scheme>/ routes " +
 	"(file, dir, ado) reach the others while the server runs."
 
+// outlineStyles are the values --outline takes, each with the shorthand that also names it:
+// an outline without numbers, one numbered within each level, and one numbered as 1., 1.1.,
+// 1.1.1. down the levels.
+var outlineStyles = []struct{ name, shorthand string }{
+	{"plain", "p"},
+	{"numbered", "n"},
+	{"numbered-hierarchical", "nh"},
+}
+
+// outlineNone is the value that asks for no outline at all.
+const outlineNone = "none"
+
+// outlineJustifications are the sides of the document the outline stands on.
+var outlineJustifications = []string{"left", "right"}
+
+// defaultOutline is what an outline is drawn with before --outline or the query names
+// anything else.
+var defaultOutline = outlineSettings{Style: "plain", Justify: "left"}
+
+// outlineStyle returns the style given names, by its name, its shorthand or outlineNone for
+// no outline. The second result is false when it names none of them.
+func outlineStyle(given string) (string, bool) {
+	if given == outlineNone {
+		return "", true
+	}
+	for _, style := range outlineStyles {
+		if given == style.name || given == style.shorthand {
+			return style.name, true
+		}
+	}
+	return "", false
+}
+
+// outlineStyleList names the styles with their shorthands, for the flag's help and its errors.
+func outlineStyleList() string {
+	names := make([]string, 0, len(outlineStyles)+1)
+	for _, style := range outlineStyles {
+		names = append(names, fmt.Sprintf("%s (%s)", style.name, style.shorthand))
+	}
+	return strings.Join(append(names, outlineNone), ", ")
+}
+
+// parseOutline reads the "style" and "justify" settings onto the ones it is given, and
+// returns the outline the list asks for.
+func parseOutline(given string, settings outlineSettings) (outlineSettings, error) {
+	err := parseSettings(given, map[string]func(string) error{
+		"style": func(value string) error {
+			style, known := outlineStyle(value)
+			if !known {
+				return fmt.Errorf("'%s' is not an outline style; expected one of %s",
+					value, outlineStyleList())
+			}
+			settings.Style = style
+			return nil
+		},
+		"justify": settingFrom("an outline justification", outlineJustifications, &settings.Justify),
+	})
+	return settings, err
+}
+
 // contentPayload is the JSON the page polls for. Its mtime, text and css are null when the
 // document could not be read.
 type contentPayload struct {
@@ -68,6 +128,12 @@ func run() error {
 		defaultWatchInterval, defaultADOWatchSecond, adoScheme))
 	online := flag.Bool("online", false,
 		"Load the Markdown and highlighting libraries from their CDNs instead of from inside this binary")
+	outline := flag.String("outline", "", fmt.Sprintf(
+		"Show an outline of the document's headings beside it, as a comma separated list of "+
+			"settings: style:%s, justify:%s. A page takes an 'outline' query parameter of the "+
+			"same settings, which overrides this one",
+		outlineStyleList(), strings.Join(outlineJustifications, "|")))
+	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 
 	flag.Usage = func() {
@@ -85,7 +151,18 @@ func run() error {
 		return nil
 	}
 
-	handler := &server{assets: embeddedAssets, online: *online}
+	// Without an outline the style is empty and the side still stands, for a query to turn
+	// the outline on without naming one.
+	outlineOf := outlineSettings{Justify: defaultOutline.Justify}
+	if *outline != "" {
+		parsed, err := parseOutline(*outline, defaultOutline)
+		if err != nil {
+			return err
+		}
+		outlineOf = parsed
+	}
+
+	handler := &server{assets: embeddedAssets, online: *online, outline: outlineOf, mermaid: *mermaid}
 	if *online {
 		handler.assets = cdnAssets
 	}
@@ -197,10 +274,18 @@ func (s *server) serve(listener net.Listener) error {
 }
 
 // ServeHTTP serves a page shell for every route, and the document that route addresses at
-// /content.
+// /content. A route naming a picture or another binary file is answered with its bytes.
+//
+// A page route takes an "outline" query parameter of the settings --outline itself takes,
+// which it applies onto them for that page; a parameter that does not read leaves them.
 func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if strings.HasPrefix(request.URL.Path, pageAssetRoute) {
+		pageFiles.ServeHTTP(writer, request)
+		return
+	}
+
 	if !s.online && strings.HasPrefix(request.URL.Path, assetRoute) {
-		vendorHandler().ServeHTTP(writer, request)
+		vendorFiles.ServeHTTP(writer, request)
 		return
 	}
 
@@ -210,6 +295,11 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	src, ok := resolveSource(request.URL.Path, s.defaultSource)
+	if ok && isRawAsset(request.URL.Path) {
+		s.sendRawAsset(writer, request, src)
+		return
+	}
+
 	title := ""
 	if ok {
 		title = s.documentTitle(src)
@@ -222,8 +312,14 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	outline := s.outline
+	if asked, err := parseOutline(request.URL.Query().Get("outline"), outline); err == nil {
+		outline = asked
+	}
+
 	query := "?path=" + url.QueryEscape(request.URL.Path)
-	page := renderPage(title, query, int(math.Round(s.watchInterval*1000)), s.assets)
+	page := renderPage(title, query, int(math.Round(s.watchInterval*1000)), s.assets,
+		outline, s.mermaid)
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.Write(page)
 }
