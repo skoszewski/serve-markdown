@@ -662,6 +662,16 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 		t.Errorf("the page does not hold %q: %q", want, page)
 	}
 
+	// A list of repositories leads to the same page, under the label naming what it holds.
+	up := adoUpLink(source{kind: kindADO, organization: "my org", project: "my proj",
+		repository: "repo"})
+	up.Label = "Back to projects"
+	page = string(renderPage("README.md", "?path=/", 1000, embeddedAssets,
+		sidebars{List: listSettings{Style: "plain"}, Up: up}, false))
+	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Back to projects</a>`; !strings.Contains(page, want) {
+		t.Errorf("the page does not hold %q: %q", want, page)
+	}
+
 	// A local list has nothing above it.
 	entries, up := handler.documentList(source{kind: kindLocal, route: "/docs/guide.md"}, "current")
 	if len(entries) == 0 || up.Label != "" {

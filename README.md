@@ -225,8 +225,9 @@ one:
 
 A repository whose list would hold nothing but the document already on the page - a repository
 with a `README.md` and no other Markdown - carries the project's repositories instead, the one
-on the page marked, so there is somewhere to go from it. A repository holding one document
-under another name keeps it, since that entry is the only way to reach it.
+on the page marked, and the link above them reads **Back to projects**, leading to the project
+the way it always does. A repository holding one document under another name keeps it, since
+that entry is the only way to reach it.
 
 ## Rendering
 

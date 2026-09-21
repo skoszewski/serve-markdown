@@ -418,17 +418,20 @@ func listingDocument(title, held string, names []string) document {
 //
 // A repository whose list holds nothing but the document already on the page carries the
 // project's repositories instead, the one on the page marked, since a list of that one
-// document says nothing the page does not.
+// document says nothing the page does not. The link above them leads where it always does,
+// under the label that names what the list now holds.
 func adoList(src source, scope string) ([]listEntry, listLink) {
 	if src.repository == "" {
 		return adoProjectEntries(src, scope), listLink{}
 	}
 
 	entries := documentTree(adoTree{src: src}, scope)
+	up := adoUpLink(src)
 	if holdsOnlyTheCurrentDocument(entries) {
 		entries = adoRepositoryEntries(src, src.project)
+		up.Label = "Back to projects"
 	}
-	return entries, adoUpLink(src)
+	return entries, up
 }
 
 // adoProjectEntries lists the projects of the organization source names, the one on the page

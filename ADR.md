@@ -131,7 +131,8 @@ costs one read per project and is asked for rather than assumed.
 
 A repository holding a `README.md` and nothing else would list that one document, which is the
 document the reader is already looking at. The list is then the project's repositories, the
-one on the page marked, so the sidebar always offers somewhere to go.
+one on the page marked, so the sidebar always offers somewhere to go. The link above them
+leads to the project as it always does, under a label naming what the list now holds.
 
 Telling that case apart takes more than the entry's mark: a repository's own route addresses
 the document inside it without naming it, so nothing in the list is marked. An only entry
