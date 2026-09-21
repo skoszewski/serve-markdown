@@ -65,6 +65,36 @@ func TestADOSourceRoute(t *testing.T) {
 	}
 }
 
+func TestADOTreeFolder(t *testing.T) {
+	// The repository holds /docs as a folder, and nothing else is one.
+	isFolder := func(src source, itemPath string) bool { return itemPath == "/docs" }
+
+	tests := map[string]string{
+		"/docs/guide.md": "/docs",
+		"/docs/":         "/docs",
+		"/docs":          "/docs",
+		"/README.md":     "/",
+		"/":              "/",
+	}
+	for given, want := range tests {
+		t.Run(given, func(t *testing.T) {
+			tree := adoTree{src: source{kind: kindADO, organization: "org", project: "proj",
+				repository: "repo", path: given}, isFolder: isFolder}
+			if got := tree.folder(); got != want {
+				t.Errorf("folder() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestADORoute(t *testing.T) {
+	src := source{kind: kindADO, organization: "my org", project: "proj", repository: "repo"}
+	tree := adoTree{src: src}
+	if got, want := tree.route("/docs/my guide.md"), "/_/ado/my%20org/proj/repo/docs/my%20guide.md"; got != want {
+		t.Errorf("route = %q, want %q", got, want)
+	}
+}
+
 func TestADODocumentTitle(t *testing.T) {
 	tests := []struct {
 		path string

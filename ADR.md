@@ -44,12 +44,33 @@ the same list and apply it onto the server's own settings for that page alone.
 
 ## One tree walk reads both kinds of source
 
-The directory list and the local `dir:` source read a filesystem, while an `ado://` source
-reads a repository over REST, but both are a tree of folders and documents. `documentTree`
+A local source reads a filesystem and an `ado://` source reads a repository over REST, but
+both are a tree of folders and documents. `documentTree`
 holds the whole of the building - the scope, the nesting, the ordering, the `..` entry, the
 marking of the document on the page - and asks a `treeProvider` for the folder it starts at,
 what a folder holds, and the route that addresses an item. `localTree` and `adoTree` are those
 providers, and a third kind of source would only have to answer the same questions.
+
+## The document says what its links are read from
+
+A document's relative links are resolved by the browser against the page's own address, which
+drops its last segment. A folder served at `/_/ado/<org>/<project>/<repo>` therefore turned
+`pool/README.md` into `/_/ado/<org>/<project>/pool/README.md`, reading the repository name as
+a project's, and Azure DevOps answered TF401019; a local folder at `/_/local/docs` lost its
+last segment the same way.
+
+The route is not the place to fix it. An `ado://` route is
+`/_/ado/<organization>/<project>/<repository><path>`, whose first five segments are the
+address of the repository itself and are not the server's to rewrite, and a folder is a route
+the reader may write with or without a trailing slash either way.
+
+So `/content` answers with the base the links are read from - the route of the folder the
+document was resolved in, which only the server knows, since a route naming a folder resolves
+to a document inside it - and the page resolves the document's own links and pictures against
+it. Nothing redirects, and every shape of route is served as written.
+
+A `<base>` element would do the same for the browser, but it also moves every anchor on the
+page, which would send the outline's links away from the document instead of down it.
 
 ## Browsing carries the page's query
 
@@ -87,9 +108,21 @@ An Azure Repos picture is read as the item's own stream rather than through the 
 the documents are read with, since a binary file does not survive being carried as a JSON
 string.
 
-## A route below an ado:// source resolves beside the document
+## One local namespace, and ado:// under its own route
 
-A local file source makes the file's directory the server's root, so a route below it
-addresses a path beside the file. An `ado://` source resolved the same route against the
-repository root instead, which left a picture beside the document unreachable. Both now
-resolve beside the document.
+`/_/file/<path>` resolved a directory to the `README.md` or `index.md` within it, and
+`/_/dir/<path>` listed the directory's Markdown files instead; a file read the same under
+both. Two namespaces for one filesystem, telling apart two answers to the same question.
+
+They are now `/_/local/<path>`, which resolves a directory to the document within it, lists
+the directory when it holds neither `README.md` nor `index.md`, and says so when it holds no
+Markdown file at all. The listing is the fallback rather than a mode, since the directory list
+beside the page is what browsing is done with now, and `dir:` on the command line goes with
+it - a directory argument says the same thing.
+
+An `ado://` source keeps its own route and is not served at the root: the repository is named
+by `/_/ado/<organization>/<project>/<repository>`, so serving it at `/` as well gave the same
+document two addresses, one of which dropped the part saying where it comes from, and a
+relative link from the rooted one resolved into the wrong repository. A local source keeps the
+root, since a path below the server's own directory is what the rest of the route already
+says.

@@ -18,26 +18,23 @@ import (
 const routeNamespace = "_"
 
 const (
-	kindFile = "file"
-	kindDir  = "dir"
-	kindADO  = "ado"
+	kindLocal = "local"
+	kindADO   = "ado"
 )
 
-const (
-	dirPrefix = "dir:"
-	adoScheme = "ado://"
-)
+const adoScheme = "ado://"
 
 var defaultCandidates = []string{"README.md", "index.md"}
 
 const routeHelp = `Routes:
-  /<path>                                              the source the server was started with
-  /_/file/<path>                                       a local file under the server's directory
-  /_/dir/<path>                                        a local directory's Markdown files, listed
-  /_/ado/<organization>/<project>/<repository>/<path>  a file in an Azure Repos repository`
+  /<path>                                              a local file or directory under the server's directory
+  /_/ado/<organization>/<project>/<repository><path>   a file in an Azure Repos repository
 
-// source names one document to read: a route below the server's directory for the "file" and
-// "dir" kinds, or a repository path for the "ado" kind.
+A directory resolves to the README.md or index.md within it, and is listed when it holds
+neither.`
+
+// source names one document to read: a route below the server's directory for the "local"
+// kind, or a repository path for the "ado" kind.
 type source struct {
 	kind         string
 	route        string
@@ -133,39 +130,17 @@ func findIndexFile(directory string) string {
 	return ""
 }
 
-// resolveRoute resolves a URL route to a file under rootDir, or "" if it cannot be served.
+// resolveRoute resolves a URL route to the file or directory under rootDir it addresses, or
+// "" when it reaches neither.
 //
-// defaultFile is the file the "/" route serves; without one the defaultCandidates are tried.
+// defaultFile is the file the "/" route serves; without one the route reads rootDir itself.
+// A directory is returned as itself, and resolved to the document within it when one is read.
 func resolveRoute(route, rootDir, defaultFile string) string {
 	relative := strings.TrimLeft(unescapePath(route), "/")
-	if relative == "" {
-		if defaultFile != "" {
-			return defaultFile
-		}
-		return findIndexFile(rootDir)
+	if relative == "" && defaultFile != "" {
+		return defaultFile
 	}
 
-	resolved, contained := containedPath(rootDir, relative)
-	if !contained {
-		return ""
-	}
-	if isDir(resolved) {
-		return findIndexFile(resolved)
-	}
-	if isFile(resolved) {
-		return resolved
-	}
-	return ""
-}
-
-// resolveDirRoute resolves a URL route to a file or directory under rootDir, or "" if neither
-// exists.
-//
-// Unlike resolveRoute, a directory is returned as itself rather than resolved to its index
-// file, since the "dir" source lists the directory's Markdown files instead of requiring one
-// of them to be named README.md or index.md.
-func resolveDirRoute(route, rootDir string) string {
-	relative := strings.TrimLeft(unescapePath(route), "/")
 	resolved, contained := containedPath(rootDir, relative)
 	if !contained {
 		return ""
@@ -177,10 +152,10 @@ func resolveDirRoute(route, rootDir string) string {
 }
 
 // renderDirectoryListing returns a Markdown document listing the Markdown files found
-// directly under directory.
+// directly under directory, or saying that it holds none.
 //
-// Subdirectories are not scanned; a link to a file below one still works, since it is served
-// the way any other file under the "dir" source is.
+// It is the document of a directory holding neither README.md nor index.md. Subdirectories
+// are not scanned; the directory list beside the page reaches those.
 func renderDirectoryListing(directory string) (string, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
@@ -199,61 +174,48 @@ func renderDirectoryListing(directory string) (string, error) {
 	})
 
 	lines := []string{"# " + filepath.Base(directory), ""}
+	if len(names) == 0 {
+		lines = append(lines, "No Markdown files found.")
+	}
 	for _, name := range names {
 		lines = append(lines, fmt.Sprintf("- [%s](%s)", name, name))
 	}
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
-// readLocalFile reads a local file and returns it as (change marker, Markdown text, CSS).
-func readLocalFile(path string) (string, string, string, error) {
+// readLocalFile reads a local file as the document it holds.
+func readLocalFile(path string) (document, error) {
 	text, err := os.ReadFile(path)
 	if err != nil {
-		return "", "", "", err
+		return document{}, err
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", "", "", err
+		return document{}, err
 	}
-	css, markdown := asMarkdownDocument(filepath.Base(path), string(text))
-	return strconv.FormatInt(info.ModTime().UnixNano(), 10), markdown, css, nil
+	name := filepath.Base(path)
+	css, markdown := asMarkdownDocument(name, string(text))
+	return document{marker: strconv.FormatInt(info.ModTime().UnixNano(), 10),
+		name: name, text: markdown, css: css}, nil
 }
 
 // resolveSource resolves a URL route to the document source it addresses.
 //
-// A route under routeNamespace names the kind of source to read from - "/_/file/<path>",
-// "/_/dir/<path>" or "/_/ado/<organization>/<project>/<repository>/<path>" - which is served
-// whatever the server was started with. Any other route is read from the source the server
-// was started with, addressing a document below it.
+// A route under routeNamespace reads an Azure Repos repository -
+// "/_/ado/<organization>/<project>/<repository><path>" - whatever the server was started
+// with, since the repository is named by the route itself. Every other route is local,
+// addressing a file or a directory below the server's own directory.
 //
-// A route below an "ado" default source addresses a path beside the document the server was
-// started with.
-//
-// The second result is false when the route names a scheme but no document within it.
+// The second result is false when the route names no document.
 func resolveSource(route string, defaultSource source) (source, bool) {
 	namespace, remainder, _ := strings.Cut(strings.TrimLeft(route, "/"), "/")
 	if namespace == routeNamespace {
-		scheme, rest, _ := strings.Cut(remainder, "/")
-		switch scheme {
-		case kindFile, kindDir:
-			return source{kind: scheme, route: "/" + rest}, true
-		case kindADO:
+		if scheme, rest, _ := strings.Cut(remainder, "/"); scheme == kindADO {
 			return parseADOLocation(rest)
 		}
 		return source{}, false
 	}
-
-	if defaultSource.kind == kindFile || defaultSource.kind == kindDir {
-		return source{kind: defaultSource.kind, route: route}, true
-	}
-
-	relative := strings.TrimLeft(unescapePath(route), "/")
-	if relative == "" {
-		return defaultSource, true
-	}
-	addressed := defaultSource
-	addressed.path = path.Join(path.Dir(defaultSource.path), relative)
-	return addressed, true
+	return source{kind: kindLocal, route: route}, true
 }
 
 // escapeRoute escapes each segment of a slash separated path, for a route that addresses it.
@@ -266,12 +228,10 @@ func escapeRoute(path string) string {
 }
 
 // documentList returns the entries of the directory list for the document src addresses.
-//
-// Only the "dir" and "ado" sources are listed; any other returns no entries.
 func (s *server) documentList(src source, scope string) []listEntry {
 	switch src.kind {
-	case kindDir:
-		resolved := resolveDirRoute(src.route, s.rootDir)
+	case kindLocal:
+		resolved := resolveRoute(src.route, s.rootDir, s.defaultFile)
 		root, contained := containedPath(s.rootDir, "")
 		if resolved == "" || !contained {
 			return nil
@@ -302,8 +262,7 @@ func (t localTree) document() string { return t.documentPath }
 
 func (t localTree) parent(folder string) string { return filepath.Dir(folder) }
 
-// route addresses a local path through the "dir" namespace, which reads it from the directory
-// the server was started in.
+// route addresses a local path as the route below the server's directory that reaches it.
 func (t localTree) route(path string) string {
 	relative, err := filepath.Rel(t.rootDir, path)
 	if err != nil {
@@ -312,7 +271,7 @@ func (t localTree) route(path string) string {
 	if relative == "." {
 		relative = ""
 	}
-	return "/" + routeNamespace + "/" + kindDir + "/" + escapeRoute(filepath.ToSlash(relative))
+	return "/" + escapeRoute(filepath.ToSlash(relative))
 }
 
 func (t localTree) read(folder string, recursive bool) []treeItem {
@@ -359,15 +318,28 @@ func (s *server) sendRawAsset(writer http.ResponseWriter, request *http.Request,
 		return
 	}
 
-	file := resolveRoute(src.route, s.rootDir, s.defaultFile)
-	if src.kind == kindDir {
-		file = resolveDirRoute(src.route, s.rootDir)
-	}
-	if file == "" || !isFile(file) {
+	path := resolveRoute(src.route, s.rootDir, s.defaultFile)
+	if path == "" || !isFile(path) {
 		http.Error(writer, fmt.Sprintf("no such file for route '%s'", src.route), http.StatusNotFound)
 		return
 	}
-	http.ServeFile(writer, request, file)
+
+	// The file is opened and served itself rather than through http.ServeFile, which refuses
+	// any route holding '..' - one a document may well link a picture by, and one the route
+	// has already been resolved through.
+	file, err := os.Open(path)
+	if err != nil {
+		http.Error(writer, err.Error(), http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		http.Error(writer, err.Error(), http.StatusNotFound)
+		return
+	}
+	http.ServeContent(writer, request, filepath.Base(path), info.ModTime(), file)
 }
 
 // sourceRoute returns the URL route that addresses source, for the server to print at startup.
@@ -380,12 +352,6 @@ func (s *server) sourceRoute() string {
 		return fmt.Sprintf("/%s/ado/%s/%s/%s%s", routeNamespace,
 			url.PathEscape(s.defaultSource.organization), url.PathEscape(s.defaultSource.project),
 			url.PathEscape(s.defaultSource.repository), strings.Join(segments, "/"))
-	}
-	if s.defaultFile != "" {
-		relative, err := filepath.Rel(s.rootDir, s.defaultFile)
-		if err == nil {
-			return fmt.Sprintf("/%s/file/%s", routeNamespace, filepath.ToSlash(relative))
-		}
 	}
 	return "/"
 }
@@ -402,62 +368,81 @@ func (s *server) documentTitle(src source) string {
 			return src.repository
 		}
 		return name
-	case kindDir:
-		path := resolveDirRoute(src.route, s.rootDir)
-		if path == "" {
-			return ""
-		}
-		return filepath.Base(path)
 	}
 
 	path := resolveRoute(src.route, s.rootDir, s.defaultFile)
 	if path == "" {
 		return ""
 	}
+	if index := findIndexFile(path); isDir(path) && index != "" {
+		return filepath.Base(index)
+	}
 	return filepath.Base(path)
 }
 
-// loadDocument reads the document source addresses and returns it as (change marker, Markdown
-// text, CSS).
+// document is one document read from a source.
 //
-// The change marker identifies the version that was read - a modification time, a Git object
-// ID - so that the page re-renders only once it differs from the one it holds.
-func (s *server) loadDocument(src source) (string, string, string, error) {
+// The marker identifies the version that was read - a modification time, a Git object ID - so
+// that the page re-renders only once it differs from the one it holds. The name is the file
+// the document was read from, which a route naming a folder resolves to, and is empty for a
+// listing the server wrote itself.
+type document struct {
+	marker string
+	name   string
+	text   string
+	css    string
+}
+
+// loadDocument reads the document source addresses.
+func (s *server) loadDocument(src source) (document, error) {
 	switch src.kind {
 	case kindADO:
 		itemPath, text, objectID, err := readADODocument(src)
 		if err != nil {
-			return "", "", "", err
+			return document{}, err
 		}
 		name := itemPath
 		if index := strings.LastIndex(name, "/"); index >= 0 {
 			name = name[index+1:]
 		}
 		css, markdown := asMarkdownDocument(name, text)
-		return objectID, markdown, css, nil
+		return document{marker: objectID, name: name, text: markdown, css: css}, nil
 
-	case kindDir:
-		path := resolveDirRoute(src.route, s.rootDir)
-		if path == "" {
-			return "", "", "", fmt.Errorf("no such file or directory for route '%s'", src.route)
-		}
-		if isDir(path) {
-			info, err := os.Stat(path)
-			if err != nil {
-				return "", "", "", err
-			}
-			listing, err := renderDirectoryListing(path)
-			if err != nil {
-				return "", "", "", err
-			}
-			return strconv.FormatInt(info.ModTime().UnixNano(), 10), listing, "", nil
-		}
-		return readLocalFile(path)
 	}
 
 	path := resolveRoute(src.route, s.rootDir, s.defaultFile)
 	if path == "" {
-		return "", "", "", fmt.Errorf("no such file for route '%s'", src.route)
+		return document{}, fmt.Errorf("no such file or directory for route '%s'", src.route)
 	}
-	return readLocalFile(path)
+	if !isDir(path) {
+		return readLocalFile(path)
+	}
+	if index := findIndexFile(path); index != "" {
+		return readLocalFile(index)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return document{}, err
+	}
+	listing, err := renderDirectoryListing(path)
+	if err != nil {
+		return document{}, err
+	}
+	return document{marker: strconv.FormatInt(info.ModTime().UnixNano(), 10), text: listing}, nil
+}
+
+// documentBase returns the route relative links in the document are resolved against: the
+// route of the folder holding it, ending in a slash.
+//
+// name is the file the document was read from; a route ending in it names the document
+// itself, and any other route names the folder it lies in.
+func documentBase(route, name string) string {
+	if route == "" {
+		route = "/"
+	}
+	if name != "" && unescapePath(path.Base(route)) == name {
+		route = path.Dir(route)
+	}
+	return strings.TrimSuffix(route, "/") + "/"
 }

@@ -46,7 +46,7 @@ Flags must precede the path.
 | `--port` | `8000` | Port for the local web server |
 | `--watch-interval` | `1`, or `15` for `ado://` | Seconds between the browser page's checks for changes |
 | `--outline` | off | Show an outline of the document's headings beside it; takes `style` and `justify` as a comma separated list, e.g. `style:plain,justify:right` |
-| `--list` | off | List a `dir:` or `ado://` source's documents on the left of the page; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
+| `--list` | off | List the documents around the page's own on its left; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
@@ -54,19 +54,22 @@ Flags must precede the path.
 The path names what to serve:
 
 - a Markdown file, served at `/`;
-- a directory, served at its own URL paths, resolving each to the `README.md` or `index.md`
-  within it;
-- `dir:<directory>`, which lists the Markdown files directly in a directory instead of
-  requiring one of those names;
+- a directory, served at its own URL paths;
 - `ado://<organization>/<project>/<repository>/<path to file>`, a file in an Azure Repos Git
-  repository;
+  repository, served under `/_/ado/<organization>/<project>/<repository>`;
 - nothing, which serves the current directory.
+
+A directory - the one the server was started with or any below it - is the `index.md` or
+`README.md` within it; a directory holding neither is served as a list of its Markdown files,
+and one holding no Markdown file at all as a page saying so.
+
+An `ado://` source is reached through its own route alone, since the repository is named by
+the route itself, and the server prints that route at startup.
 
 ```sh
 serve-markdown README.md
 serve-markdown --port 9000 docs/
 serve-markdown --outline style:nh --mermaid docs/
-serve-markdown dir:docs
 serve-markdown ado://myorg/myproject/myrepo/README.md
 ```
 
@@ -104,12 +107,11 @@ The outline follows the document as it is re-read, and moves above it on a narro
 
 ## Directory list
 
-`--list` puts the documents around the one on the page on its left, for a `dir:` or an
-`ado://` source; any other source is served without one. It takes its settings the way
-`--outline` does:
+`--list` puts the documents around the one on the page on its left. It takes its settings the
+way `--outline` does:
 
 ```sh
-serve-markdown --list style:plain,scope:subfolders dir:docs
+serve-markdown --list style:plain,scope:subfolders docs/
 ```
 
 | Setting | Values | Meaning |
@@ -126,20 +128,28 @@ every link in the document itself that points back at the server, carries it on.
 `justify` says. A page takes a `list` query parameter of the same settings:
 
 ```
-http://127.0.0.1:8000/_/dir/guides/install.md?list=scope:tree
-http://127.0.0.1:8000/_/dir/guides/install.md?list=style:none
+http://127.0.0.1:8000/guides/install.md?list=scope:tree
+http://127.0.0.1:8000/guides/install.md?list=style:none
 ```
 
 ## Routes
 
-Whatever the server was started with, these routes reach every kind of source while it runs:
+Whatever the server was started with, these routes reach both kinds of source while it runs:
 
 ```
-/<path>                                              the source the server was started with
-/_/file/<path>                                       a local file under the server's directory
-/_/dir/<path>                                        a local directory's Markdown files, listed
-/_/ado/<organization>/<project>/<repository>/<path>  a file in an Azure Repos repository
+/<path>                                              a local file or directory under the server's directory
+/_/local/<path>                                      the same, whatever the server was started with
+/_/ado/<organization>/<project>/<repository><path>   a file in an Azure Repos repository
 ```
+
+The first five segments of an `ado://` route are the address of the repository itself, and the
+path within it follows them; `/_/ado/org/project/repo`, with or without a trailing slash, is
+the repository's own document.
+
+A route may name a folder as well as a document, with or without a trailing slash; the folder
+resolves to the document within it, and the routes themselves are served as written. The relative links the document holds - `pool/README.md`, `../README.md`, an image
+beside it - are resolved against the folder the document was read from, which the server sends
+to the page with the document.
 
 A path that resolves outside the directory the server was started in is served as not found.
 

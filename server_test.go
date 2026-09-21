@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func get(t *testing.T, handler *server, target string) (*http.Response, string) 
 
 func TestServeRootReturnsThePageShell(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	response, body := get(t, handler, "/")
 	if response.StatusCode != http.StatusOK {
@@ -44,7 +45,7 @@ func TestServeRootReturnsThePageShell(t *testing.T) {
 
 func TestServeContentReturnsTheDocument(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	response, body := get(t, handler, "/content?path=/docs/guide.md")
 	if response.StatusCode != http.StatusOK {
@@ -74,7 +75,7 @@ func TestServeContentReturnsTheDocument(t *testing.T) {
 
 func TestServeContentReportsAMissingDocument(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	_, body := get(t, handler, "/content?path=/nowhere.md")
 	var payload contentPayload
@@ -91,7 +92,7 @@ func TestServeContentReportsAMissingDocument(t *testing.T) {
 
 func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 	writeFile(t, filepath.Join(root, "styled.md"), "---\ncss: 'p { margin: 0; }'\n---\n# Styled\n")
 
 	_, body := get(t, handler, "/content?path=/styled.md")
@@ -109,7 +110,7 @@ func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 
 func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
 	response, body := get(t, handler, "/nowhere.md")
 	if response.StatusCode != http.StatusNotFound {
@@ -128,7 +129,7 @@ func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 
 func TestServeEmbeddedAssetsByDefault(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets}
 
 	_, page := get(t, handler, "/")
@@ -152,7 +153,7 @@ func TestServeEmbeddedAssetsByDefault(t *testing.T) {
 
 func TestServeOnlineReferencesTheCDNs(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: cdnAssets, online: true}
 
 	_, page := get(t, handler, "/")
@@ -170,33 +171,73 @@ func TestServeOnlineReferencesTheCDNs(t *testing.T) {
 	}
 }
 
-func TestServeDirSourceListsTheDirectory(t *testing.T) {
+func TestServeDirectoryReadsItsDocumentOrListsIt(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
-	response, page := get(t, handler, "/docs")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", response.StatusCode)
-	}
-	if !strings.Contains(page, "<title>docs</title>") {
-		t.Errorf("the page is not titled after the directory: %q", page)
+	// A directory holding index.md or README.md is that document, written with a trailing
+	// slash or without one.
+	for _, route := range []string{"/docs", "/docs/"} {
+		response, page := get(t, handler, route)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s: status = %d, want 200", route, response.StatusCode)
+		}
+		if !strings.Contains(page, "<title>index.md</title>") {
+			t.Errorf("%s: the page is not titled after the document: %q", route, page)
+		}
 	}
 
-	_, body := get(t, handler, "/content?path=/docs")
-	var payload contentPayload
-	if err := json.Unmarshal([]byte(body), &payload); err != nil {
-		t.Fatal(err)
+	// A directory holding neither is listed, and one holding no document at all says so.
+	tests := map[string]string{
+		"/content?path=/listing": "- [one.md](one.md)",
+		"/content?path=/empty":   "No Markdown files found.",
 	}
-	if payload.Text == nil || !strings.Contains(*payload.Text, "- [guide.md](guide.md)") {
-		t.Errorf("text = %v, want a listing", payload.Text)
+	for target, want := range tests {
+		t.Run(target, func(t *testing.T) {
+			_, body := get(t, handler, target)
+			var payload contentPayload
+			if err := json.Unmarshal([]byte(body), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Text == nil || !strings.Contains(*payload.Text, want) {
+				t.Errorf("text = %v, want one holding %q", payload.Text, want)
+			}
+		})
+	}
+}
+
+func TestServeContentCarriesTheDocumentBase(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets}
+
+	// A route naming a folder is answered with the document inside it, and its links are read
+	// from that folder rather than from beside it, whatever the route's shape.
+	tests := map[string]string{
+		"/content?path=/docs/guide.md": "/docs/",
+		"/content?path=/docs":          "/docs/",
+		"/content?path=/docs/":         "/docs/",
+		"/content?path=/":              "/",
+	}
+	for target, want := range tests {
+		t.Run(target, func(t *testing.T) {
+			_, body := get(t, handler, target)
+			var payload contentPayload
+			if err := json.Unmarshal([]byte(body), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Base == nil || *payload.Base != want {
+				t.Errorf("base = %v, want %q", payload.Base, want)
+			}
+		})
 	}
 }
 
 func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
 
-	_, body := get(t, handler, "/content?path=/_/file/docs/guide.md")
+	_, body := get(t, handler, "/content?path=/docs/guide.md")
 	var payload contentPayload
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatal(err)
@@ -209,7 +250,7 @@ func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	root := documentRoot(t)
 
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets}
 	if _, page := get(t, handler, "/"); strings.Contains(page, `id="_outline"`) {
 		t.Errorf("the page holds an outline without the flag: %q", page)
@@ -234,7 +275,7 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 
 func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"}}
 
 	tests := map[string]string{
@@ -261,15 +302,15 @@ func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 
 func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
 		list: listSettings{Style: "plain", Scope: "current"}}
 
 	_, page := get(t, handler, "/docs/guide.md")
 	for _, want := range []string{
 		`<nav id="_list" class="sidebar style-plain">`,
-		`<a href="/_/dir/docs/guide.md" class="current">guide.md</a>`,
-		`<a href="/_/dir/docs/index.md">index.md</a>`,
+		`<a href="/docs/guide.md" class="current">guide.md</a>`,
+		`<a href="/docs/index.md">index.md</a>`,
 		// The list takes the outline to the right, whatever the outline was given.
 		`<body class="with-sidebar outline-right">`,
 	} {
@@ -278,13 +319,13 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 		}
 	}
 
-	// A file source holds no list, so its outline keeps the side it was given.
-	file := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	// An ado source the server cannot read holds no list, so its outline keeps its own side.
+	ado := &server{defaultSource: source{kind: kindADO, organization: "org", project: "proj",
+		repository: "repo", path: "/README.md"}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
 		list: listSettings{Style: "plain", Scope: "current"}}
-	if _, page := get(t, file, "/"); strings.Contains(page, `id="_list"`) ||
-		!strings.Contains(page, `<body class="with-sidebar outline-left">`) {
-		t.Errorf("a file source page holds a list: %q", page)
+	if _, page := get(t, ado, "/notes.md"); !strings.Contains(page, `id="_list"`) {
+		t.Errorf("the local namespace holds no list under an ado source: %q", page)
 	}
 
 	// The query turns the list off and the outline goes back to its own side.
@@ -295,14 +336,14 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 
 	// The scope reaches further when the query asks it to, and browsing keeps that query.
 	if _, page := get(t, handler, "/docs/guide.md?list=scope:tree"); !strings.Contains(page,
-		`<a href="/_/dir/plain/README.md?list=scope:tree">README.md</a>`) {
+		`<a href="/plain/README.md?list=scope:tree">README.md</a>`) {
 		t.Errorf("the tree scope does not reach the whole source: %q", page)
 	}
 }
 
 func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets, outline: outlineSettings{Justify: "left"},
 		list: listSettings{Scope: "current"}}
 
@@ -311,7 +352,7 @@ func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
 	tests := map[string]string{
 		"/docs/guide.md?outline=justify:right": `<nav id="_outline" class="sidebar style-plain">`,
 		"/docs/guide.md?list=scope:current":    `<nav id="_list" class="sidebar style-plain">`,
-		"/docs/guide.md?list=scope:tree":       `<a href="/_/dir/plain/README.md?list=scope:tree">README.md</a>`,
+		"/docs/guide.md?list=scope:tree":       `<a href="/plain/README.md?list=scope:tree">README.md</a>`,
 	}
 	for target, want := range tests {
 		t.Run(target, func(t *testing.T) {
@@ -389,7 +430,7 @@ func TestOutlineStyle(t *testing.T) {
 
 func TestServePageShellCarriesMermaidOnlyWhenAsked(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets}
 
 	if _, page := get(t, handler, "/"); strings.Contains(page, "mermaid.min.js") {
@@ -404,7 +445,7 @@ func TestServePageShellCarriesMermaidOnlyWhenAsked(t *testing.T) {
 
 func TestServePageAssets(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: cdnAssets, online: true}
 
 	// They are the server's own, so they are served from the binary even with --online.
@@ -421,7 +462,7 @@ func TestServePageAssets(t *testing.T) {
 
 func TestServeRawAssets(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets}
 
 	tests := []struct {
@@ -453,7 +494,7 @@ func TestServeRawAssets(t *testing.T) {
 
 func TestServeRawAssetRejectsTraversal(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: filepath.Join(root, "docs"),
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: filepath.Join(root, "docs"),
 		watchInterval: 1, assets: embeddedAssets}
 
 	response, _ := get(t, handler, "/../picture.png")
@@ -464,7 +505,7 @@ func TestServeRawAssetRejectsTraversal(t *testing.T) {
 
 func TestServeRejectsTraversal(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: filepath.Join(root, "docs"),
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: filepath.Join(root, "docs"),
 		watchInterval: 1, assets: embeddedAssets}
 
 	response, _ := get(t, handler, "/../notes.md")
@@ -479,5 +520,94 @@ func TestServeRejectsTraversal(t *testing.T) {
 	}
 	if payload.Text != nil {
 		t.Errorf("a file outside the root was served: %v", payload.Text)
+	}
+}
+
+func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
+	root := documentRoot(t)
+	// A document the server must never reach, beside the directory it was started in.
+	writeFile(t, filepath.Join(filepath.Dir(root), "secret.md"), "# Secret\n")
+	writeFile(t, filepath.Join(filepath.Dir(root), "secret.png"), pictureContent)
+
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, list: listSettings{Style: "plain", Scope: "tree"}}
+
+	// A '..' that stays inside the root is followed, the way a link in a document writes it.
+	inside := map[string]string{
+		"/docs/../notes.md":        "# Notes\n",
+		"/docs/../docs/guide.md":   "# Guide\n",
+		"/docs/subdir/../guide.md": "# Guide\n",
+		"/./docs/./guide.md":       "# Guide\n",
+		"/docs/%2e%2e/notes.md":    "# Notes\n",
+		"/plain/../docs/../docs/":  "# Docs\n",
+	}
+	for route, want := range inside {
+		t.Run("inside "+route, func(t *testing.T) {
+			_, body := get(t, handler, "/content?path="+url.QueryEscape(route))
+			var payload contentPayload
+			if err := json.Unmarshal([]byte(body), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Text == nil || *payload.Text != want {
+				t.Errorf("text = %v, want %q", payload.Text, want)
+			}
+		})
+	}
+
+	// A '..' that climbs out of the root reaches nothing, however it is written.
+	outside := []string{
+		"/../secret.md",
+		"/docs/../../secret.md",
+		"/docs/../..",
+		"/%2e%2e/secret.md",
+		"/docs/%2e%2e/%2e%2e/secret.md",
+		"/..%2fsecret.md",
+	}
+	for _, route := range outside {
+		t.Run("outside "+route, func(t *testing.T) {
+			response, page := get(t, handler, route)
+			if response.StatusCode != http.StatusNotFound {
+				t.Errorf("the page route answered %d, want 404: %q", response.StatusCode, page)
+			}
+			if strings.Contains(page, "Secret") {
+				t.Errorf("the page route served the document outside the root: %q", page)
+			}
+
+			_, body := get(t, handler, "/content?path="+url.QueryEscape(route))
+			var payload contentPayload
+			if err := json.Unmarshal([]byte(body), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Text != nil {
+				t.Errorf("/content served a document outside the root: %q", *payload.Text)
+			}
+			if payload.Error == nil {
+				t.Error("/content reported no error for a route outside the root")
+			}
+		})
+	}
+
+	// The same holds for the pictures served as their own bytes.
+	pictures := map[string]int{
+		"/docs/../picture.png":   http.StatusOK,
+		"/../secret.png":         http.StatusNotFound,
+		"/docs/../../secret.png": http.StatusNotFound,
+		"/%2e%2e/secret.png":     http.StatusNotFound,
+	}
+	for route, want := range pictures {
+		t.Run("picture "+route, func(t *testing.T) {
+			response, body := get(t, handler, route)
+			if response.StatusCode != want {
+				t.Errorf("status = %d, want %d", response.StatusCode, want)
+			}
+			if want != http.StatusOK && strings.Contains(body, pictureContent) {
+				t.Error("a picture outside the root was served")
+			}
+		})
+	}
+
+	// And for the directory list, which must name nothing above the root.
+	for _, entry := range handler.documentList(source{kind: kindLocal, route: "/docs/../.."}, "tree") {
+		t.Errorf("the list names %q from outside the root", entry.Route)
 	}
 }

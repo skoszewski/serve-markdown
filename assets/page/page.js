@@ -132,26 +132,36 @@ function buildOutline() {
 }
 
 /**
- * Gives every link into this server the query the page was opened with, so that browsing from
- * the document keeps its settings.
+ * Resolves the document's own links and pictures against the folder holding it, and gives
+ * each link into this server the query the page was opened with.
  *
- * A link that carries a query of its own, or points at another host or at this page, is left
- * as it is.
+ * The base the server sends is the folder's route, which the browser cannot work out from the
+ * page's own address: a route naming a folder resolves to a document inside it. An anchor, a
+ * link to another host, and a link carrying a query of its own are left as they are.
+ *
+ * @param {string} base the route the document's relative links are read from.
  */
-function carryQuery() {
-  if (!location.search) {
-    return;
-  }
+function resolveLinks(base) {
+  const from = new URL(base || "/", location.href);
+
   content.querySelectorAll("a[href]").forEach((link) => {
     const href = link.getAttribute("href");
     if (href.startsWith("#")) {
       return;
     }
-    const target = new URL(href, location.href);
-    if (target.origin !== location.origin || target.search) {
+    const target = new URL(href, from);
+    if (target.origin !== location.origin) {
       return;
     }
-    link.setAttribute("href", target.pathname + location.search + target.hash);
+    const query = target.search || location.search;
+    link.setAttribute("href", target.pathname + query + target.hash);
+  });
+
+  content.querySelectorAll("img[src]").forEach((picture) => {
+    const target = new URL(picture.getAttribute("src"), from);
+    if (target.origin === location.origin) {
+      picture.setAttribute("src", target.pathname + target.search);
+    }
   });
 }
 
@@ -160,8 +170,9 @@ function carryQuery() {
  *
  * @param {string} text the document, as Markdown.
  * @param {string} css the CSS to style the page with.
+ * @param {string} base the route the document's relative links are read from.
  */
-function render(text, css) {
+function render(text, css, base) {
   documentCSS.textContent = css || "";
   if (!window.marked || !window.DOMPurify) {
     const pre = document.createElement("pre");
@@ -176,7 +187,7 @@ function render(text, css) {
     content.querySelectorAll("pre code:not(.language-mermaid)").forEach((block) => hljs.highlightElement(block));
   }
   buildOutline();
-  carryQuery();
+  resolveLinks(base);
   renderDiagrams();
 }
 
@@ -194,9 +205,9 @@ async function poll() {
   }
   if (data.mtime !== null && data.mtime !== lastMtime) {
     lastMtime = data.mtime;
-    render(data.text, data.css);
+    render(data.text, data.css, data.base);
   } else if (data.mtime === null) {
-    render("(file not found: " + data.error + ")", "");
+    render("(file not found: " + data.error + ")", "", "/");
   }
 }
 

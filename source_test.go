@@ -31,6 +31,8 @@ func documentRoot(t *testing.T) string {
 		"docs/index.md":    "# Docs\n",
 		"docs/guide.md":    "# Guide\n",
 		"plain/README.md":  "# Plain\n",
+		"listing/one.md":   "# One\n",
+		"listing/two.md":   "# Two\n",
 	}
 	for name, content := range files {
 		writeFile(t, filepath.Join(root, filepath.FromSlash(name)), content)
@@ -48,16 +50,16 @@ func TestResolveRoute(t *testing.T) {
 		route string
 		want  string
 	}{
-		{"root resolves to the index file", "/", "README.md"},
+		{"the root is the server's directory", "/", "."},
 		{"a file below the root", "/notes.md", "notes.md"},
-		{"a subdirectory resolves to its index file", "/docs", "docs/index.md"},
-		{"a subdirectory with a trailing slash", "/docs/", "docs/index.md"},
+		{"a subdirectory is itself", "/docs", "docs"},
+		{"a subdirectory with a trailing slash", "/docs/", "docs"},
 		{"a file below a subdirectory", "/docs/guide.md", "docs/guide.md"},
 		{"a percent-escaped route", "/docs/%67uide.md", "docs/guide.md"},
 		{"a traversal attempt", "/../../etc/passwd", ""},
 		{"a traversal attempt below a subdirectory", "/docs/../../secrets.md", ""},
 		{"a missing file", "/nowhere.md", ""},
-		{"a directory without an index file", "/empty", ""},
+		{"a directory holding no document", "/empty", "empty"},
 	}
 
 	for _, test := range tests {
@@ -82,34 +84,6 @@ func TestResolveRouteServesTheDefaultFileAtTheRoot(t *testing.T) {
 	}
 }
 
-func TestResolveDirRoute(t *testing.T) {
-	root := documentRoot(t)
-	tests := []struct {
-		route string
-		want  string
-	}{
-		{"/", "."},
-		{"/notes.md", "notes.md"},
-		{"/docs", "docs"},
-		{"/empty", "empty"},
-		{"/nowhere.md", ""},
-		{"/../..", ""},
-	}
-
-	for _, test := range tests {
-		t.Run(test.route, func(t *testing.T) {
-			got := resolveDirRoute(test.route, root)
-			want := ""
-			if test.want != "" {
-				want = filepath.Join(root, filepath.FromSlash(test.want))
-			}
-			if got != want {
-				t.Errorf("resolveDirRoute(%q) = %q, want %q", test.route, got, want)
-			}
-		})
-	}
-}
-
 func TestRenderDirectoryListing(t *testing.T) {
 	root := documentRoot(t)
 	listing, err := renderDirectoryListing(root)
@@ -126,8 +100,20 @@ func TestRenderDirectoryListing(t *testing.T) {
 	}
 }
 
+func TestRenderDirectoryListingWithoutDocuments(t *testing.T) {
+	root := documentRoot(t)
+	empty := filepath.Join(root, "empty")
+	listing, err := renderDirectoryListing(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "# empty\n\nNo Markdown files found.\n"; listing != want {
+		t.Errorf("listing = %q, want %q", listing, want)
+	}
+}
+
 func TestResolveSource(t *testing.T) {
-	fileSource := source{kind: kindFile}
+	localSource := source{kind: kindLocal}
 	adoSource := source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/README.md"}
 
 	tests := []struct {
@@ -137,27 +123,22 @@ func TestResolveSource(t *testing.T) {
 		want          source
 		ok            bool
 	}{
-		{"a plain route reads the default file source", "/notes.md", fileSource,
-			source{kind: kindFile, route: "/notes.md"}, true},
-		{"a plain route reads the default dir source", "/notes.md", source{kind: kindDir},
-			source{kind: kindDir, route: "/notes.md"}, true},
-		{"the file namespace", "/_/file/docs/guide.md", source{kind: kindDir},
-			source{kind: kindFile, route: "/docs/guide.md"}, true},
-		{"the dir namespace", "/_/dir/docs", fileSource,
-			source{kind: kindDir, route: "/docs"}, true},
-		{"the ado namespace", "/_/ado/org/proj/repo/docs/guide.md", fileSource,
+		{"a document", "/notes.md", localSource,
+			source{kind: kindLocal, route: "/notes.md"}, true},
+		{"a directory", "/docs", localSource,
+			source{kind: kindLocal, route: "/docs"}, true},
+		{"the root", "/", localSource,
+			source{kind: kindLocal, route: "/"}, true},
+		{"the ado namespace", "/_/ado/org/proj/repo/docs/guide.md", localSource,
 			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"}, true},
-		{"an incomplete ado route", "/_/ado/org/proj", fileSource, source{}, false},
-		{"an unknown namespace", "/_/pydoc/module", fileSource, source{}, false},
-		{"the root of an ado source", "/", adoSource, adoSource, true},
-		{"a path below an ado source", "/docs/guide.md", adoSource,
-			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"}, true},
-		{"a path beside an ado document", "/diagram.png",
-			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"},
-			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/diagram.png"}, true},
-		{"a path below an ado folder", "/guide.md",
-			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/"},
-			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"}, true},
+		{"an incomplete ado route", "/_/ado/org/proj", localSource, source{}, false},
+		{"an unknown namespace", "/_/pydoc/module", localSource, source{}, false},
+		// Every route outside the namespace is local, whatever the server was started with, so
+		// an ado:// source keeps its own route and the rest of the server stays local.
+		{"a plain route under an ado source", "/docs/guide.md", adoSource,
+			source{kind: kindLocal, route: "/docs/guide.md"}, true},
+		{"the root under an ado source", "/", adoSource,
+			source{kind: kindLocal, route: "/"}, true},
 	}
 
 	for _, test := range tests {
@@ -173,29 +154,76 @@ func TestResolveSource(t *testing.T) {
 	}
 }
 
-func TestLoadDocumentListsADirectory(t *testing.T) {
+func TestLoadDocumentReadsADirectory(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root}
-	marker, text, css, err := handler.loadDocument(source{kind: kindDir, route: "/docs"})
-	if err != nil {
-		t.Fatal(err)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
+
+	tests := map[string]struct {
+		name string
+		text string
+	}{
+		// A directory is the document it holds, and the listing of its documents when it holds
+		// neither README.md nor index.md.
+		"/docs":    {"index.md", "# Docs\n"},
+		"/plain":   {"README.md", "# Plain\n"},
+		"/listing": {"", "# listing\n\n- [one.md](one.md)\n- [two.md](two.md)\n"},
+		"/empty":   {"", "# empty\n\nNo Markdown files found.\n"},
 	}
-	if marker == "" {
-		t.Error("the listing carries no change marker")
+	for route, want := range tests {
+		t.Run(route, func(t *testing.T) {
+			read, err := handler.loadDocument(source{kind: kindLocal, route: route})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if read.marker == "" {
+				t.Error("the document carries no change marker")
+			}
+			if read.name != want.name {
+				t.Errorf("name = %q, want %q", read.name, want.name)
+			}
+			if read.text != want.text {
+				t.Errorf("text = %q, want %q", read.text, want.text)
+			}
+		})
 	}
-	if css != "" {
-		t.Errorf("css = %q, want empty", css)
+}
+
+func TestDocumentBase(t *testing.T) {
+	tests := []struct {
+		route string
+		name  string
+		want  string
+	}{
+		// A route ending in the document's own name reads its links from the folder above it.
+		{"/_/ado/org/project/repo/pool/README.md", "README.md", "/_/ado/org/project/repo/pool/"},
+		{"/_/ado/org/project/repo/README.md", "README.md", "/_/ado/org/project/repo/"},
+		{"/docs/guide.md", "guide.md", "/docs/"},
+		// A route naming a folder resolved to a document within it, however it was written.
+		{"/_/ado/org/project/repo", "README.md", "/_/ado/org/project/repo/"},
+		{"/_/ado/org/project/repo/", "README.md", "/_/ado/org/project/repo/"},
+		{"/_/ado/org/project/repo/subdir", "index.md", "/_/ado/org/project/repo/subdir/"},
+		{"/docs", "index.md", "/docs/"},
+		{"/", "README.md", "/"},
+		{"", "README.md", "/"},
+		// An escaped route names the same document as the name it was read from.
+		{"/docs/my%20guide.md", "my guide.md", "/docs/"},
+		// A listing the server wrote has no file of its own.
+		{"/docs", "", "/docs/"},
 	}
-	want := "# docs\n\n- [guide.md](guide.md)\n- [index.md](index.md)\n"
-	if text != want {
-		t.Errorf("text = %q, want %q", text, want)
+
+	for _, test := range tests {
+		t.Run(test.route, func(t *testing.T) {
+			if got := documentBase(test.route, test.name); got != test.want {
+				t.Errorf("documentBase(%q, %q) = %q, want %q", test.route, test.name, got, test.want)
+			}
+		})
 	}
 }
 
 func TestLoadDocumentReportsAMissingFile(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root}
-	if _, _, _, err := handler.loadDocument(source{kind: kindFile, route: "/nowhere.md"}); err == nil {
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
+	if _, err := handler.loadDocument(source{kind: kindLocal, route: "/nowhere.md"}); err == nil {
 		t.Fatal("reading a missing file returned no error")
 	}
 }
@@ -213,8 +241,8 @@ func writeFile(t *testing.T, path, content string) {
 
 func TestDocumentTreeListsALocalDirectory(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root}
-	src := source{kind: kindDir, route: "/docs/guide.md"}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
+	src := source{kind: kindLocal, route: "/docs/guide.md"}
 
 	names := func(entries []listEntry) []string {
 		var read []string
@@ -230,7 +258,8 @@ func TestDocumentTreeListsALocalDirectory(t *testing.T) {
 	tests := map[string][]string{
 		"current":    {"guide.md", "index.md"},
 		"subfolders": {"..", "guide.md", "index.md"},
-		"tree":       {"docs", "docs/guide.md", "docs/index.md", "plain", "plain/README.md", "Alpha.md", "beta.markdown", "notes.md", "README.md"},
+		"tree": {"docs", "docs/guide.md", "docs/index.md", "listing", "listing/one.md", "listing/two.md",
+			"plain", "plain/README.md", "Alpha.md", "beta.markdown", "notes.md", "README.md"},
 	}
 	for scope, want := range tests {
 		t.Run(scope, func(t *testing.T) {
@@ -244,20 +273,20 @@ func TestDocumentTreeListsALocalDirectory(t *testing.T) {
 
 func TestDocumentTreeRoutesAndMarksTheCurrentDocument(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
 
-	entries := handler.documentList(source{kind: kindDir, route: "/docs/guide.md"}, "subfolders")
+	entries := handler.documentList(source{kind: kindLocal, route: "/docs/guide.md"}, "subfolders")
 	for _, entry := range entries {
 		if entry.Name == "guide.md" {
-			if entry.Route != "/_/dir/docs/guide.md" {
-				t.Errorf("route = %q, want \"/_/dir/docs/guide.md\"", entry.Route)
+			if entry.Route != "/docs/guide.md" {
+				t.Errorf("route = %q, want \"/docs/guide.md\"", entry.Route)
 			}
 			if !entry.Current {
 				t.Error("the document the page shows is not marked")
 			}
 		}
-		if entry.Name == ".." && entry.Route != "/_/dir/" {
-			t.Errorf("the parent route = %q, want \"/_/dir/\"", entry.Route)
+		if entry.Name == ".." && entry.Route != "/" {
+			t.Errorf("the parent route = %q, want \"/\"", entry.Route)
 		}
 		if entry.Name == "index.md" && entry.Current {
 			t.Error("another document is marked as the one the page shows")
@@ -265,10 +294,79 @@ func TestDocumentTreeRoutesAndMarksTheCurrentDocument(t *testing.T) {
 	}
 }
 
-func TestDocumentListIgnoresAFileSource(t *testing.T) {
+func TestDocumentListIgnoresARouteItCannotRead(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root}
-	if entries := handler.documentList(source{kind: kindFile, route: "/notes.md"}, "tree"); entries != nil {
-		t.Errorf("entries = %v, want none", entries)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
+
+	for _, route := range []string{"/nowhere.md", "/../.."} {
+		t.Run(route, func(t *testing.T) {
+			if entries := handler.documentList(source{kind: kindLocal, route: route}, "tree"); entries != nil {
+				t.Errorf("entries = %v, want none", entries)
+			}
+		})
+	}
+}
+
+func TestResolveRouteRefusesClimbingOutOfTheRoot(t *testing.T) {
+	root := documentRoot(t)
+	// The directory the server was started in is a subdirectory, as it is when a file was
+	// named on the command line.
+	started := filepath.Join(root, "docs")
+	writeFile(t, filepath.Join(root, "secret.md"), "# Secret\n")
+
+	inside := map[string]string{
+		"/guide.md":             "docs/guide.md",
+		"/../docs/guide.md":     "docs/guide.md",
+		"/subdir/../index.md":   "docs/index.md",
+		"/./index.md":           "docs/index.md",
+		"/%2e%2e/docs/index.md": "docs/index.md",
+	}
+	for route, want := range inside {
+		t.Run("inside "+route, func(t *testing.T) {
+			got := resolveRoute(route, started, "")
+			if got != filepath.Join(root, filepath.FromSlash(want)) {
+				t.Errorf("resolveRoute(%q) = %q, want the document itself", route, got)
+			}
+		})
+	}
+
+	outside := []string{
+		"/../secret.md",
+		"/../../secret.md",
+		"/%2e%2e/secret.md",
+		"/..%2f..%2fsecret.md",
+		"/subdir/../../secret.md",
+		"/../",
+		"/..",
+	}
+	for _, route := range outside {
+		t.Run("outside "+route, func(t *testing.T) {
+			if got := resolveRoute(route, started, ""); got != "" {
+				t.Errorf("resolveRoute(%q) = %q, want nothing outside the root", route, got)
+			}
+		})
+	}
+}
+
+func TestDocumentTreeStaysInsideTheRoot(t *testing.T) {
+	root := documentRoot(t)
+	started := filepath.Join(root, "docs")
+	writeFile(t, filepath.Join(root, "secret.md"), "# Secret\n")
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: started}
+
+	for _, route := range []string{"/", "/guide.md", "/../", "/../secret.md", "/%2e%2e"} {
+		t.Run(route, func(t *testing.T) {
+			for _, entry := range handler.documentList(source{kind: kindLocal, route: route}, "tree") {
+				if strings.Contains(entry.Name, "secret") || strings.Contains(entry.Route, "secret") {
+					t.Errorf("the list names %q, outside the root", entry.Route)
+				}
+			}
+			// The parent of the root is the root itself, so '..' never leads out of it.
+			for _, entry := range handler.documentList(source{kind: kindLocal, route: route}, "subfolders") {
+				if entry.Name == ".." {
+					t.Errorf("the list offers a way above the root: %q", entry.Route)
+				}
+			}
+		})
 	}
 }

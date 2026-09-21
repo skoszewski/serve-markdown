@@ -297,12 +297,36 @@ func adoRoute(src source, itemPath string) string {
 }
 
 // adoTree reads an Azure Repos repository as the tree the directory list is built from.
+//
+// isFolder tells whether a repository path names a folder, and is the repository's own answer
+// unless a test gives another.
 type adoTree struct {
-	src source
+	src      source
+	isFolder func(source, string) bool
 }
 
-func (t adoTree) root() string     { return "/" }
-func (t adoTree) folder() string   { return path.Dir(t.src.path) }
+func (t adoTree) root() string { return "/" }
+
+// folder returns the folder the addressed path lies in, which is the path itself when it
+// names a folder rather than a document.
+//
+// A path ending in a slash, or carrying a Markdown suffix, says which it is on its own; any
+// other is looked up, since a route reaching a folder is written without a trailing slash.
+func (t adoTree) folder() string {
+	suffix := strings.ToLower(path.Ext(t.src.path))
+	if strings.HasSuffix(t.src.path, "/") || markdownExtensions[suffix] {
+		return path.Dir(t.src.path)
+	}
+	answer := t.isFolder
+	if answer == nil {
+		answer = adoItemIsFolder
+	}
+	if answer(t.src, t.src.path) {
+		return t.src.path
+	}
+	return path.Dir(t.src.path)
+}
+
 func (t adoTree) document() string { return t.src.path }
 
 func (t adoTree) parent(folder string) string { return path.Dir(folder) }

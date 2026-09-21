@@ -27,11 +27,11 @@ const (
 )
 
 const pathUsage = "Markdown file or directory to serve; defaults to the current directory. " +
-	"A directory is served at its own URL path, resolving to index.md or README.md within it. " +
-	"Prefix with 'dir:' and a directory to list its Markdown files instead of requiring one of " +
-	"those, or give an 'ado://<organization>/<project>/<repository>/<path to file>' URL to serve " +
-	"a file from an Azure Repos Git repository. Whichever is given, the /_/<scheme>/ routes " +
-	"(file, dir, ado) reach the others while the server runs."
+	"A directory is served at its own URL path, resolving to index.md or README.md within it " +
+	"and listing its Markdown files when it holds neither. An " +
+	"'ado://<organization>/<project>/<repository>/<path to file>' URL serves a file from an " +
+	"Azure Repos Git repository, under its own /_/ado/ route rather than at the root. " +
+	"Whichever is given, the /_/local/ and /_/ado/ routes reach both while the server runs."
 
 // outlineStyles are the values --outline takes, each with the shorthand that also names it:
 // an outline without numbers, one numbered within each level, and one numbered as 1., 1.1.,
@@ -120,12 +120,17 @@ func parseList(given string, settings listSettings) (listSettings, error) {
 	return settings, err
 }
 
-// contentPayload is the JSON the page polls for. Its mtime, text and css are null when the
-// document could not be read.
+// contentPayload is the JSON the page polls for. Its mtime, text, css and base are null when
+// the document could not be read.
+//
+// base is the route the document's relative links are resolved against, which the page cannot
+// work out for itself: a route naming a folder resolves to a document inside it, and the
+// browser would resolve the links beside the folder instead.
 type contentPayload struct {
 	MTime *string `json:"mtime"`
 	Text  *string `json:"text"`
 	CSS   *string `json:"css"`
+	Base  *string `json:"base"`
 	Error *string `json:"error"`
 }
 
@@ -161,10 +166,10 @@ func run() error {
 			"same settings, which overrides this one",
 		outlineStyleList(), strings.Join(outlineJustifications, "|")))
 	list := flag.String("list", "", fmt.Sprintf(
-		"List the documents of a %s or %s source on the left of the page, as a comma separated "+
-			"list of settings: style:%s, scope:%s. It takes the outline to the right, and a page "+
+		"List the documents around the one on the page, on its left, as a comma separated list "+
+			"of settings: style:%s, scope:%s. It takes the outline to the right, and a page "+
 			"takes a 'list' query parameter of the same settings",
-		dirPrefix, adoScheme, outlineStyleList(), strings.Join(listScopes, "|")))
+		outlineStyleList(), strings.Join(listScopes, "|")))
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 
@@ -259,17 +264,9 @@ func (s *server) resolveStartupSource(path string) (string, error) {
 		}
 		return description, nil
 
-	case strings.HasPrefix(path, dirPrefix):
-		given := strings.TrimPrefix(path, dirPrefix)
-		if !isDir(given) {
-			return "", fmt.Errorf("'%s' does not exist or is not a directory", given)
-		}
-		s.rootDir = given
-		s.defaultSource = source{kind: kindDir}
-		return fmt.Sprintf("'%s' (Markdown file listing)", given), nil
 	}
 
-	s.defaultSource = source{kind: kindFile}
+	s.defaultSource = source{kind: kindLocal}
 	if path != "" {
 		switch {
 		case isFile(path):
@@ -280,10 +277,6 @@ func (s *server) resolveStartupSource(path string) (string, error) {
 		default:
 			return "", fmt.Errorf("'%s' does not exist or is not a file or directory", path)
 		}
-	}
-	if s.defaultFile == "" && findIndexFile(s.rootDir) == "" {
-		return "", fmt.Errorf("no file given and none of %s found in '%s'",
-			strings.Join(defaultCandidates, ", "), s.rootDir)
 	}
 	return fmt.Sprintf("'%s'", s.rootDir), nil
 }
@@ -410,11 +403,12 @@ func (s *server) sendContent(writer http.ResponseWriter, route string) {
 	if !ok {
 		message := fmt.Sprintf("'%s' names no document", route)
 		payload.Error = &message
-	} else if marker, text, css, err := s.loadDocument(src); err != nil {
+	} else if read, err := s.loadDocument(src); err != nil {
 		message := err.Error()
 		payload.Error = &message
 	} else {
-		payload.MTime, payload.Text, payload.CSS = &marker, &text, &css
+		base := documentBase(route, read.name)
+		payload.MTime, payload.Text, payload.CSS, payload.Base = &read.marker, &read.text, &read.css, &base
 	}
 
 	content, err := json.Marshal(payload)
