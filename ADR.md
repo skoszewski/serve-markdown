@@ -120,6 +120,18 @@ page saying none was found, and the listing of whatever else stands there is lef
 decides the page alone - the list beside it still reaches every document, since browsing is
 what that list is for.
 
+## The version a repository is read at travels with the source
+
+Azure Repos reads an item at a version, defaulting to the repository's branch. `--ado` names
+one as `branch:`, `tag:` or `commit:` - three keys rather than one carrying the kind, so the
+list says what it means - and a page's `ado` parameter replaces it for that page, the way the
+outline and list parameters replace theirs.
+
+The version is carried on the source rather than on the server, since one request may read at
+a version another does not: it is set once where the route is resolved and reaches the item
+requests through the query they build. The listings of projects and repositories have no
+version, so nothing is added to them.
+
 ## An organization and a project are folders
 
 Azure DevOps nests an organization, a project, a repository and then the files, so the two

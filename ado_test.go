@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"net/url"
+	"strings"
+	"testing"
+)
 
 func TestParseADOLocation(t *testing.T) {
 	tests := []struct {
@@ -133,6 +137,64 @@ func TestNamedEntries(t *testing.T) {
 		if entry.Name != want[index].Name || entry.Route != want[index].Route || entry.Current != want[index].Current {
 			t.Errorf("entry %d = %+v, want %+v", index, entry, want[index])
 		}
+	}
+}
+
+func TestParseADO(t *testing.T) {
+	tests := map[string]adoSettings{
+		"":                       {},
+		"branch:main":            {Version: "main", VersionType: "branch"},
+		"branch:release/2.1":     {Version: "release/2.1", VersionType: "branch"},
+		"tag:v1.0":               {Version: "v1.0", VersionType: "tag"},
+		"commit:9a3f2b1":         {Version: "9a3f2b1", VersionType: "commit"},
+		"branch:main,branch:old": {Version: "old", VersionType: "branch"},
+	}
+	for given, want := range tests {
+		t.Run(given, func(t *testing.T) {
+			got, err := parseADO(given, adoSettings{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Errorf("parseADO(%q) = %+v, want %+v", given, got, want)
+			}
+		})
+	}
+
+	// A page's list replaces the version the server was started with, whatever kind each names.
+	started := adoSettings{Version: "main", VersionType: "branch"}
+	if got, err := parseADO("tag:v1.0", started); err != nil || (got != adoSettings{Version: "v1.0", VersionType: "tag"}) {
+		t.Errorf("parseADO(\"tag:v1.0\", %+v) = %+v, %v", started, got, err)
+	}
+
+	for _, given := range []string{"branch:main,tag:v1.0", "tag:v1.0,commit:9a3f", "branch:", "version:main", "main"} {
+		t.Run("refused "+given, func(t *testing.T) {
+			if _, err := parseADO(given, adoSettings{}); err == nil {
+				t.Errorf("parseADO(%q) raised no error", given)
+			}
+		})
+	}
+}
+
+func TestADOItemsURLCarriesTheVersion(t *testing.T) {
+	src := source{kind: kindADO, organization: "org", project: "my proj", repository: "repo",
+		path: "/docs/guide.md", version: "release/2.1", versionType: "branch"}
+
+	address := adoItemsURL(src, withVersion(src, url.Values{"path": []string{src.path}}))
+	for _, want := range []string{
+		"https://dev.azure.com/org/my%20proj/_apis/git/repositories/repo/items?",
+		"versionDescriptor.version=release%2F2.1",
+		"versionDescriptor.versionType=branch",
+	} {
+		if !strings.Contains(address, want) {
+			t.Errorf("the URL does not hold %q: %q", want, address)
+		}
+	}
+
+	// Without a version the repository is read at its default branch, the parameters left out.
+	plain := source{kind: kindADO, organization: "org", project: "proj", repository: "repo"}
+	if address := adoItemsURL(plain, withVersion(plain, url.Values{})); strings.Contains(address, "versionDescriptor") {
+		t.Errorf("the URL holds a version: %q", address)
 	}
 }
 

@@ -46,6 +46,9 @@ neither; an organization and a project are always listed.`
 
 // source names one document to read: a route below the server's directory for the "local"
 // kind, or a repository path for the "ado" kind.
+//
+// version and versionType name the branch, tag or commit an "ado" path is read at; empty,
+// they read the repository's default branch.
 type source struct {
 	kind         string
 	route        string
@@ -53,6 +56,8 @@ type source struct {
 	project      string
 	repository   string
 	path         string
+	version      string
+	versionType  string
 }
 
 // server holds what every request needs to resolve and read a document.
@@ -65,8 +70,24 @@ type server struct {
 	online        bool
 	outline       outlineSettings
 	list          listSettings
+	ado           adoSettings
 	mermaid       bool
 	indexOnly     bool
+}
+
+// adoVersion returns src carrying the version Azure Repos is read at: what --ado was given,
+// with the page's own 'ado' parameter applied onto it. A parameter that does not read leaves
+// the server's own settings.
+func (s *server) adoVersion(src source, given string) source {
+	if src.kind != kindADO {
+		return src
+	}
+	settings := s.ado
+	if asked, err := parseADO(given, settings); err == nil {
+		settings = asked
+	}
+	src.version, src.versionType = settings.Version, settings.VersionType
+	return src
 }
 
 // Files with these suffixes are served as the bytes they hold rather than read as documents.

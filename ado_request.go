@@ -29,6 +29,11 @@ func adoURL(src source, withProject bool, endpoint string, query url.Values) str
 	return fmt.Sprintf("%s/%s?%s", address, endpoint, query.Encode())
 }
 
+// adoItemsURL builds the URL of the items endpoint of the repository source names.
+func adoItemsURL(src source, query url.Values) string {
+	return adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/items", query)
+}
+
 // adoGet performs one Azure DevOps REST request and returns the body it answered with.
 //
 // description names what was being read, for the error a failure raises. accept is the media

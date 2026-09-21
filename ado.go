@@ -20,6 +20,57 @@ const adoGitAPIVersion = "7.1"
 
 const adoTokenLifetime = 1800 * time.Second
 
+// adoVersionKinds are the settings naming what a repository is read at, each the versionType
+// the REST API knows it by.
+var adoVersionKinds = []string{"branch", "tag", "commit"}
+
+// adoSettings is what --ado and a page's 'ado' parameter say about reading Azure Repos: the
+// version to read, empty for the repository's default branch, and which kind of version it
+// is.
+type adoSettings struct {
+	Version     string
+	VersionType string
+}
+
+// parseADO reads the "branch", "tag" and "commit" settings onto the ones it is given, and
+// returns what the list asks for.
+//
+// One list names one version: a list naming two of them is refused, while a page's list
+// replaces what the server was started with.
+func parseADO(given string, settings adoSettings) (adoSettings, error) {
+	named := ""
+	reader := func(kind string) func(string) error {
+		return func(value string) error {
+			switch {
+			case value == "":
+				return fmt.Errorf("'%s' names no %s", given, kind)
+			case named != "" && named != kind:
+				return fmt.Errorf("'%s' names a version that '%s' has named already", kind, named)
+			}
+			named = kind
+			settings.Version, settings.VersionType = value, kind
+			return nil
+		}
+	}
+
+	readers := map[string]func(string) error{}
+	for _, kind := range adoVersionKinds {
+		readers[kind] = reader(kind)
+	}
+	err := parseSettings(given, readers)
+	return settings, err
+}
+
+// withVersion returns query carrying the version source is read at, which an item request
+// needs and the listings of projects and repositories know nothing of.
+func withVersion(src source, query url.Values) url.Values {
+	if src.version != "" {
+		query.Set("versionDescriptor.version", src.version)
+		query.Set("versionDescriptor.versionType", src.versionType)
+	}
+	return query
+}
+
 // gitItem is the part of the Azure Repos GitItem answer this server reads.
 type gitItem struct {
 	Content  string `json:"content"`
@@ -153,8 +204,7 @@ func readADOItem(src source, itemPath string, includeContent bool) (gitItem, err
 	query.Set("api-version", adoGitAPIVersion)
 
 	description := fmt.Sprintf("reading %s from %s", itemPath, src.repository)
-	err := adoGetJSON(adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/items", query),
-		description, &item)
+	err := adoGetJSON(adoItemsURL(src, withVersion(src, query)), description, &item)
 	return item, err
 }
 
@@ -170,8 +220,7 @@ func readADORawItem(src source) ([]byte, error) {
 	query.Set("api-version", adoGitAPIVersion)
 
 	description := fmt.Sprintf("reading %s from %s", src.path, src.repository)
-	return adoGet(adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/items", query),
-		"application/octet-stream", description)
+	return adoGet(adoItemsURL(src, withVersion(src, query)), "application/octet-stream", description)
 }
 
 // readADOItems lists the items below folder in the repository source names, one level down or
@@ -191,8 +240,7 @@ func readADOItems(src source, folder string, recursive bool) ([]gitItem, error) 
 		Value []gitItem `json:"value"`
 	}
 	description := fmt.Sprintf("listing %s in %s", folder, src.repository)
-	err := adoGetJSON(adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/items", query),
-		description, &answer)
+	err := adoGetJSON(adoItemsURL(src, withVersion(src, query)), description, &answer)
 	return answer.Value, err
 }
 

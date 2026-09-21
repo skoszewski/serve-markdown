@@ -170,6 +170,11 @@ func run() error {
 			"of settings: style:%s, scope:%s. It takes the outline to the right, and a page "+
 			"takes a 'list' query parameter of the same settings",
 		outlineStyleList(), strings.Join(listScopes, "|")))
+	ado := flag.String("ado", "", fmt.Sprintf(
+		"Read Azure Repos at the version named by a comma separated list of settings: %s. "+
+			"One of them at a time, the repository's default branch without any; a page takes "+
+			"an 'ado' query parameter of the same settings",
+		strings.Join(adoVersionKinds, ":<name>, ")+":<name>"))
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	indexOnly := flag.Bool("index-only", false, fmt.Sprintf(
 		"Read a folder as the first of %s it holds and look no further; a folder holding "+
@@ -217,8 +222,13 @@ func run() error {
 		listOf = parsed
 	}
 
+	adoOf, err := parseADO(*ado, adoSettings{})
+	if err != nil {
+		return err
+	}
+
 	handler := &server{assets: embeddedAssets, online: *online, outline: outlineOf,
-		list: listOf, mermaid: *mermaid, indexOnly: *indexOnly}
+		list: listOf, ado: adoOf, mermaid: *mermaid, indexOnly: *indexOnly}
 	if *online {
 		handler.assets = cdnAssets
 	}
@@ -266,8 +276,12 @@ func (s *server) resolveStartupSource(path string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		src = s.adoVersion(src, "")
 		s.defaultSource = src
 		description := adoWebURL(src)
+		if src.version != "" {
+			description = fmt.Sprintf("%s (%s %s)", description, src.versionType, src.version)
+		}
 		if _, err := s.loadDocument(src); err != nil {
 			return "", fmt.Errorf("cannot read %s (%v)", description, err)
 		}
@@ -320,9 +334,10 @@ func (s *server) serve(listener net.Listener) error {
 // ServeHTTP serves a page shell for every route, and the document that route addresses at
 // /content. A route naming a picture or another binary file is answered with its bytes.
 //
-// A page route takes "outline" and "list" query parameters of the settings --outline and
-// --list themselves take, which it applies onto them for that page; a parameter that does not
-// read leaves them. A page holding a directory list carries its outline on the right.
+// A page route takes "outline", "list" and "ado" query parameters of the settings --outline,
+// --list and --ado themselves take, which it applies onto them for that page; a parameter
+// that does not read leaves them. A page holding a directory list carries its outline on the
+// right.
 func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if strings.HasPrefix(request.URL.Path, pageAssetRoute) {
 		pageFiles.ServeHTTP(writer, request)
@@ -335,11 +350,12 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	if request.URL.Path == "/content" {
-		s.sendContent(writer, request.URL.Query().Get("path"))
+		s.sendContent(writer, request)
 		return
 	}
 
 	src, ok := resolveSource(request.URL.Path, s.defaultSource)
+	src = s.adoVersion(src, request.URL.Query().Get("ado"))
 	if ok && isRawAsset(request.URL.Path) {
 		s.sendRawAsset(writer, request, src)
 		return
@@ -357,7 +373,12 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	// The page reads its document at the version the page itself was asked for.
 	query := "?path=" + url.QueryEscape(request.URL.Path)
+	if given := request.URL.Query().Get("ado"); given != "" {
+		query += "&ado=" + url.QueryEscape(given)
+	}
+
 	page := renderPage(title, query, int(math.Round(s.watchInterval*1000)), s.assets,
 		s.sidebarsFor(request, src), s.mermaid)
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -406,10 +427,15 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 
 // sendContent answers a /content poll with the document the route addresses, or with the
 // error that reading it raised.
-func (s *server) sendContent(writer http.ResponseWriter, route string) {
+//
+// The poll carries the route in its "path" parameter and, when the page was asked for one,
+// the version to read Azure Repos at in its "ado" parameter.
+func (s *server) sendContent(writer http.ResponseWriter, request *http.Request) {
 	payload := contentPayload{}
+	route := request.URL.Query().Get("path")
 
 	src, ok := resolveSource(route, s.defaultSource)
+	src = s.adoVersion(src, request.URL.Query().Get("ado"))
 	if !ok {
 		message := fmt.Sprintf("'%s' names no document", route)
 		payload.Error = &message

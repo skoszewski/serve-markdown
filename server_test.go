@@ -643,6 +643,43 @@ func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 	}
 }
 
+func TestServePageShellCarriesTheADOVersion(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, ado: adoSettings{Version: "main", VersionType: "branch"}}
+
+	// The page polls at the version it was asked for, so the document and the shell agree.
+	_, page := get(t, handler, "/_/ado/myorg/myproject/repo?ado=tag:v1.0")
+	// The parameters are read apart, the separator between them being escaped as JSON in HTML.
+	for _, want := range []string{
+		`"contentQuery":"?path=%2F_%2Fado%2Fmyorg%2Fmyproject%2Frepo`,
+		`ado=tag%3Av1.0"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page does not hold %q: %q", want, page)
+		}
+	}
+
+	// Without a parameter the page polls for the route alone, reading at the server's version.
+	_, page = get(t, handler, "/_/ado/myorg/myproject/repo")
+	if strings.Contains(page, "ado=") {
+		t.Errorf("the page carries a version it was not asked for: %q", page)
+	}
+
+	// The version reaches the source the page's sidebars and documents are read from.
+	src, _ := resolveSource("/_/ado/myorg/myproject/repo", handler.defaultSource)
+	if read := handler.adoVersion(src, "tag:v1.0"); read.version != "v1.0" || read.versionType != "tag" {
+		t.Errorf("source = %+v, want the tag the page named", read)
+	}
+	if read := handler.adoVersion(src, "sideways"); read.version != "main" || read.versionType != "branch" {
+		t.Errorf("an unread parameter changed the version to %+v", read)
+	}
+	local, _ := resolveSource("/notes.md", handler.defaultSource)
+	if read := handler.adoVersion(local, "tag:v1.0"); read.version != "" {
+		t.Errorf("a local source carries the version %q", read.version)
+	}
+}
+
 func TestServePageShellCarriesTheListLink(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,

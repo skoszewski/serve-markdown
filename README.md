@@ -54,6 +54,7 @@ serve-markdown docs/ --list style:plain     # the flag is ignored
 | `--list` | off | List the documents around the page's own on its left; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
+| `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
 
@@ -215,6 +216,38 @@ serve-markdown ado://myorg/myproject/myrepo/docs/     # a folder within it
 An organization and a project are folders holding no document of their own, so each is served
 as a list of what it holds - its projects, its Git repositories - each entry opening the one
 below it. A disabled repository is left out.
+
+### Version
+
+A repository is read at its default branch unless `--ado` names another version, as a comma
+separated list of settings:
+
+| Setting | Meaning |
+|---|---|
+| `branch:<name>` | a branch, `branch:release/2.1` |
+| `tag:<name>` | a tag, `tag:v1.0` |
+| `commit:<id>` | a commit, `commit:9a3f2b1` |
+
+One list names one version: naming two stops the server with a message saying which had it
+already.
+
+```sh
+serve-markdown --ado branch:release/2.1 ado://myorg/myproject/myrepo
+serve-markdown --ado tag:v1.0 ado://myorg/myproject/myrepo/docs/guide.md
+```
+
+A page takes an `ado` query parameter of the same settings, replacing the version for that
+page and carried on while browsing, so a whole repository can be read at a tag without
+restarting the server:
+
+```
+http://127.0.0.1:8000/_/ado/myorg/myproject/myrepo?ado=tag:v1.0
+http://127.0.0.1:8000/_/ado/myorg/myproject/myrepo/docs/guide.md?ado=commit:9a3f2b1
+```
+
+The version reaches everything read from the repository: the document, the pictures beside it
+and the file list. A project's repositories and an organization's projects have no version of
+their own, so it does not touch them.
 
 With `--list` - written before the URL, the way every flag is - the sidebar follows the level
 above the page, so the way back is always beside the way down:
