@@ -230,8 +230,13 @@ func resolveSource(route string, defaultSource source) (source, bool) {
 // sourceRoute returns the URL route that addresses source, for the server to print at startup.
 func (s *server) sourceRoute() string {
 	if s.defaultSource.kind == kindADO {
-		return fmt.Sprintf("/%s/ado/%s/%s/%s%s", routeNamespace, s.defaultSource.organization,
-			s.defaultSource.project, s.defaultSource.repository, s.defaultSource.path)
+		segments := strings.Split(s.defaultSource.path, "/")
+		for index, segment := range segments {
+			segments[index] = url.PathEscape(segment)
+		}
+		return fmt.Sprintf("/%s/ado/%s/%s/%s%s", routeNamespace,
+			url.PathEscape(s.defaultSource.organization), url.PathEscape(s.defaultSource.project),
+			url.PathEscape(s.defaultSource.repository), strings.Join(segments, "/"))
 	}
 	if s.defaultFile != "" {
 		relative, err := filepath.Rel(s.rootDir, s.defaultFile)
