@@ -706,7 +706,8 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 		t.Error("a list holding only the link above it is left out of the page")
 	}
 
-	page := string(renderPage("guide.md", "?path=/", 1000, embeddedAssets, beside, false))
+	page := string(renderPage("guide.md", "?path=/", 1000, embeddedAssets,
+		pageSettings{Sidebars: beside, ContentWidth: defaultContentWidth}))
 	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Browse to repositories</a>`; !strings.Contains(page, want) {
 		t.Errorf("the page does not hold %q: %q", want, page)
 	}
@@ -715,8 +716,9 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 	up := adoUpLink(source{kind: kindADO, organization: "my org", project: "my proj",
 		repository: "repo"})
 	up.Label = "Back to projects"
-	page = string(renderPage("README.md", "?path=/", 1000, embeddedAssets,
-		sidebars{List: listSettings{Style: "plain"}, Up: up}, false))
+	page = string(renderPage("README.md", "?path=/", 1000, embeddedAssets, pageSettings{
+		Sidebars:     sidebars{List: listSettings{Style: "plain"}, Up: up},
+		ContentWidth: defaultContentWidth}))
 	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Back to projects</a>`; !strings.Contains(page, want) {
 		t.Errorf("the page does not hold %q: %q", want, page)
 	}

@@ -5,9 +5,22 @@ body {
 
 .markdown-body {
   box-sizing: border-box;
-  max-width: 980px;
   margin: 0 auto;
   padding: 45px;
+}
+
+/* How wide the document is drawn: prose, the width github-markdown-css is written for, what
+   a 1080p screen leaves beside both sidebars, and the window itself. */
+body.width-small .markdown-body {
+  max-width: 780px;
+}
+
+body.width-medium .markdown-body {
+  max-width: 980px;
+}
+
+body.width-large .markdown-body {
+  max-width: 1280px;
 }
 
 .markdown-body pre {

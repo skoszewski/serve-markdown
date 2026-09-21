@@ -79,6 +79,7 @@ type server struct {
 	outline       outlineSettings
 	list          listSettings
 	ado           adoSettings
+	contentWidth  string
 	mermaid       bool
 	indexOnly     bool
 }

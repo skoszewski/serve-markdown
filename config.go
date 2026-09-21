@@ -28,7 +28,16 @@ const (
 	defaultListenAddress = "127.0.0.1"
 	defaultServePort     = 8000
 	defaultWatchInterval = 1.0
+	defaultContentWidth  = "full"
 )
+
+// widthFull is the width that caps the document at nothing, giving it the window.
+const widthFull = "full"
+
+// contentWidths are the widths --content-width takes, the styling holding what each measures:
+// 780px of prose, the 980px github-markdown-css is written for, the 1280px a 1080p screen
+// leaves beside both sidebars, and the window itself, which is what a page is given unasked.
+var contentWidths = []string{"small", "medium", "large", widthFull}
 
 // defaultOutline is what an outline is drawn with before --outline or a page names anything
 // else, and defaultList the same for a directory list.
@@ -75,6 +84,7 @@ type configuration struct {
 	online        bool
 	mermaid       bool
 	indexOnly     bool
+	contentWidth  string
 	outline       outlineSettings
 	list          listSettings
 	ado           adoSettings
@@ -136,6 +146,10 @@ func readConfiguration() (configuration, error) {
 			"One of them at a time, the repository's default branch without any; a page takes "+
 			"an 'ado' query parameter of the same settings",
 		strings.Join(adoVersionKinds, ":<name>, ")+":<name>"))
+	contentWidth := flag.String("content-width", defaultContentWidth, fmt.Sprintf(
+		"How wide the document is rendered: %s. The sidebars keep their own width, so a wider "+
+			"document fills what they leave of the window",
+		strings.Join(contentWidths, ", ")))
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	indexOnly := flag.Bool("index-only", false, fmt.Sprintf(
 		"Read a folder as the first of %s it holds and look no further; a folder holding "+
@@ -174,6 +188,12 @@ func readConfiguration() (configuration, error) {
 	settings.online = choose(written, "online", *online, fromFile.Online)
 	settings.mermaid = choose(written, "mermaid", *mermaid, fromFile.Mermaid)
 	settings.indexOnly = choose(written, "index-only", *indexOnly, fromFile.IndexOnly)
+
+	settings.contentWidth = choose(written, "content-width", *contentWidth, fromFile.ContentWidth)
+	if !slices.Contains(contentWidths, settings.contentWidth) {
+		return configuration{}, fmt.Errorf("'%s' is not a content width; expected one of %s",
+			settings.contentWidth, strings.Join(contentWidths, ", "))
+	}
 
 	// Without an outline the style is empty and the side still stands, for a query to turn
 	// the outline on without naming one; a list keeps its scope the same way.
@@ -258,6 +278,7 @@ type fileConfig struct {
 	Mermaid       *bool          `yaml:"mermaid"`
 	Online        *bool          `yaml:"online"`
 	IndexOnly     *bool          `yaml:"index-only"`
+	ContentWidth  *string        `yaml:"content-width"`
 }
 
 // settingsValue is how a flag taking a settings list is written in a file: true to draw it

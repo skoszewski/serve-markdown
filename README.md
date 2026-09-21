@@ -55,6 +55,7 @@ serve-markdown docs/ --list style:plain     # the flag is ignored
 | `--list` | off | List the documents around the page's own on its left; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
+| `--content-width` | `full` | How wide the document is drawn: `small`, `medium`, `large` or `full` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--config` | `serve-markdown.yaml` beside the path | Read the flags from a YAML file |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
@@ -109,6 +110,7 @@ list: true
 outline:
   style: numbered-hierarchical
   justify: right
+content-width: large
 port: 9000
 ```
 
@@ -160,6 +162,22 @@ http://127.0.0.1:8000/docs/guide.md?outline=style:none
 
 The outline follows the document as it is re-read, and moves above it on a narrow window.
 
+### A query stands before the fragment
+
+An outline entry, and many a link within a document, addresses a heading by a fragment -
+`guide.md#steps`. A query parameter goes *before* that fragment, never after it:
+
+```
+http://127.0.0.1:8000/docs/guide.md?outline=style:none#steps     the outline is left out
+http://127.0.0.1:8000/docs/guide.md#steps?outline=style:none     nothing happens
+```
+
+A URL reads `path?query#fragment`, and everything after the `#` is the fragment, `?` and `&`
+included. The browser keeps the fragment to itself and never sends it, so a parameter written
+there reaches no server; the heading is not found either, the page looking for one named
+`steps?outline=style:none`. Every browser behaves this way - it is what a URL means - and the
+page is served as though the parameter had not been written at all.
+
 ## Directory list
 
 `--list` puts the documents around the one on the page on its left. It takes its settings the
@@ -187,6 +205,8 @@ a `list` query parameter of the same settings:
 http://127.0.0.1:8000/guides/install.md?list=scope:tree
 http://127.0.0.1:8000/guides/install.md?list=style:none
 ```
+
+It stands before the fragment, as every query parameter does.
 
 ## Routes
 
@@ -292,6 +312,8 @@ http://127.0.0.1:8000/_/ado/myorg/myproject/myrepo?ado=tag:v1.0
 http://127.0.0.1:8000/_/ado/myorg/myproject/myrepo/docs/guide.md?ado=commit:9a3f2b1
 ```
 
+It stands before the fragment, as every query parameter does.
+
 The version reaches everything read from the repository: the document, the pictures beside it
 and the file list. A project's repositories and an organization's projects have no version of
 their own, so it does not touch them.
@@ -329,6 +351,20 @@ sanitises it with [DOMPurify](https://github.com/cure53/DOMPurify), highlights c
 [highlight.js](https://github.com/highlightjs/highlight.js), and styles it with
 [github-markdown-css](https://github.com/sindresorhus/github-markdown-css), following the
 browser's light or dark preference.
+
+`--content-width` says how wide the document is drawn. Each sidebar takes 320px and the
+document's own padding 45px a side, so the text is the width below less 90px, and less again
+what the sidebars take:
+
+| Width | The document is capped at | Text at that cap |
+|---|---|---|
+| `small` | 780px | 690px, about 86 characters |
+| `medium` | 980px | 890px, what `github-markdown-css` is written for |
+| `large` | 1280px | 1190px, a 1080p window less both sidebars |
+| `full` | the window | whatever the sidebars leave |
+
+A cap wider than the window is simply not reached: on a 1512px screen with both sidebars every
+width above `small` draws the same 872px column.
 
 With `--mermaid`, a fenced `mermaid` block is drawn as a diagram by
 [mermaid](https://github.com/mermaid-js/mermaid), in the theme that preference asks for. The

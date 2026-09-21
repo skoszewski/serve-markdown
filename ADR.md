@@ -125,6 +125,19 @@ repositories when nothing else was there to browse. A folder stands for one docu
 the one it is read as, so a folder holding both an `index.md` and a `README.md` is listed once
 rather than twice.
 
+## The document's width is named, and the names are measured
+
+A fixed 980px column - `github-markdown-css`'s own - left most of a large screen empty, the
+more so with the two 320px sidebars beside it. `--content-width` names four widths rather than
+taking a number, so that a configuration file reads as a choice rather than a measurement, and
+each name is anchored to something: 780px is prose at about 86 characters, 980px is what the
+styling was written for, 1280px is a 1080p window less both sidebars, and `full` is the window
+itself.
+
+`full` is what a page is drawn at unasked, since a reader who has not said otherwise is better
+served by their whole screen than by a third of it. It carries no class on the page, being the
+absence of a cap rather than a cap of its own.
+
 ## One file says what the server was told
 
 `config.go` is where the settings are named, defaulted, read and decided between: the flags

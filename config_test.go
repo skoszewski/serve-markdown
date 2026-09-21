@@ -141,6 +141,31 @@ func TestParseSettings(t *testing.T) {
 	}
 }
 
+func TestBodyClass(t *testing.T) {
+	outline := sidebars{Outline: outlineSettings{Style: "plain", Justify: "right"}}
+
+	tests := map[string]struct {
+		settings pageSettings
+		want     string
+	}{
+		// The window needs no rule capping it, so it carries no class of its own.
+		"the width it is given unasked": {pageSettings{ContentWidth: defaultContentWidth}, ""},
+		"a width nobody set":            {pageSettings{}, ""},
+		"a capped width":                {pageSettings{ContentWidth: "medium"}, "width-medium"},
+		"a capped width beside an outline": {pageSettings{ContentWidth: "small", Sidebars: outline},
+			"width-small with-sidebar outline-right"},
+		"the window beside an outline": {pageSettings{ContentWidth: widthFull, Sidebars: outline},
+			"with-sidebar outline-right"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := test.settings.bodyClass(); got != test.want {
+				t.Errorf("bodyClass = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestWatchInterval(t *testing.T) {
 	// A page reading Azure Repos checks for nothing, whatever seconds were asked for; a local
 	// page checks at the seconds it was given, or at the default.
