@@ -133,6 +133,12 @@ A repository holding a `README.md` and nothing else would list that one document
 document the reader is already looking at. The list is then the project's repositories, the
 one on the page marked, so the sidebar always offers somewhere to go.
 
+Telling that case apart takes more than the entry's mark: a repository's own route addresses
+the document inside it without naming it, so nothing in the list is marked. An only entry
+named `README.md` or `index.md` is therefore read as the document on the page, while an only
+entry under another name is kept - the page did not resolve to it, and that entry is the only
+way to reach it.
+
 ## One local namespace, and ado:// under its own route
 
 `/_/file/<path>` resolved a directory to the `README.md` or `index.md` within it, and

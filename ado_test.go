@@ -143,7 +143,12 @@ func TestHoldsOnlyTheCurrentDocument(t *testing.T) {
 	}{
 		"the document on the page alone": {[]listEntry{{Name: "README.md", Current: true}}, true},
 		"another document beside it":     {[]listEntry{{Name: "README.md", Current: true}, {Name: "notes.md"}}, false},
-		"one document, not the page's":   {[]listEntry{{Name: "notes.md"}}, false},
+		// A repository's own route addresses the README.md within it without naming it, so the
+		// entry is not marked and the name is what says it is the document on the page.
+		"an unmarked README.md":        {[]listEntry{{Name: "README.md"}}, true},
+		"an unmarked index.md":         {[]listEntry{{Name: "index.md"}}, true},
+		"an unmarked Readme.md":        {[]listEntry{{Name: "Readme.md"}}, true},
+		"one document, not the page's": {[]listEntry{{Name: "notes.md"}}, false},
 		"a folder holding documents": {[]listEntry{{Name: "docs", Current: true,
 			Children: []listEntry{{Name: "guide.md"}}}}, false},
 		"nothing at all": {nil, false},
