@@ -136,7 +136,7 @@ func TestNamedEntries(t *testing.T) {
 	}
 }
 
-func TestHoldsOnlyTheCurrentDocument(t *testing.T) {
+func TestHoldsNothingToBrowse(t *testing.T) {
 	tests := map[string]struct {
 		entries []listEntry
 		want    bool
@@ -151,13 +151,15 @@ func TestHoldsOnlyTheCurrentDocument(t *testing.T) {
 		"one document, not the page's": {[]listEntry{{Name: "notes.md"}}, false},
 		"a folder holding documents": {[]listEntry{{Name: "docs", Current: true,
 			Children: []listEntry{{Name: "guide.md"}}}}, false},
-		"nothing at all": {nil, false},
+		// A repository holding no Markdown at all lists nothing, which leads nowhere either.
+		"nothing at all":   {nil, true},
+		"an empty listing": {[]listEntry{}, true},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := holdsOnlyTheCurrentDocument(test.entries); got != test.want {
-				t.Errorf("holdsOnlyTheCurrentDocument = %v, want %v", got, test.want)
+			if got := holdsNothingToBrowse(test.entries); got != test.want {
+				t.Errorf("holdsNothingToBrowse = %v, want %v", got, test.want)
 			}
 		})
 	}

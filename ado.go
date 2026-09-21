@@ -416,10 +416,10 @@ func listingDocument(title, held string, names []string) document {
 // its project. The scope says how far below the entries the list reaches, the way it does for
 // a local directory.
 //
-// A repository whose list holds nothing but the document already on the page carries the
-// project's repositories instead, the one on the page marked, since a list of that one
-// document says nothing the page does not. The link above them leads where it always does,
-// under the label that names what the list now holds.
+// A repository whose list leads nowhere - holding no document at all, or the one already on
+// the page and nothing else - carries the project's repositories instead, the one on the page
+// marked. The link above them leads where it always does, under the label that names what the
+// list now holds.
 func adoList(src source, scope string) ([]listEntry, listLink) {
 	if src.repository == "" {
 		return adoProjectEntries(src, scope), listLink{}
@@ -427,7 +427,7 @@ func adoList(src source, scope string) ([]listEntry, listLink) {
 
 	entries := documentTree(adoTree{src: src}, scope)
 	up := adoUpLink(src)
-	if holdsOnlyTheCurrentDocument(entries) {
+	if holdsNothingToBrowse(entries) {
 		entries = adoRepositoryEntries(src, src.project)
 		up.Label = "Back to projects"
 	}
@@ -483,14 +483,17 @@ func namedEntries(names []string, current string, route func(string) string) []l
 	return entries
 }
 
-// holdsOnlyTheCurrentDocument reports whether entries hold the document the page shows and
-// nothing else.
+// holdsNothingToBrowse reports whether entries lead nowhere: they are empty, or hold the
+// document the page shows and nothing else.
 //
 // A route naming a folder - a repository's own route among them - addresses the document
 // within it without naming it, so the entry cannot be marked; an only entry named as one of
 // the defaultCandidates is that document, whatever its letters' case, since the folder
 // resolves to it.
-func holdsOnlyTheCurrentDocument(entries []listEntry) bool {
+func holdsNothingToBrowse(entries []listEntry) bool {
+	if len(entries) == 0 {
+		return true
+	}
 	if len(entries) != 1 || len(entries[0].Children) != 0 {
 		return false
 	}
