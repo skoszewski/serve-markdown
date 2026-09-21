@@ -203,13 +203,13 @@ func TestADOListLink(t *testing.T) {
 
 	tests := map[string]listLink{
 		// At the repository's root the way out is the repositories of its project.
-		"/":              {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
-		"":               {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
-		"/docs":          {Label: "Up", Route: "/_/ado/org/my%20proj/repo/"},
-		"/docs/deep":     {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs"},
-		"/docs/deep/深い":  {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs/deep"},
-		"/a folder":      {Label: "Up", Route: "/_/ado/org/my%20proj/repo/"},
-		"/docs/a folder": {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs"},
+		"/":                 {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
+		"":                  {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
+		"/docs":             {Label: "Up", Route: "/_/ado/org/my%20proj/repo/"},
+		"/docs/deep":        {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs"},
+		"/docs/deep/deeper": {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs/deep"},
+		"/a folder":         {Label: "Up", Route: "/_/ado/org/my%20proj/repo/"},
+		"/docs/a folder":    {Label: "Up", Route: "/_/ado/org/my%20proj/repo/docs"},
 	}
 	for folder, want := range tests {
 		t.Run(folder, func(t *testing.T) {

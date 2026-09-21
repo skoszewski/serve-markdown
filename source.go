@@ -52,11 +52,11 @@ const routeHelp = `Routes:
 A directory resolves to the README.md or index.md within it, and is listed when it holds
 neither; an organization and a project are always listed.`
 
-// source names one document to read: a route below the server's directory for the "local"
-// kind, or a repository path for the "ado" kind.
+// source names one document to read: a route below the server's directory for a local
+// source, or a repository path for an Azure Repos one.
 //
-// version and versionType name the branch, tag or commit an "ado" path is read at; empty,
-// they read the repository's default branch.
+// version and versionType name the branch, tag or commit a repository is read at; empty, they
+// read its default branch.
 type source struct {
 	kind         sourceKind
 	route        string

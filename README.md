@@ -3,8 +3,9 @@
 Serve Markdown from local files or Azure Repos as GitHub-styled HTML pages, from a single
 executable with nothing else installed.
 
-A page is served for every route; the browser polls the server for the document behind it and
-re-renders as soon as it changes, so an editor and a browser side by side show the same file.
+A page is served for every route; for a local file the browser polls the server for the
+document behind it and re-renders as soon as it changes, so an editor and a browser side by
+side show the same file. A page reading Azure Repos is read once and again on refresh.
 
 ## Installation
 
@@ -80,9 +81,10 @@ else stands in it.
 Within an `ado://` repository the list beside the page follows that rule too, holding the
 folders and their index documents alone, since a document the page will never open is not
 somewhere to browse. A folder contributes one document at most - the one it is read as, which
-is its `README.md` where both it and an `index.md` stand there - or none. A repository root left with nothing to browse then falls back to the
-project's repositories, the way it does for a repository holding a `README.md` alone. A local
-directory's list still names every Markdown file it finds.
+is its `README.md` where both it and an `index.md` stand there - or none. A repository root
+left with nothing to browse then falls back to the project's repositories, the way it does for
+a repository holding a `README.md` alone. A local directory's list still names every Markdown
+file it finds.
 
 An `ado://` source is reached through its own route alone, since the repository is named by
 the route itself, and the server prints that route at startup.
@@ -177,8 +179,9 @@ serve-markdown --list style:plain,scope:subfolders docs/
 
 The document the page shows is marked, folders come before documents, and names beginning with
 a dot are left out. Browsing keeps the query the page was opened with: every list entry, and
-every link in the document itself that points back at the server, carries it on. A page carrying a list always carries its outline on the right, whatever
-`justify` says. A page takes a `list` query parameter of the same settings:
+every link in the document itself that points back at the server, carries it on. A page
+carrying a list always carries its outline on the right, whatever `justify` says. A page takes
+a `list` query parameter of the same settings:
 
 ```
 http://127.0.0.1:8000/guides/install.md?list=scope:tree
@@ -203,9 +206,10 @@ the path within it follows them, so `/_/ado/org/project/repo`, with or without a
 slash, is the repository's own document.
 
 A route may name a folder as well as a document, with or without a trailing slash; the folder
-resolves to the document within it, and the routes themselves are served as written. The relative links the document holds - `pool/README.md`, `../README.md`, an image
-beside it - are resolved against the folder the document was read from, which the server sends
-to the page with the document.
+resolves to the document within it, and the routes themselves are served as written. The
+relative links the document holds - `pool/README.md`, `../README.md`, an image beside it - are
+resolved against the folder the document was read from, which the server sends to the page
+with the document.
 
 A path that resolves outside the directory the server was started in is served as not found.
 

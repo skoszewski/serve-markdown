@@ -56,8 +56,8 @@ providers, and a third kind of source would only have to answer the same questio
 A document's relative links are resolved by the browser against the page's own address, which
 drops its last segment. A folder served at `/_/ado/<org>/<project>/<repo>` therefore turned
 `pool/README.md` into `/_/ado/<org>/<project>/pool/README.md`, reading the repository name as
-a project's, and Azure DevOps answered TF401019; a local folder at `/_/local/docs` lost its
-last segment the same way.
+a project's, and Azure DevOps answered TF401019; a local folder at `/docs` lost its last
+segment the same way.
 
 The route is not the place to fix it. An `ado://` route is
 `/_/ado/<organization>/<project>/<repository><path>`, whose first five segments are the
@@ -212,21 +212,17 @@ named `README.md` or `index.md` is therefore read as the document on the page, w
 entry under another name is kept - the page did not resolve to it, and that entry is the only
 way to reach it.
 
-## One local namespace, and ado:// under its own route
+## A local file has one route, and ado:// its own namespace
 
-`/_/file/<path>` resolved a directory to the `README.md` or `index.md` within it, and
-`/_/dir/<path>` listed the directory's Markdown files instead; a file read the same under
-both. Two namespaces for one filesystem, telling apart two answers to the same question.
+A local document is served at `/<path>` alone. Naming the source in the route as well - a
+namespace resolving a directory to its document, another listing the directory instead - gave
+one document several addresses answering the same question, and a link followed from one of
+them landed in another. The directory's own document, the listing when it holds none, and the
+page saying it holds no Markdown at all are three answers to one question, so they are one
+route with a fallback rather than a route each.
 
-They are now `/_/local/<path>`, which resolves a directory to the document within it, lists
-the directory when it holds neither `README.md` nor `index.md`, and says so when it holds no
-Markdown file at all. The listing is the fallback rather than a mode, since the directory list
-beside the page is what browsing is done with now, and `dir:` on the command line goes with
-it - a directory argument says the same thing.
-
-An `ado://` source keeps its own route and is not served at the root: the repository is named
-by `/_/ado/<organization>/<project>/<repository>`, so serving it at `/` as well gave the same
+An `ado://` source is the exception, and not served at the root: the repository is named by
+`/_/ado/<organization>/<project>/<repository>`, so serving it at `/` as well gave the same
 document two addresses, one of which dropped the part saying where it comes from, and a
-relative link from the rooted one resolved into the wrong repository. A local source keeps the
-root, since a path below the server's own directory is what the rest of the route already
-says.
+relative link from the rooted one resolved into the wrong repository. A local path below the
+server's own directory needs no such naming, the rest of the route already saying it.

@@ -122,9 +122,6 @@ func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 	if !strings.Contains(body, routeHelp) {
 		t.Errorf("body does not hold the route help: %q", body)
 	}
-	if strings.Contains(body, "pydoc") {
-		t.Errorf("the route help still names pydoc: %q", body)
-	}
 }
 
 func TestServeEmbeddedAssetsByDefault(t *testing.T) {

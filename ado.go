@@ -608,8 +608,8 @@ func namedEntries(names []string, current string, route func(string) string) []l
 //
 // A route naming a folder - a repository's own route among them - addresses the document
 // within it without naming it, so the entry cannot be marked; an only entry named as one of
-// the defaultCandidates is that document, whatever its letters' case, since the folder
-// resolves to it.
+// the indexNames is that document, whatever its letters' case, since the folder resolves to
+// it.
 func holdsNothingToBrowse(entries []listEntry) bool {
 	if len(entries) == 0 {
 		return true
