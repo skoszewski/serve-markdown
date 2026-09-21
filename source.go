@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"hash/fnv"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -28,10 +29,12 @@ var defaultCandidates = []string{"README.md", "index.md"}
 
 const routeHelp = `Routes:
   /<path>                                              a local file or directory under the server's directory
+  /_/ado/<organization>                                the projects of an Azure DevOps organization
+  /_/ado/<organization>/<project>                      the Git repositories of a project
   /_/ado/<organization>/<project>/<repository><path>   a file in an Azure Repos repository
 
 A directory resolves to the README.md or index.md within it, and is listed when it holds
-neither.`
+neither; an organization and a project are always listed.`
 
 // source names one document to read: a route below the server's directory for the "local"
 // kind, or a repository path for the "ado" kind.
@@ -244,6 +247,11 @@ func (s *server) documentList(src source, scope string) []listEntry {
 		return documentTree(tree, scope)
 
 	case kindADO:
+		// An organization and a project are read as the listing of what they hold, and the
+		// tree below them is that listing itself.
+		if src.repository == "" {
+			return nil
+		}
 		return documentTree(adoTree{src: src}, scope)
 	}
 	return nil
@@ -345,13 +353,7 @@ func (s *server) sendRawAsset(writer http.ResponseWriter, request *http.Request,
 // sourceRoute returns the URL route that addresses source, for the server to print at startup.
 func (s *server) sourceRoute() string {
 	if s.defaultSource.kind == kindADO {
-		segments := strings.Split(s.defaultSource.path, "/")
-		for index, segment := range segments {
-			segments[index] = url.PathEscape(segment)
-		}
-		return fmt.Sprintf("/%s/ado/%s/%s/%s%s", routeNamespace,
-			url.PathEscape(s.defaultSource.organization), url.PathEscape(s.defaultSource.project),
-			url.PathEscape(s.defaultSource.repository), strings.Join(segments, "/"))
+		return adoRoute(s.defaultSource, s.defaultSource.path)
 	}
 	return "/"
 }
@@ -360,6 +362,12 @@ func (s *server) sourceRoute() string {
 func (s *server) documentTitle(src source) string {
 	switch src.kind {
 	case kindADO:
+		if src.project == "" {
+			return src.organization
+		}
+		if src.repository == "" {
+			return src.project
+		}
 		name := strings.TrimSuffix(src.path, "/")
 		if index := strings.LastIndex(name, "/"); index >= 0 {
 			name = name[index+1:]
@@ -395,19 +403,8 @@ type document struct {
 
 // loadDocument reads the document source addresses.
 func (s *server) loadDocument(src source) (document, error) {
-	switch src.kind {
-	case kindADO:
-		itemPath, text, objectID, err := readADODocument(src)
-		if err != nil {
-			return document{}, err
-		}
-		name := itemPath
-		if index := strings.LastIndex(name, "/"); index >= 0 {
-			name = name[index+1:]
-		}
-		css, markdown := asMarkdownDocument(name, text)
-		return document{marker: objectID, name: name, text: markdown, css: css}, nil
-
+	if src.kind == kindADO {
+		return readADOSource(src)
 	}
 
 	path := resolveRoute(src.route, s.rootDir, s.defaultFile)
@@ -445,4 +442,12 @@ func documentBase(route, name string) string {
 		route = path.Dir(route)
 	}
 	return strings.TrimSuffix(route, "/") + "/"
+}
+
+// textMarker returns the change marker of a document the server wrote itself, which has no
+// modification time or object ID of its own.
+func textMarker(text string) string {
+	sum := fnv.New64a()
+	sum.Write([]byte(text))
+	return strconv.FormatUint(sum.Sum64(), 16)
 }

@@ -259,7 +259,7 @@ func (s *server) resolveStartupSource(path string) (string, error) {
 		}
 		s.defaultSource = src
 		description := adoWebURL(src)
-		if _, _, _, err := readADODocument(src); err != nil {
+		if _, err := s.loadDocument(src); err != nil {
 			return "", fmt.Errorf("cannot read %s (%v)", description, err)
 		}
 		return description, nil

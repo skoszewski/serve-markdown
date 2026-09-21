@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os/exec"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -20,15 +19,6 @@ const adoResourceID = "499b84ac-1321-427f-aa17-267ca6975798"
 const adoGitAPIVersion = "7.1"
 
 const adoTokenLifetime = 1800 * time.Second
-
-// adoRequestError reports that an Azure DevOps REST request failed, carrying the API's own
-// error message. It is told apart from other failures so that a path which cannot be read can
-// still be looked up as a folder.
-type adoRequestError struct {
-	message string
-}
-
-func (e *adoRequestError) Error() string { return e.message }
 
 // gitItem is the part of the Azure Repos GitItem answer this server reads.
 type gitItem struct {
@@ -82,12 +72,13 @@ func accessTokenFromAZ() (string, error) {
 	return adoToken.value, nil
 }
 
-// parseADOLocation splits "<organization>/<project>/<repository>/<path to file>" into an ado
-// source.
+// parseADOLocation splits "<organization>[/<project>[/<repository>[<path to file>]]]" into an
+// ado source.
 //
-// A location naming only a repository, or ending in a slash, addresses a folder, whose index
-// file is looked up the way a local directory's is. The second result is false when location
-// does not name at least a repository.
+// An organization and a project are folders of their own, holding the projects and the
+// repositories below them; a location naming one addresses that listing. Within a repository,
+// a location naming a folder, or ending in a slash, addresses the document inside it. The
+// second result is false when location names not even an organization.
 func parseADOLocation(location string) (source, bool) {
 	var parts []string
 	for _, part := range strings.Split(unescapePath(location), "/") {
@@ -95,42 +86,52 @@ func parseADOLocation(location string) (source, bool) {
 			parts = append(parts, part)
 		}
 	}
-	if len(parts) < 3 {
+	if len(parts) == 0 {
 		return source{}, false
 	}
 
-	path := "/" + strings.Join(parts[3:], "/")
-	if len(parts) == 3 || strings.HasSuffix(location, "/") {
-		path = strings.TrimSuffix(path, "/") + "/"
+	src := source{kind: kindADO, organization: parts[0]}
+	if len(parts) > 1 {
+		src.project = parts[1]
 	}
-	return source{
-		kind:         kindADO,
-		organization: parts[0],
-		project:      parts[1],
-		repository:   parts[2],
-		path:         path,
-	}, true
+	if len(parts) > 2 {
+		src.repository = parts[2]
+		src.path = "/" + strings.Join(parts[3:], "/")
+		if len(parts) == 3 || strings.HasSuffix(location, "/") {
+			src.path = strings.TrimSuffix(src.path, "/") + "/"
+		}
+	}
+	return src, true
 }
 
-// parseADOURL splits an ado:// URL into the source it names, failing if it is incomplete.
+// parseADOURL splits an ado:// URL into the source it names, failing if it names nothing.
 func parseADOURL(rawURL string) (source, error) {
 	src, ok := parseADOLocation(strings.TrimPrefix(rawURL, adoScheme))
 	if !ok {
-		return source{}, fmt.Errorf("'%s' is not a complete %s URL; expected %s<organization>/<project>/<repository>[/<path to file>]",
-			rawURL, adoScheme, adoScheme)
+		return source{}, fmt.Errorf("'%s' names no Azure DevOps organization; expected %s<organization>[/<project>[/<repository>[/<path to file>]]]",
+			rawURL, adoScheme)
 	}
 	return src, nil
 }
 
-// adoWebURL returns the Azure DevOps web URL showing the file source names.
+// adoWebURL returns the Azure DevOps web URL showing what source names: the organization, one
+// of its projects, or a file in a repository.
 func adoWebURL(src source) string {
+	address := "https://dev.azure.com/" + url.PathEscape(src.organization)
+	if src.project == "" {
+		return address
+	}
+	address += "/" + url.PathEscape(src.project)
+	if src.repository == "" {
+		return address
+	}
+
 	// The path keeps its separators, the way Azure DevOps writes it in a browser's address bar.
 	segments := strings.Split(src.path, "/")
 	for index, segment := range segments {
 		segments[index] = url.PathEscape(segment)
 	}
-	return fmt.Sprintf("https://dev.azure.com/%s/%s/_git/%s?path=%s",
-		url.PathEscape(src.organization), url.PathEscape(src.project),
+	return fmt.Sprintf("%s/_git/%s?path=%s", address,
 		url.PathEscape(src.repository), strings.Join(segments, "/"))
 }
 
@@ -144,51 +145,17 @@ func readADOItem(src source, itemPath string, includeContent bool) (gitItem, err
 	if itemPath == "" {
 		itemPath = src.path
 	}
-	token, err := accessTokenFromAZ()
-	if err != nil {
-		return item, err
-	}
-
 	query := url.Values{}
+	query.Set("$format", "json")
 	query.Set("path", itemPath)
 	query.Set("includeContent", fmt.Sprintf("%t", includeContent))
 	query.Set("includeContentMetadata", "true")
 	query.Set("api-version", adoGitAPIVersion)
-	requestURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?$format=json&%s",
-		url.PathEscape(src.organization), url.PathEscape(src.project),
-		url.PathEscape(src.repository), query.Encode())
 
 	description := fmt.Sprintf("reading %s from %s", itemPath, src.repository)
-
-	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
-	if err != nil {
-		return item, err
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	request.Header.Set("Accept", "application/json")
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return item, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return item, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
-	}
-	if response.StatusCode != http.StatusOK {
-		return item, &adoRequestError{fmt.Sprintf("%s failed: %d %s", description,
-			response.StatusCode, adoErrorMessage(body, response.Status))}
-	}
-	if err := json.Unmarshal(body, &item); err != nil {
-		answeredWith := response.Header.Get("Content-Type")
-		if answeredWith == "" {
-			answeredWith = "no content type"
-		}
-		return item, fmt.Errorf("%s answered with %s instead of JSON", description, answeredWith)
-	}
-	return item, nil
+	err := adoGetJSON(adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/items", query),
+		description, &item)
+	return item, err
 }
 
 // readADORawItem reads the file source addresses as the bytes it holds, for a picture or
@@ -197,103 +164,98 @@ func readADOItem(src source, itemPath string, includeContent bool) (gitItem, err
 // The item itself is read rather than JSON holding its content, and a Git LFS pointer is
 // resolved to the file it stands for.
 func readADORawItem(src source) ([]byte, error) {
-	token, err := accessTokenFromAZ()
-	if err != nil {
-		return nil, err
-	}
-
 	query := url.Values{}
 	query.Set("path", src.path)
 	query.Set("resolveLfs", "true")
 	query.Set("api-version", adoGitAPIVersion)
-	requestURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?%s",
-		url.PathEscape(src.organization), url.PathEscape(src.project),
-		url.PathEscape(src.repository), query.Encode())
 
 	description := fmt.Sprintf("reading %s from %s", src.path, src.repository)
-
-	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	request.Header.Set("Accept", "application/octet-stream")
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, &adoRequestError{fmt.Sprintf("%s failed: %d %s", description,
-			response.StatusCode, adoErrorMessage(body, response.Status))}
-	}
-	return body, nil
+	return adoGet(adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/items", query),
+		"application/octet-stream", description)
 }
 
 // readADOItems lists the items below folder in the repository source names, one level down or
 // the whole tree under it.
 func readADOItems(src source, folder string, recursive bool) ([]gitItem, error) {
-	token, err := accessTokenFromAZ()
-	if err != nil {
-		return nil, err
-	}
-
 	recursion := "OneLevel"
 	if recursive {
 		recursion = "Full"
 	}
 	query := url.Values{}
+	query.Set("$format", "json")
 	query.Set("scopePath", folder)
 	query.Set("recursionLevel", recursion)
 	query.Set("api-version", adoGitAPIVersion)
-	requestURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?$format=json&%s",
-		url.PathEscape(src.organization), url.PathEscape(src.project),
-		url.PathEscape(src.repository), query.Encode())
-
-	description := fmt.Sprintf("listing %s in %s", folder, src.repository)
-
-	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	request.Header.Set("Accept", "application/json")
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
-	}
-	defer response.Body.Close()
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, &adoRequestError{fmt.Sprintf("%s failed: %d %s", description,
-			response.StatusCode, adoErrorMessage(body, response.Status))}
-	}
 
 	var answer struct {
 		Value []gitItem `json:"value"`
 	}
-	if err := json.Unmarshal(body, &answer); err != nil {
-		return nil, fmt.Errorf("%s did not answer with JSON", description)
-	}
-	return answer.Value, nil
+	description := fmt.Sprintf("listing %s in %s", folder, src.repository)
+	err := adoGetJSON(adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/items", query),
+		description, &answer)
+	return answer.Value, err
 }
 
-// adoRoute returns the route that addresses itemPath in the repository source names.
+// readADOProjects lists the projects of the organization source names.
+func readADOProjects(src source) ([]string, error) {
+	query := url.Values{}
+	query.Set("api-version", adoGitAPIVersion)
+
+	var answer struct {
+		Value []struct {
+			Name string `json:"name"`
+		} `json:"value"`
+	}
+	description := fmt.Sprintf("listing the projects of %s", src.organization)
+	if err := adoGetJSON(adoURL(src, false, "_apis/projects", query), description, &answer); err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(answer.Value))
+	for _, project := range answer.Value {
+		names = append(names, project.Name)
+	}
+	return names, nil
+}
+
+// readADORepositories lists the Git repositories of the project source names, leaving out the
+// ones that are disabled.
+func readADORepositories(src source) ([]string, error) {
+	query := url.Values{}
+	query.Set("api-version", adoGitAPIVersion)
+
+	var answer struct {
+		Value []struct {
+			Name       string `json:"name"`
+			IsDisabled bool   `json:"isDisabled"`
+		} `json:"value"`
+	}
+	description := fmt.Sprintf("listing the repositories of %s", src.project)
+	if err := adoGetJSON(adoURL(src, true, "_apis/git/repositories", query), description, &answer); err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(answer.Value))
+	for _, repository := range answer.Value {
+		if !repository.IsDisabled {
+			names = append(names, repository.Name)
+		}
+	}
+	return names, nil
+}
+
+// adoRoute returns the route that addresses itemPath in what source names: the organization,
+// one of its projects, or a repository holding the item.
 func adoRoute(src source, itemPath string) string {
-	return fmt.Sprintf("/%s/%s/%s/%s/%s%s", routeNamespace, kindADO,
-		url.PathEscape(src.organization), url.PathEscape(src.project),
-		url.PathEscape(src.repository), escapeRoute(itemPath))
+	route := "/" + routeNamespace + "/" + kindADO + "/" + url.PathEscape(src.organization)
+	if src.project == "" {
+		return route
+	}
+	route += "/" + url.PathEscape(src.project)
+	if src.repository == "" {
+		return route
+	}
+	return route + "/" + url.PathEscape(src.repository) + escapeRoute(itemPath)
 }
 
 // adoTree reads an Azure Repos repository as the tree the directory list is built from.
@@ -353,18 +315,6 @@ func (t adoTree) read(folder string, recursive bool) []treeItem {
 	return items
 }
 
-// adoErrorMessage extracts the Azure DevOps error text from a failed response body, falling
-// back to the HTTP status.
-func adoErrorMessage(body []byte, status string) string {
-	var answer struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(body, &answer); err == nil && answer.Message != "" {
-		return answer.Message
-	}
-	return status
-}
-
 // adoItemIsFolder reports whether itemPath names a folder in the repository source names.
 //
 // Reading a folder's content is an error rather than an empty answer, so this asks for its
@@ -402,4 +352,59 @@ func readADODocument(src source) (itemPath, content, objectID string, err error)
 		return itemPath + candidate, item.Content, item.ObjectID, nil
 	}
 	return "", "", "", fmt.Errorf("none of %s found in '%s'", strings.Join(defaultCandidates, ", "), itemPath)
+}
+
+// readADOSource reads the document source addresses in Azure DevOps.
+//
+// An organization and a project hold no document of their own, so each is read as a listing:
+// of the organization's projects, and of the project's repositories. A repository is read as
+// the file the path names.
+func readADOSource(src source) (document, error) {
+	switch {
+	case src.project == "":
+		names, err := readADOProjects(src)
+		if err != nil {
+			return document{}, err
+		}
+		return listingDocument(src.organization, "projects", names), nil
+
+	case src.repository == "":
+		names, err := readADORepositories(src)
+		if err != nil {
+			return document{}, err
+		}
+		return listingDocument(src.project, "repositories", names), nil
+	}
+
+	itemPath, content, objectID, err := readADODocument(src)
+	if err != nil {
+		return document{}, err
+	}
+	name := itemPath
+	if index := strings.LastIndex(name, "/"); index >= 0 {
+		name = name[index+1:]
+	}
+	css, markdown := asMarkdownDocument(name, content)
+	return document{marker: objectID, name: name, text: markdown, css: css}, nil
+}
+
+// listingDocument returns the document listing what an organization or a project holds, each
+// name linking to the route below the one the page stands at.
+//
+// held names what is listed, for the line a listing without any of them carries.
+func listingDocument(title, held string, names []string) document {
+	sort.SliceStable(names, func(i, j int) bool {
+		return strings.ToLower(names[i]) < strings.ToLower(names[j])
+	})
+
+	lines := []string{"# " + title, ""}
+	if len(names) == 0 {
+		lines = append(lines, fmt.Sprintf("No %s found.", held))
+	}
+	for _, name := range names {
+		lines = append(lines, fmt.Sprintf("- [%s](%s)", name, url.PathEscape(name)))
+	}
+
+	text := strings.Join(lines, "\n") + "\n"
+	return document{marker: textMarker(text), text: text}
 }

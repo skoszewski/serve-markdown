@@ -14,8 +14,11 @@ func TestParseADOLocation(t *testing.T) {
 		{"org/proj/repo/", source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/"}, true},
 		{"org/proj/repo/docs/", source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/"}, true},
 		{"my%20org/my%20proj/repo/README.md", source{kind: kindADO, organization: "my org", project: "my proj", repository: "repo", path: "/README.md"}, true},
-		{"org/proj", source{}, false},
-		{"org", source{}, false},
+		// An organization and a project are folders of their own, holding a listing.
+		{"org/proj", source{kind: kindADO, organization: "org", project: "proj"}, true},
+		{"org/proj/", source{kind: kindADO, organization: "org", project: "proj"}, true},
+		{"org", source{kind: kindADO, organization: "org"}, true},
+		{"org/", source{kind: kindADO, organization: "org"}, true},
 		{"", source{}, false},
 	}
 
@@ -42,8 +45,72 @@ func TestParseADOURL(t *testing.T) {
 		t.Errorf("source = %+v, want %+v", src, want)
 	}
 
-	if _, err := parseADOURL("ado://org/proj"); err == nil {
-		t.Error("an incomplete URL was accepted")
+	// A URL naming an organization or a project addresses the listing it holds.
+	for _, rawURL := range []string{"ado://org", "ado://org/proj"} {
+		if _, err := parseADOURL(rawURL); err != nil {
+			t.Errorf("parseADOURL(%q) raised %v", rawURL, err)
+		}
+	}
+	if _, err := parseADOURL("ado://"); err == nil {
+		t.Error("a URL naming no organization was accepted")
+	}
+}
+
+func TestADOWebURLByLevel(t *testing.T) {
+	tests := []struct {
+		src  source
+		want string
+	}{
+		{source{kind: kindADO, organization: "org"}, "https://dev.azure.com/org"},
+		{source{kind: kindADO, organization: "org", project: "my proj"}, "https://dev.azure.com/org/my%20proj"},
+	}
+	for _, test := range tests {
+		t.Run(test.want, func(t *testing.T) {
+			if got := adoWebURL(test.src); got != test.want {
+				t.Errorf("adoWebURL = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestADORouteByLevel(t *testing.T) {
+	tests := []struct {
+		src  source
+		want string
+	}{
+		{source{kind: kindADO, organization: "my org"}, "/_/ado/my%20org"},
+		{source{kind: kindADO, organization: "org", project: "my proj"}, "/_/ado/org/my%20proj"},
+		{source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"},
+			"/_/ado/org/proj/repo/docs/guide.md"},
+	}
+	for _, test := range tests {
+		t.Run(test.want, func(t *testing.T) {
+			if got := adoRoute(test.src, test.src.path); got != test.want {
+				t.Errorf("adoRoute = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestADOListingDocument(t *testing.T) {
+	read := listingDocument("org", "projects", []string{"Second", "first", "My Project"})
+	want := "# org\n\n- [first](first)\n- [My Project](My%20Project)\n- [Second](Second)\n"
+	if read.text != want {
+		t.Errorf("text = %q, want %q", read.text, want)
+	}
+	if read.marker == "" {
+		t.Error("the listing carries no change marker")
+	}
+	if read.name != "" {
+		t.Errorf("name = %q, want empty for a listing the server wrote", read.name)
+	}
+
+	empty := listingDocument("proj", "repositories", nil)
+	if want := "# proj\n\nNo repositories found.\n"; empty.text != want {
+		t.Errorf("text = %q, want %q", empty.text, want)
+	}
+	if empty.marker == read.marker {
+		t.Error("two listings carry the same change marker")
 	}
 }
 

@@ -108,6 +108,17 @@ An Azure Repos picture is read as the item's own stream rather than through the 
 the documents are read with, since a binary file does not survive being carried as a JSON
 string.
 
+## An organization and a project are folders
+
+Azure DevOps nests an organization, a project, a repository and then the files, so the two
+levels above a repository are folders the way a directory is - except that they can hold no
+`README.md` to be read instead. Each is therefore served as the listing of what it holds, the
+way a local directory holding no document is, and the route below an entry opens it.
+
+The listings have no modification time or object ID to mark a version with, so their change
+marker is a hash of the text they render to: the page re-renders when the list of projects or
+repositories differs, and stays still while it does not.
+
 ## One local namespace, and ado:// under its own route
 
 `/_/file/<path>` resolved a directory to the `README.md` or `index.md` within it, and

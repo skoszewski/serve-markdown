@@ -611,3 +611,37 @@ func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
 		t.Errorf("the list names %q from outside the root", entry.Route)
 	}
 }
+
+func TestServeADOOrganizationAndProjectPages(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, list: listSettings{Style: "plain", Scope: "current"}}
+
+	// The page shell is built without reading the repository, so the titles and the sidebars
+	// are answered whatever the network does.
+	tests := map[string]string{
+		"/_/ado/myorg":           "<title>myorg</title>",
+		"/_/ado/myorg/myproject": "<title>myproject</title>",
+	}
+	for route, want := range tests {
+		t.Run(route, func(t *testing.T) {
+			response, page := get(t, handler, route)
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200", response.StatusCode)
+			}
+			if !strings.Contains(page, want) {
+				t.Errorf("the page does not hold %q: %q", want, page)
+			}
+			// An organization and a project are the listing they hold, so neither reads a
+			// repository to carry one beside it.
+			if strings.Contains(page, `id="_list"`) {
+				t.Errorf("the page holds a directory list: %q", page)
+			}
+		})
+	}
+
+	// A route naming no organization reaches nothing.
+	if response, _ := get(t, handler, "/_/ado/"); response.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", response.StatusCode)
+	}
+}

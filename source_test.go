@@ -131,7 +131,11 @@ func TestResolveSource(t *testing.T) {
 			source{kind: kindLocal, route: "/"}, true},
 		{"the ado namespace", "/_/ado/org/proj/repo/docs/guide.md", localSource,
 			source{kind: kindADO, organization: "org", project: "proj", repository: "repo", path: "/docs/guide.md"}, true},
-		{"an incomplete ado route", "/_/ado/org/proj", localSource, source{}, false},
+		{"an ado project", "/_/ado/org/proj", localSource,
+			source{kind: kindADO, organization: "org", project: "proj"}, true},
+		{"an ado organization", "/_/ado/org", localSource,
+			source{kind: kindADO, organization: "org"}, true},
+		{"the ado namespace naming nothing", "/_/ado/", localSource, source{}, false},
 		{"an unknown namespace", "/_/pydoc/module", localSource, source{}, false},
 		// Every route outside the namespace is local, whatever the server was started with, so
 		// an ado:// source keeps its own route and the rest of the server stays local.

@@ -138,13 +138,16 @@ Whatever the server was started with, these routes reach both kinds of source wh
 
 ```
 /<path>                                              a local file or directory under the server's directory
-/_/local/<path>                                      the same, whatever the server was started with
+/_/ado/<organization>                                the projects of an Azure DevOps organization
+/_/ado/<organization>/<project>                      the Git repositories of a project
 /_/ado/<organization>/<project>/<repository><path>   a file in an Azure Repos repository
 ```
 
-The first five segments of an `ado://` route are the address of the repository itself, and the
-path within it follows them; `/_/ado/org/project/repo`, with or without a trailing slash, is
-the repository's own document.
+An organization and a project hold no document of their own, so each is served as a list of
+what it holds, every entry opening the route below it; a repository is read as its documents.
+The first five segments of a repository route are the address of the repository itself, and
+the path within it follows them, so `/_/ado/org/project/repo`, with or without a trailing
+slash, is the repository's own document.
 
 A route may name a folder as well as a document, with or without a trailing slash; the folder
 resolves to the document within it, and the routes themselves are served as written. The relative links the document holds - `pool/README.md`, `../README.md`, an image
@@ -183,6 +186,19 @@ An `ado://` source reads the file over the Azure DevOps REST API, and takes its 
 from the Azure CLI, so `az login` must have been run. A path naming a folder, or ending in a
 slash, resolves to the `README.md` or `index.md` within it. The change marker is the file's
 Git object ID, so the page re-renders on every commit that touches it.
+
+A URL may stop short of a file:
+
+```sh
+serve-markdown ado://myorg                            # the organization's projects
+serve-markdown ado://myorg/myproject                  # the project's repositories
+serve-markdown ado://myorg/myproject/myrepo           # the repository's own document
+serve-markdown ado://myorg/myproject/myrepo/docs/     # a folder within it
+```
+
+An organization and a project are folders holding no document of their own, so each is served
+as a list of what it holds - its projects, its Git repositories - each entry opening the one
+below it. A disabled repository is left out.
 
 ## Rendering
 
