@@ -177,8 +177,12 @@ func run() error {
 		fmt.Fprintf(flag.CommandLine.Output(),
 			"Usage: %s [flags] [path]\n\n"+
 				"Render Markdown from local files or Azure Repos as GitHub-styled pages.\n\n"+
-				"  path\n    \t%s\n\nFlags (they must precede the path):\n",
-			filepath.Base(os.Args[0]), pathUsage)
+				"  path\n    \t%s\n\n"+
+				"Flags stand before the path, which ends them; a flag written after it is not read:\n\n"+
+				"  %s --list style:plain docs/\n    \tthe list is drawn\n"+
+				"  %s docs/ --list style:plain\n    \tthe flag is ignored\n\nFlags:\n",
+			filepath.Base(os.Args[0]), pathUsage,
+			filepath.Base(os.Args[0]), filepath.Base(os.Args[0]))
 		flag.PrintDefaults()
 	}
 	flag.Parse()

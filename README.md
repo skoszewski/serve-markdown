@@ -38,7 +38,12 @@ do it, and the result is a static binary.
 serve-markdown [flags] [path]
 ```
 
-Flags must precede the path.
+Flags stand before the path, which ends them; a flag written after it is not read:
+
+```sh
+serve-markdown --list style:plain docs/     # the list is drawn
+serve-markdown docs/ --list style:plain     # the flag is ignored
+```
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -200,8 +205,8 @@ An organization and a project are folders holding no document of their own, so e
 as a list of what it holds - its projects, its Git repositories - each entry opening the one
 below it. A disabled repository is left out.
 
-With `--list`, the sidebar follows the level above the page, so the way back is always beside
-the way down:
+With `--list` - written before the URL, the way every flag is - the sidebar follows the level
+above the page, so the way back is always beside the way down:
 
 | Page | Sidebar |
 |---|---|
