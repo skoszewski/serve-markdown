@@ -230,31 +230,27 @@ func escapeRoute(path string) string {
 	return strings.Join(segments, "/")
 }
 
-// documentList returns the entries of the directory list for the document src addresses.
-func (s *server) documentList(src source, scope string) []listEntry {
+// documentList returns the directory list for the document src addresses: the entries beside
+// it, and the link leading out of them.
+func (s *server) documentList(src source, scope string) ([]listEntry, listLink) {
 	switch src.kind {
 	case kindLocal:
 		resolved := resolveRoute(src.route, s.rootDir, s.defaultFile)
 		root, contained := containedPath(s.rootDir, "")
 		if resolved == "" || !contained {
-			return nil
+			return nil, listLink{}
 		}
 		tree := localTree{rootDir: root, folderPath: resolved}
 		if isFile(resolved) {
 			tree.documentPath = resolved
 			tree.folderPath = filepath.Dir(resolved)
 		}
-		return documentTree(tree, scope)
+		return documentTree(tree, scope), listLink{}
 
 	case kindADO:
-		// An organization and a project are read as the listing of what they hold, and the
-		// tree below them is that listing itself.
-		if src.repository == "" {
-			return nil
-		}
-		return documentTree(adoTree{src: src}, scope)
+		return adoList(src, scope)
 	}
-	return nil
+	return nil, listLink{}
 }
 
 // localTree reads a local directory as the tree the directory list is built from.

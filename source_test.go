@@ -267,7 +267,8 @@ func TestDocumentTreeListsALocalDirectory(t *testing.T) {
 	}
 	for scope, want := range tests {
 		t.Run(scope, func(t *testing.T) {
-			got := names(handler.documentList(src, scope))
+			entries, _ := handler.documentList(src, scope)
+			got := names(entries)
 			if strings.Join(got, ",") != strings.Join(want, ",") {
 				t.Errorf("entries = %v, want %v", got, want)
 			}
@@ -279,7 +280,10 @@ func TestDocumentTreeRoutesAndMarksTheCurrentDocument(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
 
-	entries := handler.documentList(source{kind: kindLocal, route: "/docs/guide.md"}, "subfolders")
+	entries, up := handler.documentList(source{kind: kindLocal, route: "/docs/guide.md"}, "subfolders")
+	if up.Label != "" {
+		t.Errorf("a local list carries the link %q above it", up.Label)
+	}
 	for _, entry := range entries {
 		if entry.Name == "guide.md" {
 			if entry.Route != "/docs/guide.md" {
@@ -304,7 +308,7 @@ func TestDocumentListIgnoresARouteItCannotRead(t *testing.T) {
 
 	for _, route := range []string{"/nowhere.md", "/../.."} {
 		t.Run(route, func(t *testing.T) {
-			if entries := handler.documentList(source{kind: kindLocal, route: route}, "tree"); entries != nil {
+			if entries, _ := handler.documentList(source{kind: kindLocal, route: route}, "tree"); entries != nil {
 				t.Errorf("entries = %v, want none", entries)
 			}
 		})
@@ -360,13 +364,15 @@ func TestDocumentTreeStaysInsideTheRoot(t *testing.T) {
 
 	for _, route := range []string{"/", "/guide.md", "/../", "/../secret.md", "/%2e%2e"} {
 		t.Run(route, func(t *testing.T) {
-			for _, entry := range handler.documentList(source{kind: kindLocal, route: route}, "tree") {
+			tree, _ := handler.documentList(source{kind: kindLocal, route: route}, "tree")
+			for _, entry := range tree {
 				if strings.Contains(entry.Name, "secret") || strings.Contains(entry.Route, "secret") {
 					t.Errorf("the list names %q, outside the root", entry.Route)
 				}
 			}
 			// The parent of the root is the root itself, so '..' never leads out of it.
-			for _, entry := range handler.documentList(source{kind: kindLocal, route: route}, "subfolders") {
+			below, _ := handler.documentList(source{kind: kindLocal, route: route}, "subfolders")
+			for _, entry := range below {
 				if entry.Name == ".." {
 					t.Errorf("the list offers a way above the root: %q", entry.Route)
 				}

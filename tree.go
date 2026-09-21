@@ -92,9 +92,15 @@ func carryQuery(entries []listEntry, query string) {
 		return
 	}
 	for index := range entries {
-		if entries[index].Route != "" {
-			entries[index].Route += "?" + query
-		}
+		entries[index].Route = withQuery(entries[index].Route, query)
 		carryQuery(entries[index].Children, query)
 	}
+}
+
+// withQuery appends query to a route, leaving a route or a query that is empty alone.
+func withQuery(route, query string) string {
+	if route == "" || query == "" {
+		return route
+	}
+	return route + "?" + query
 }

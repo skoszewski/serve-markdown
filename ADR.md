@@ -119,6 +119,13 @@ The listings have no modification time or object ID to mark a version with, so t
 marker is a hash of the text they render to: the page re-renders when the list of projects or
 repositories differs, and stays still while it does not.
 
+The sidebar follows the level above the page rather than repeating it: an organization carries
+none, since the page is already the list of its projects; a project carries those projects
+with the one on the page marked, so moving between projects takes one click; and a repository
+carries its own documents under a link back to the repositories of its project, which is the
+one step the file tree cannot express. Without that link a reader who had walked down into a
+repository could only leave it by editing the address.
+
 ## One local namespace, and ado:// under its own route
 
 `/_/file/<path>` resolved a directory to the `README.md` or `index.md` within it, and

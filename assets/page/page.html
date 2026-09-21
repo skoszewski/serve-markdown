@@ -17,7 +17,8 @@
 <style id="_document-css"></style>
 </head>
 <body{{if .BodyClass}} class="{{.BodyClass}}"{{end}}>
-{{if .Sidebars.Entries}}<nav id="_list" class="sidebar style-{{.Sidebars.List.Style}}">{{template "entries" .Sidebars.Entries}}</nav>
+{{if .Sidebars.HoldsList}}<nav id="_list" class="sidebar style-{{.Sidebars.List.Style}}">{{if .Sidebars.Up.Label}}<a class="up" href="{{.Sidebars.Up.Route}}">{{.Sidebars.Up.Label}}</a>
+{{end}}{{template "entries" .Sidebars.Entries}}</nav>
 {{end}}{{if .Sidebars.Outline.Style}}<nav id="_outline" class="sidebar style-{{.Sidebars.Outline.Style}}"></nav>
 {{end}}<article id="_content" class="markdown-body">Loading...</article>
 </body>

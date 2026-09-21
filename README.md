@@ -200,6 +200,15 @@ An organization and a project are folders holding no document of their own, so e
 as a list of what it holds - its projects, its Git repositories - each entry opening the one
 below it. A disabled repository is left out.
 
+With `--list`, the sidebar follows the level above the page, so the way back is always beside
+the way down:
+
+| Page | Sidebar |
+|---|---|
+| an organization | nothing; the page is the list of its projects |
+| a project | the organization's projects, the one on the page marked |
+| a repository | the repository's documents, under a **Browse to repositories** link back to the project |
+
 ## Rendering
 
 The page renders Markdown in the browser with [marked](https://github.com/markedjs/marked),

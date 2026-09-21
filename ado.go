@@ -408,3 +408,42 @@ func listingDocument(title, held string, names []string) document {
 	text := strings.Join(lines, "\n") + "\n"
 	return document{marker: textMarker(text), text: text}
 }
+
+// adoList returns the directory list beside a page of an Azure DevOps source.
+//
+// An organization holds the listing of its projects in the page itself, so it carries none. A
+// project carries the organization's projects, the one on the page marked, since the page is
+// the repositories below it. A repository carries its own documents, under the link back to
+// the repositories of its project.
+func adoList(src source, scope string) ([]listEntry, listLink) {
+	switch {
+	case src.project == "":
+		return nil, listLink{}
+
+	case src.repository == "":
+		names, err := readADOProjects(src)
+		if err != nil {
+			logInfo("  %scannot list the projects of %s: %v%s", colorYellow, src.organization, err, colorReset)
+			return nil, listLink{}
+		}
+		entries := make([]listEntry, 0, len(names))
+		for _, name := range names {
+			entries = append(entries, listEntry{Name: name, Current: name == src.project,
+				Route: adoRoute(source{kind: kindADO, organization: src.organization, project: name}, "")})
+		}
+		sortEntries(entries)
+		return entries, listLink{}
+	}
+
+	return documentTree(adoTree{src: src}, scope), adoUpLink(src)
+}
+
+// adoUpLink returns the link standing above a repository's documents, leading back to the
+// repositories of the project it belongs to.
+func adoUpLink(src source) listLink {
+	if src.repository == "" {
+		return listLink{}
+	}
+	project := source{kind: kindADO, organization: src.organization, project: src.project}
+	return listLink{Label: "Browse to repositories", Route: adoRoute(project, "")}
+}

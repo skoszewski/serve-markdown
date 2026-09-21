@@ -385,10 +385,11 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 	}
 
 	if beside.List.Style != "" {
-		beside.Entries = s.documentList(src, beside.List.Scope)
+		beside.Entries, beside.Up = s.documentList(src, beside.List.Scope)
 		carryQuery(beside.Entries, request.URL.RawQuery)
+		beside.Up.Route = withQuery(beside.Up.Route, request.URL.RawQuery)
 	}
-	if len(beside.Entries) > 0 {
+	if beside.HoldsList() {
 		beside.Outline.Justify = "right"
 	}
 	return beside

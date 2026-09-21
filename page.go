@@ -70,18 +70,31 @@ type listEntry struct {
 	Children []listEntry
 }
 
+// listLink is the link standing above the directory list, leading out of what the list holds.
+type listLink struct {
+	Label string
+	Route string
+}
+
 // sidebars is what stands beside the document: the outline built from its headings, and the
-// list of the documents around it.
+// list of the documents around it, under a link out of them.
 type sidebars struct {
 	Outline outlineSettings
 	List    listSettings
+	Up      listLink
 	Entries []listEntry
+}
+
+// HoldsList reports whether the page carries a directory list: its entries, the link above
+// them, or both. It is read by the page template.
+func (s sidebars) HoldsList() bool {
+	return len(s.Entries) > 0 || s.Up.Label != ""
 }
 
 // bodyClass returns the class the page's body carries, naming the sidebars it holds and the
 // side the outline stands on.
 func (s sidebars) bodyClass() string {
-	if s.Outline.Style == "" && len(s.Entries) == 0 {
+	if s.Outline.Style == "" && !s.HoldsList() {
 		return ""
 	}
 	if s.Outline.Style == "" {

@@ -607,21 +607,23 @@ func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
 	}
 
 	// And for the directory list, which must name nothing above the root.
-	for _, entry := range handler.documentList(source{kind: kindLocal, route: "/docs/../.."}, "tree") {
+	entries, _ := handler.documentList(source{kind: kindLocal, route: "/docs/../.."}, "tree")
+	for _, entry := range entries {
 		t.Errorf("the list names %q from outside the root", entry.Route)
 	}
 }
 
 func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, list: listSettings{Style: "plain", Scope: "current"}}
-
-	// The page shell is built without reading the repository, so the titles and the sidebars
+	// Without --list nothing is read from Azure DevOps to build the page shell, so the titles
 	// are answered whatever the network does.
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets}
+
 	tests := map[string]string{
-		"/_/ado/myorg":           "<title>myorg</title>",
-		"/_/ado/myorg/myproject": "<title>myproject</title>",
+		"/_/ado/myorg":                "<title>myorg</title>",
+		"/_/ado/myorg/myproject":      "<title>myproject</title>",
+		"/_/ado/myorg/myproject/repo": "<title>repo</title>",
 	}
 	for route, want := range tests {
 		t.Run(route, func(t *testing.T) {
@@ -632,16 +634,37 @@ func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 			if !strings.Contains(page, want) {
 				t.Errorf("the page does not hold %q: %q", want, page)
 			}
-			// An organization and a project are the listing they hold, so neither reads a
-			// repository to carry one beside it.
-			if strings.Contains(page, `id="_list"`) {
-				t.Errorf("the page holds a directory list: %q", page)
-			}
 		})
 	}
 
 	// A route naming no organization reaches nothing.
 	if response, _ := get(t, handler, "/_/ado/"); response.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", response.StatusCode)
+	}
+}
+
+func TestServePageShellCarriesTheListLink(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, list: listSettings{Style: "plain", Scope: "current"}}
+
+	// The link above a repository's documents leads back to the repositories of its project,
+	// carrying the settings the page was opened with.
+	beside := sidebars{List: listSettings{Style: "plain"},
+		Up: adoUpLink(source{kind: kindADO, organization: "my org", project: "my proj",
+			repository: "repo", path: "/docs/guide.md"})}
+	if !beside.HoldsList() {
+		t.Error("a list holding only the link above it is left out of the page")
+	}
+
+	page := string(renderPage("guide.md", "?path=/", 1000, embeddedAssets, beside, false))
+	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Browse to repositories</a>`; !strings.Contains(page, want) {
+		t.Errorf("the page does not hold %q: %q", want, page)
+	}
+
+	// A local list has nothing above it.
+	entries, up := handler.documentList(source{kind: kindLocal, route: "/docs/guide.md"}, "current")
+	if len(entries) == 0 || up.Label != "" {
+		t.Errorf("a local list carries the link %q above it", up.Label)
 	}
 }
