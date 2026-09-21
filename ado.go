@@ -415,7 +415,13 @@ func listingDocument(title, held string, names []string) document {
 // project carries the organization's projects, the one on the page marked, since the page is
 // the repositories below it. A repository carries its own documents, under the link back to
 // the repositories of its project.
+//
+// A repository whose list holds nothing but the document already on the page carries the
+// project's repositories instead, the one on the page marked, since a list of that one
+// document says nothing the page does not.
 func adoList(src source, scope string) ([]listEntry, listLink) {
+	project := source{kind: kindADO, organization: src.organization, project: src.project}
+
 	switch {
 	case src.project == "":
 		return nil, listLink{}
@@ -426,16 +432,41 @@ func adoList(src source, scope string) ([]listEntry, listLink) {
 			logInfo("  %scannot list the projects of %s: %v%s", colorYellow, src.organization, err, colorReset)
 			return nil, listLink{}
 		}
-		entries := make([]listEntry, 0, len(names))
-		for _, name := range names {
-			entries = append(entries, listEntry{Name: name, Current: name == src.project,
-				Route: adoRoute(source{kind: kindADO, organization: src.organization, project: name}, "")})
-		}
-		sortEntries(entries)
-		return entries, listLink{}
+		return namedEntries(names, src.project, func(name string) string {
+			return adoRoute(source{kind: kindADO, organization: src.organization, project: name}, "")
+		}), listLink{}
 	}
 
-	return documentTree(adoTree{src: src}, scope), adoUpLink(src)
+	entries := documentTree(adoTree{src: src}, scope)
+	if holdsOnlyTheCurrentDocument(entries) {
+		names, err := readADORepositories(project)
+		if err != nil {
+			logInfo("  %scannot list the repositories of %s: %v%s", colorYellow, src.project, err, colorReset)
+			return entries, adoUpLink(src)
+		}
+		entries = namedEntries(names, src.repository, func(name string) string {
+			return adoRoute(source{kind: kindADO, organization: src.organization,
+				project: src.project, repository: name}, "")
+		})
+	}
+	return entries, adoUpLink(src)
+}
+
+// namedEntries turns names into list entries addressing the route each name names, marking
+// the one the page stands at.
+func namedEntries(names []string, current string, route func(string) string) []listEntry {
+	entries := make([]listEntry, 0, len(names))
+	for _, name := range names {
+		entries = append(entries, listEntry{Name: name, Route: route(name), Current: name == current})
+	}
+	sortEntries(entries)
+	return entries
+}
+
+// holdsOnlyTheCurrentDocument reports whether entries hold the document the page shows and
+// nothing else.
+func holdsOnlyTheCurrentDocument(entries []listEntry) bool {
+	return len(entries) == 1 && entries[0].Current && len(entries[0].Children) == 0
 }
 
 // adoUpLink returns the link standing above a repository's documents, leading back to the

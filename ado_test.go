@@ -114,6 +114,50 @@ func TestADOListingDocument(t *testing.T) {
 	}
 }
 
+func TestNamedEntries(t *testing.T) {
+	src := source{kind: kindADO, organization: "org", project: "proj"}
+	entries := namedEntries([]string{"Second", "my repo", "first"}, "my repo", func(name string) string {
+		return adoRoute(source{kind: kindADO, organization: src.organization,
+			project: src.project, repository: name}, "")
+	})
+
+	want := []listEntry{
+		{Name: "first", Route: "/_/ado/org/proj/first"},
+		{Name: "my repo", Route: "/_/ado/org/proj/my%20repo", Current: true},
+		{Name: "Second", Route: "/_/ado/org/proj/Second"},
+	}
+	if len(entries) != len(want) {
+		t.Fatalf("entries = %+v, want %+v", entries, want)
+	}
+	for index, entry := range entries {
+		if entry.Name != want[index].Name || entry.Route != want[index].Route || entry.Current != want[index].Current {
+			t.Errorf("entry %d = %+v, want %+v", index, entry, want[index])
+		}
+	}
+}
+
+func TestHoldsOnlyTheCurrentDocument(t *testing.T) {
+	tests := map[string]struct {
+		entries []listEntry
+		want    bool
+	}{
+		"the document on the page alone": {[]listEntry{{Name: "README.md", Current: true}}, true},
+		"another document beside it":     {[]listEntry{{Name: "README.md", Current: true}, {Name: "notes.md"}}, false},
+		"one document, not the page's":   {[]listEntry{{Name: "notes.md"}}, false},
+		"a folder holding documents": {[]listEntry{{Name: "docs", Current: true,
+			Children: []listEntry{{Name: "guide.md"}}}}, false},
+		"nothing at all": {nil, false},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := holdsOnlyTheCurrentDocument(test.entries); got != test.want {
+				t.Errorf("holdsOnlyTheCurrentDocument = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestADOWebURL(t *testing.T) {
 	src := source{kind: kindADO, organization: "my org", project: "proj", repository: "repo", path: "/docs/guide.md"}
 	want := "https://dev.azure.com/my%20org/proj/_git/repo?path=/docs/guide.md"

@@ -209,6 +209,10 @@ the way down:
 | a project | the organization's projects, the one on the page marked |
 | a repository | the repository's documents, under a **Browse to repositories** link back to the project |
 
+A repository whose list would hold nothing but the document already on the page - a repository
+with a `README.md` and no other Markdown - carries the project's repositories instead, the one
+on the page marked, so there is somewhere to go from it.
+
 ## Rendering
 
 The page renders Markdown in the browser with [marked](https://github.com/markedjs/marked),

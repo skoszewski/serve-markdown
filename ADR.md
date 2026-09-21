@@ -126,6 +126,10 @@ carries its own documents under a link back to the repositories of its project, 
 one step the file tree cannot express. Without that link a reader who had walked down into a
 repository could only leave it by editing the address.
 
+A repository holding a `README.md` and nothing else would list that one document, which is the
+document the reader is already looking at. The list is then the project's repositories, the
+one on the page marked, so the sidebar always offers somewhere to go.
+
 ## One local namespace, and ado:// under its own route
 
 `/_/file/<path>` resolved a directory to the `README.md` or `index.md` within it, and
