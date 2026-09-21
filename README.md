@@ -46,6 +46,7 @@ Flags must precede the path.
 | `--port` | `8000` | Port for the local web server |
 | `--watch-interval` | `1`, or `15` for `ado://` | Seconds between the browser page's checks for changes |
 | `--outline` | off | Show an outline of the document's headings beside it; takes `style` and `justify` as a comma separated list, e.g. `style:plain,justify:right` |
+| `--list` | off | List a `dir:` or `ado://` source's documents on the left of the page; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
@@ -100,6 +101,34 @@ http://127.0.0.1:8000/docs/guide.md?outline=style:none
 ```
 
 The outline follows the document as it is re-read, and moves above it on a narrow window.
+
+## Directory list
+
+`--list` puts the documents around the one on the page on its left, for a `dir:` or an
+`ado://` source; any other source is served without one. It takes its settings the way
+`--outline` does:
+
+```sh
+serve-markdown --list style:plain,scope:subfolders dir:docs
+```
+
+| Setting | Values | Meaning |
+|---|---|---|
+| `style` | `plain` (`p`), `numbered` (`n`), `numbered-hierarchical` (`nh`) | how the entries are numbered |
+| | `none` | no list |
+| `scope` | `current` | the documents of the folder the page's document is in |
+| | `subfolders` | those, the folders below it, and `..` to the folder above |
+| | `tree` | every document under the source, nested by folder |
+
+The document the page shows is marked, folders come before documents, and names beginning with
+a dot are left out. Browsing keeps the query the page was opened with: every list entry, and
+every link in the document itself that points back at the server, carries it on. A page carrying a list always carries its outline on the right, whatever
+`justify` says. A page takes a `list` query parameter of the same settings:
+
+```
+http://127.0.0.1:8000/_/dir/guides/install.md?list=scope:tree
+http://127.0.0.1:8000/_/dir/guides/install.md?list=style:none
+```
 
 ## Routes
 

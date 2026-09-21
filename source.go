@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"mime"
 	"net/http"
 	"net/url"
@@ -55,6 +56,7 @@ type server struct {
 	assets        assetURLs
 	online        bool
 	outline       outlineSettings
+	list          listSettings
 	mermaid       bool
 }
 
@@ -252,6 +254,93 @@ func resolveSource(route string, defaultSource source) (source, bool) {
 	addressed := defaultSource
 	addressed.path = path.Join(path.Dir(defaultSource.path), relative)
 	return addressed, true
+}
+
+// escapeRoute escapes each segment of a slash separated path, for a route that addresses it.
+func escapeRoute(path string) string {
+	segments := strings.Split(path, "/")
+	for index, segment := range segments {
+		segments[index] = url.PathEscape(segment)
+	}
+	return strings.Join(segments, "/")
+}
+
+// documentList returns the entries of the directory list for the document src addresses.
+//
+// Only the "dir" and "ado" sources are listed; any other returns no entries.
+func (s *server) documentList(src source, scope string) []listEntry {
+	switch src.kind {
+	case kindDir:
+		resolved := resolveDirRoute(src.route, s.rootDir)
+		root, contained := containedPath(s.rootDir, "")
+		if resolved == "" || !contained {
+			return nil
+		}
+		tree := localTree{rootDir: root, folderPath: resolved}
+		if isFile(resolved) {
+			tree.documentPath = resolved
+			tree.folderPath = filepath.Dir(resolved)
+		}
+		return documentTree(tree, scope)
+
+	case kindADO:
+		return documentTree(adoTree{src: src}, scope)
+	}
+	return nil
+}
+
+// localTree reads a local directory as the tree the directory list is built from.
+type localTree struct {
+	rootDir      string
+	folderPath   string
+	documentPath string
+}
+
+func (t localTree) root() string     { return t.rootDir }
+func (t localTree) folder() string   { return t.folderPath }
+func (t localTree) document() string { return t.documentPath }
+
+func (t localTree) parent(folder string) string { return filepath.Dir(folder) }
+
+// route addresses a local path through the "dir" namespace, which reads it from the directory
+// the server was started in.
+func (t localTree) route(path string) string {
+	relative, err := filepath.Rel(t.rootDir, path)
+	if err != nil {
+		return ""
+	}
+	if relative == "." {
+		relative = ""
+	}
+	return "/" + routeNamespace + "/" + kindDir + "/" + escapeRoute(filepath.ToSlash(relative))
+}
+
+func (t localTree) read(folder string, recursive bool) []treeItem {
+	var items []treeItem
+	err := filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return nil
+		case path == folder:
+			return nil
+		case strings.HasPrefix(entry.Name(), "."):
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+		case entry.IsDir():
+			items = append(items, treeItem{path: path, name: entry.Name(), isFolder: true})
+			if !recursive {
+				return fs.SkipDir
+			}
+		case markdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))]:
+			items = append(items, treeItem{path: path, name: entry.Name()})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+	return items
 }
 
 // sendRawAsset answers with the bytes of the picture or other binary file src addresses,

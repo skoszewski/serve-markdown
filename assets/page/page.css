@@ -29,24 +29,37 @@ body {
   height: auto;
 }
 
-/* The outline stands beside the document, scrolling on its own. */
-body.with-outline {
+/* The sidebars stand beside the document, each scrolling on its own. */
+body.with-sidebar {
   display: flex;
   align-items: flex-start;
 }
 
-body.outline-right {
-  flex-direction: row-reverse;
+/* The list is always on the left, the outline on the side it was given. */
+#_list {
+  order: -2;
 }
 
-/* The document keeps its own width, centred in what the outline leaves it. */
-body.with-outline .markdown-body {
+#_content {
+  order: 0;
+}
+
+#_outline {
+  order: 1;
+}
+
+body.outline-left #_outline {
+  order: -1;
+}
+
+/* The document keeps its own width, centred in what the sidebars leave it. */
+body.with-sidebar .markdown-body {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0 auto;
 }
 
-#_outline {
+nav.sidebar {
   position: sticky;
   top: 0;
   flex: 0 0 320px;
@@ -64,48 +77,52 @@ body.outline-right #_outline {
   border-left: 1px solid #d0d7de;
 }
 
-#_outline ol {
+nav.sidebar ol {
   margin: 0;
   padding-left: 1.4em;
 }
 
-#_outline > ol {
+nav.sidebar > ol {
   padding-left: 0;
 }
 
-#_outline li {
+nav.sidebar li {
   margin: 3px 0;
 }
 
-#_outline a {
+nav.sidebar a {
   color: inherit;
   text-decoration: none;
 }
 
-#_outline a:hover {
+nav.sidebar a:hover {
   text-decoration: underline;
 }
 
-/* Each style numbers the outline in CSS alone. */
-#_outline.outline-plain ol {
+nav.sidebar a.current {
+  font-weight: 600;
+}
+
+/* Each style numbers a sidebar in CSS alone. */
+nav.sidebar.style-plain ol {
   list-style: none;
   padding-left: 1em;
 }
 
-#_outline.outline-plain > ol {
+nav.sidebar.style-plain > ol {
   padding-left: 0;
 }
 
-#_outline.outline-numbered ol {
+nav.sidebar.style-numbered ol {
   list-style: decimal;
 }
 
-#_outline.outline-numbered-hierarchical ol {
+nav.sidebar.style-numbered-hierarchical ol {
   list-style: none;
   counter-reset: section;
 }
 
-#_outline.outline-numbered-hierarchical li::before {
+nav.sidebar.style-numbered-hierarchical li::before {
   counter-increment: section;
   content: counters(section, ".") ". ";
 }
@@ -115,7 +132,7 @@ body.outline-right #_outline {
     background-color: #0d1117;
   }
 
-  #_outline {
+  nav.sidebar {
     border-right-color: #30363d;
     color: #c9d1d9;
   }
@@ -125,13 +142,13 @@ body.outline-right #_outline {
   }
 }
 
-/* Too narrow to stand beside the document, the outline goes above it. */
+/* Too narrow to stand beside the document, the sidebars go above it. */
 @media (max-width: 900px) {
-  body.with-outline {
+  body.with-sidebar {
     display: block;
   }
 
-  #_outline,
+  nav.sidebar,
   body.outline-right #_outline {
     position: static;
     flex: none;
@@ -144,7 +161,7 @@ body.outline-right #_outline {
 }
 
 @media (max-width: 900px) and (prefers-color-scheme: dark) {
-  #_outline {
+  nav.sidebar {
     border-bottom-color: #30363d;
   }
 }

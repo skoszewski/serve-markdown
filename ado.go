@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ type gitItem struct {
 	Content  string `json:"content"`
 	ObjectID string `json:"objectId"`
 	IsFolder bool   `json:"isFolder"`
+	Path     string `json:"path"`
 }
 
 // The access token is reused for adoTokenLifetime, since every poll of /content reads the
@@ -232,6 +234,99 @@ func readADORawItem(src source) ([]byte, error) {
 			response.StatusCode, adoErrorMessage(body, response.Status))}
 	}
 	return body, nil
+}
+
+// readADOItems lists the items below folder in the repository source names, one level down or
+// the whole tree under it.
+func readADOItems(src source, folder string, recursive bool) ([]gitItem, error) {
+	token, err := accessTokenFromAZ()
+	if err != nil {
+		return nil, err
+	}
+
+	recursion := "OneLevel"
+	if recursive {
+		recursion = "Full"
+	}
+	query := url.Values{}
+	query.Set("scopePath", folder)
+	query.Set("recursionLevel", recursion)
+	query.Set("api-version", adoGitAPIVersion)
+	requestURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?$format=json&%s",
+		url.PathEscape(src.organization), url.PathEscape(src.project),
+		url.PathEscape(src.repository), query.Encode())
+
+	description := fmt.Sprintf("listing %s in %s", folder, src.repository)
+
+	request, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Accept", "application/json")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, &adoRequestError{fmt.Sprintf("%s failed: %v", description, err)}
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, &adoRequestError{fmt.Sprintf("%s failed: %d %s", description,
+			response.StatusCode, adoErrorMessage(body, response.Status))}
+	}
+
+	var answer struct {
+		Value []gitItem `json:"value"`
+	}
+	if err := json.Unmarshal(body, &answer); err != nil {
+		return nil, fmt.Errorf("%s did not answer with JSON", description)
+	}
+	return answer.Value, nil
+}
+
+// adoRoute returns the route that addresses itemPath in the repository source names.
+func adoRoute(src source, itemPath string) string {
+	return fmt.Sprintf("/%s/%s/%s/%s/%s%s", routeNamespace, kindADO,
+		url.PathEscape(src.organization), url.PathEscape(src.project),
+		url.PathEscape(src.repository), escapeRoute(itemPath))
+}
+
+// adoTree reads an Azure Repos repository as the tree the directory list is built from.
+type adoTree struct {
+	src source
+}
+
+func (t adoTree) root() string     { return "/" }
+func (t adoTree) folder() string   { return path.Dir(t.src.path) }
+func (t adoTree) document() string { return t.src.path }
+
+func (t adoTree) parent(folder string) string { return path.Dir(folder) }
+
+func (t adoTree) route(itemPath string) string { return adoRoute(t.src, itemPath) }
+
+func (t adoTree) read(folder string, recursive bool) []treeItem {
+	found, err := readADOItems(t.src, folder, recursive)
+	if err != nil {
+		logInfo("  %scannot list %s: %v%s", colorYellow, folder, err, colorReset)
+		return nil
+	}
+
+	var items []treeItem
+	for _, found := range found {
+		switch {
+		case found.Path == "" || found.Path == folder || strings.HasPrefix(path.Base(found.Path), "."):
+		case found.IsFolder:
+			items = append(items, treeItem{path: found.Path, name: path.Base(found.Path), isFolder: true})
+		case markdownExtensions[strings.ToLower(path.Ext(found.Path))]:
+			items = append(items, treeItem{path: found.Path, name: path.Base(found.Path)})
+		}
+	}
+	return items
 }
 
 // adoErrorMessage extracts the Azure DevOps error text from a failed response body, falling

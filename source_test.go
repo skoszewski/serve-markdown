@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -207,5 +208,67 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDocumentTreeListsALocalDirectory(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root}
+	src := source{kind: kindDir, route: "/docs/guide.md"}
+
+	names := func(entries []listEntry) []string {
+		var read []string
+		for _, entry := range entries {
+			read = append(read, entry.Name)
+			for _, child := range entry.Children {
+				read = append(read, entry.Name+"/"+child.Name)
+			}
+		}
+		return read
+	}
+
+	tests := map[string][]string{
+		"current":    {"guide.md", "index.md"},
+		"subfolders": {"..", "guide.md", "index.md"},
+		"tree":       {"docs", "docs/guide.md", "docs/index.md", "plain", "plain/README.md", "Alpha.md", "beta.markdown", "notes.md", "README.md"},
+	}
+	for scope, want := range tests {
+		t.Run(scope, func(t *testing.T) {
+			got := names(handler.documentList(src, scope))
+			if strings.Join(got, ",") != strings.Join(want, ",") {
+				t.Errorf("entries = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestDocumentTreeRoutesAndMarksTheCurrentDocument(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root}
+
+	entries := handler.documentList(source{kind: kindDir, route: "/docs/guide.md"}, "subfolders")
+	for _, entry := range entries {
+		if entry.Name == "guide.md" {
+			if entry.Route != "/_/dir/docs/guide.md" {
+				t.Errorf("route = %q, want \"/_/dir/docs/guide.md\"", entry.Route)
+			}
+			if !entry.Current {
+				t.Error("the document the page shows is not marked")
+			}
+		}
+		if entry.Name == ".." && entry.Route != "/_/dir/" {
+			t.Errorf("the parent route = %q, want \"/_/dir/\"", entry.Route)
+		}
+		if entry.Name == "index.md" && entry.Current {
+			t.Error("another document is marked as the one the page shows")
+		}
+	}
+}
+
+func TestDocumentListIgnoresAFileSource(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindFile}, rootDir: root}
+	if entries := handler.documentList(source{kind: kindFile, route: "/notes.md"}, "tree"); entries != nil {
+		t.Errorf("entries = %v, want none", entries)
 	}
 }

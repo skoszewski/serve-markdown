@@ -42,6 +42,22 @@ each value to the reader its key names, so another flag can be described the sam
 A key left out keeps what it had, which is what lets a page's `outline` query parameter carry
 the same list and apply it onto the server's own settings for that page alone.
 
+## One tree walk reads both kinds of source
+
+The directory list and the local `dir:` source read a filesystem, while an `ado://` source
+reads a repository over REST, but both are a tree of folders and documents. `documentTree`
+holds the whole of the building - the scope, the nesting, the ordering, the `..` entry, the
+marking of the document on the page - and asks a `treeProvider` for the folder it starts at,
+what a folder holds, and the route that addresses an item. `localTree` and `adoTree` are those
+providers, and a third kind of source would only have to answer the same questions.
+
+## Browsing carries the page's query
+
+The outline and the list settings live in the query, so a link that dropped it would take the
+reader to a page drawn differently from the one they were reading. Every list entry is given
+the request's own query, and the page script gives it to each link of the rendered document
+that points back at the server and carries no query of its own.
+
 ## An unread outline query leaves the server's settings
 
 A query parameter that does not read is ignored rather than answered with an error: the page

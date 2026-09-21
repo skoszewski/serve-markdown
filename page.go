@@ -54,14 +54,51 @@ type outlineSettings struct {
 	Justify string
 }
 
+// listSettings is how a page's directory list is drawn: the style its entries are numbered
+// in, empty for no list at all, and how much of the source it reaches.
+type listSettings struct {
+	Style string
+	Scope string
+}
+
+// listEntry is one line of the directory list: a document or a folder to open, holding the
+// entries of the folder below it.
+type listEntry struct {
+	Name     string
+	Route    string
+	Current  bool
+	Children []listEntry
+}
+
+// sidebars is what stands beside the document: the outline built from its headings, and the
+// list of the documents around it.
+type sidebars struct {
+	Outline outlineSettings
+	List    listSettings
+	Entries []listEntry
+}
+
+// bodyClass returns the class the page's body carries, naming the sidebars it holds and the
+// side the outline stands on.
+func (s sidebars) bodyClass() string {
+	if s.Outline.Style == "" && len(s.Entries) == 0 {
+		return ""
+	}
+	if s.Outline.Style == "" {
+		return "with-sidebar"
+	}
+	return "with-sidebar outline-" + s.Outline.Justify
+}
+
 // pageData is what the page template renders.
 type pageData struct {
-	Title   string
-	Assets  assetURLs
-	Outline outlineSettings
-	PageCSS string
-	PageJS  string
-	Config  pageConfig
+	Title     string
+	Assets    assetURLs
+	Sidebars  sidebars
+	BodyClass string
+	PageCSS   string
+	PageJS    string
+	Config    pageConfig
 }
 
 var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html"))
@@ -69,16 +106,17 @@ var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html
 // renderPage builds the HTML page shell that polls /content and renders it as Markdown.
 //
 // contentQuery is the query string, including its leading '?', appended to the /content
-// request, and watchIntervalMS the milliseconds between polls. The outline's style is empty
-// for a page without one.
-func renderPage(title, contentQuery string, watchIntervalMS int, assets assetURLs, outline outlineSettings, mermaid bool) []byte {
+// request, and watchIntervalMS the milliseconds between polls. A sidebar with an empty style,
+// or a list without entries, is left out of the page.
+func renderPage(title, contentQuery string, watchIntervalMS int, assets assetURLs, beside sidebars, mermaid bool) []byte {
 	data := pageData{
-		Title:   title,
-		Assets:  assets,
-		Outline: outline,
-		PageCSS: pageAssetRoute + "page.css",
-		PageJS:  pageAssetRoute + "page.js",
-		Config:  pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS},
+		Title:     title,
+		Assets:    assets,
+		Sidebars:  beside,
+		BodyClass: beside.bodyClass(),
+		PageCSS:   pageAssetRoute + "page.css",
+		PageJS:    pageAssetRoute + "page.js",
+		Config:    pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS},
 	}
 	if mermaid {
 		data.Config.MermaidJS = assets.MermaidJS

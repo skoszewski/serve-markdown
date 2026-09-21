@@ -218,16 +218,16 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	for _, style := range outlineStyles {
 		handler.outline = outlineSettings{Style: style.name, Justify: "left"}
 		_, page := get(t, handler, "/")
-		if !strings.Contains(page, `<nav id="_outline" class="outline-`+style.name+`">`) {
+		if !strings.Contains(page, `<nav id="_outline" class="sidebar style-`+style.name+`">`) {
 			t.Errorf("the %s page does not hold its outline: %q", style.name, page)
 		}
-		if !strings.Contains(page, `<body class="with-outline outline-left">`) {
+		if !strings.Contains(page, `<body class="with-sidebar outline-left">`) {
 			t.Errorf("the %s page does not switch the layout: %q", style.name, page)
 		}
 	}
 
 	handler.outline = outlineSettings{Style: "plain", Justify: "right"}
-	if _, page := get(t, handler, "/"); !strings.Contains(page, `<body class="with-outline outline-right">`) {
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `<body class="with-sidebar outline-right">`) {
 		t.Errorf("the page does not put the outline on the right: %q", page)
 	}
 }
@@ -238,13 +238,13 @@ func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"}}
 
 	tests := map[string]string{
-		"/?outline=style:plain":           `class="outline-plain"`,
-		"/?outline=style:nh":              `class="outline-numbered-hierarchical"`,
-		"/?outline=justify:right":         `class="with-outline outline-right"`,
-		"/?outline=style:p,justify:right": `class="outline-plain"`,
-		"/?outline=style:elsewhere":       `class="outline-numbered"`,
-		"/?outline=colour:red":            `class="outline-numbered"`,
-		"/":                               `class="outline-numbered"`,
+		"/?outline=style:plain":           `class="sidebar style-plain"`,
+		"/?outline=style:nh":              `class="sidebar style-numbered-hierarchical"`,
+		"/?outline=justify:right":         `class="with-sidebar outline-right"`,
+		"/?outline=style:p,justify:right": `class="sidebar style-plain"`,
+		"/?outline=style:elsewhere":       `class="sidebar style-numbered"`,
+		"/?outline=colour:red":            `class="sidebar style-numbered"`,
+		"/":                               `class="sidebar style-numbered"`,
 	}
 	for target, want := range tests {
 		t.Run(target, func(t *testing.T) {
@@ -256,6 +256,74 @@ func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 
 	if _, page := get(t, handler, "/?outline=style:none"); strings.Contains(page, `id="_outline"`) {
 		t.Errorf("the page holds an outline the query turned off: %q", page)
+	}
+}
+
+func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
+		list: listSettings{Style: "plain", Scope: "current"}}
+
+	_, page := get(t, handler, "/docs/guide.md")
+	for _, want := range []string{
+		`<nav id="_list" class="sidebar style-plain">`,
+		`<a href="/_/dir/docs/guide.md" class="current">guide.md</a>`,
+		`<a href="/_/dir/docs/index.md">index.md</a>`,
+		// The list takes the outline to the right, whatever the outline was given.
+		`<body class="with-sidebar outline-right">`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page does not hold %q: %q", want, page)
+		}
+	}
+
+	// A file source holds no list, so its outline keeps the side it was given.
+	file := &server{defaultSource: source{kind: kindFile}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
+		list: listSettings{Style: "plain", Scope: "current"}}
+	if _, page := get(t, file, "/"); strings.Contains(page, `id="_list"`) ||
+		!strings.Contains(page, `<body class="with-sidebar outline-left">`) {
+		t.Errorf("a file source page holds a list: %q", page)
+	}
+
+	// The query turns the list off and the outline goes back to its own side.
+	if _, page := get(t, handler, "/docs/guide.md?list=style:none"); strings.Contains(page, `id="_list"`) ||
+		!strings.Contains(page, `<body class="with-sidebar outline-left">`) {
+		t.Errorf("the query did not turn the list off: %q", page)
+	}
+
+	// The scope reaches further when the query asks it to, and browsing keeps that query.
+	if _, page := get(t, handler, "/docs/guide.md?list=scope:tree"); !strings.Contains(page,
+		`<a href="/_/dir/plain/README.md?list=scope:tree">README.md</a>`) {
+		t.Errorf("the tree scope does not reach the whole source: %q", page)
+	}
+}
+
+func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindDir}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, outline: outlineSettings{Justify: "left"},
+		list: listSettings{Scope: "current"}}
+
+	// The server was started without either sidebar; a query naming any setting draws the one
+	// it belongs to, with the default style, the way the flags do.
+	tests := map[string]string{
+		"/docs/guide.md?outline=justify:right": `<nav id="_outline" class="sidebar style-plain">`,
+		"/docs/guide.md?list=scope:current":    `<nav id="_list" class="sidebar style-plain">`,
+		"/docs/guide.md?list=scope:tree":       `<a href="/_/dir/plain/README.md?list=scope:tree">README.md</a>`,
+	}
+	for target, want := range tests {
+		t.Run(target, func(t *testing.T) {
+			if _, page := get(t, handler, target); !strings.Contains(page, want) {
+				t.Errorf("the page does not hold %q: %q", want, page)
+			}
+		})
+	}
+
+	// A query that does not read draws neither.
+	if _, page := get(t, handler, "/docs/guide.md?list=colour:red&outline=sideways"); strings.Contains(page, "sidebar") {
+		t.Errorf("an unread query drew a sidebar: %q", page)
 	}
 }
 

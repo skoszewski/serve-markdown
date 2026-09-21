@@ -93,6 +93,33 @@ func parseOutline(given string, settings outlineSettings) (outlineSettings, erro
 	return settings, err
 }
 
+// listScopes are how much of the source the directory list reaches: the documents of the
+// folder the document is in, those and the folders below it, or every document under the
+// source, nested by folder.
+var listScopes = []string{"current", "subfolders", "tree"}
+
+// defaultList is what a directory list is drawn with before --list or the query names
+// anything else.
+var defaultList = listSettings{Style: "plain", Scope: "current"}
+
+// parseList reads the "style" and "scope" settings onto the ones it is given, and returns the
+// list the settings ask for.
+func parseList(given string, settings listSettings) (listSettings, error) {
+	err := parseSettings(given, map[string]func(string) error{
+		"style": func(value string) error {
+			style, known := outlineStyle(value)
+			if !known {
+				return fmt.Errorf("'%s' is not a list style; expected one of %s",
+					value, outlineStyleList())
+			}
+			settings.Style = style
+			return nil
+		},
+		"scope": settingFrom("a list scope", listScopes, &settings.Scope),
+	})
+	return settings, err
+}
+
 // contentPayload is the JSON the page polls for. Its mtime, text and css are null when the
 // document could not be read.
 type contentPayload struct {
@@ -133,6 +160,11 @@ func run() error {
 			"settings: style:%s, justify:%s. A page takes an 'outline' query parameter of the "+
 			"same settings, which overrides this one",
 		outlineStyleList(), strings.Join(outlineJustifications, "|")))
+	list := flag.String("list", "", fmt.Sprintf(
+		"List the documents of a %s or %s source on the left of the page, as a comma separated "+
+			"list of settings: style:%s, scope:%s. It takes the outline to the right, and a page "+
+			"takes a 'list' query parameter of the same settings",
+		dirPrefix, adoScheme, outlineStyleList(), strings.Join(listScopes, "|")))
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 
@@ -162,7 +194,17 @@ func run() error {
 		outlineOf = parsed
 	}
 
-	handler := &server{assets: embeddedAssets, online: *online, outline: outlineOf, mermaid: *mermaid}
+	listOf := listSettings{Scope: defaultList.Scope}
+	if *list != "" {
+		parsed, err := parseList(*list, defaultList)
+		if err != nil {
+			return err
+		}
+		listOf = parsed
+	}
+
+	handler := &server{assets: embeddedAssets, online: *online, outline: outlineOf,
+		list: listOf, mermaid: *mermaid}
 	if *online {
 		handler.assets = cdnAssets
 	}
@@ -276,8 +318,9 @@ func (s *server) serve(listener net.Listener) error {
 // ServeHTTP serves a page shell for every route, and the document that route addresses at
 // /content. A route naming a picture or another binary file is answered with its bytes.
 //
-// A page route takes an "outline" query parameter of the settings --outline itself takes,
-// which it applies onto them for that page; a parameter that does not read leaves them.
+// A page route takes "outline" and "list" query parameters of the settings --outline and
+// --list themselves take, which it applies onto them for that page; a parameter that does not
+// read leaves them. A page holding a directory list carries its outline on the right.
 func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if strings.HasPrefix(request.URL.Path, pageAssetRoute) {
 		pageFiles.ServeHTTP(writer, request)
@@ -312,16 +355,50 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	outline := s.outline
-	if asked, err := parseOutline(request.URL.Query().Get("outline"), outline); err == nil {
-		outline = asked
-	}
-
 	query := "?path=" + url.QueryEscape(request.URL.Path)
 	page := renderPage(title, query, int(math.Round(s.watchInterval*1000)), s.assets,
-		outline, s.mermaid)
+		s.sidebarsFor(request, src), s.mermaid)
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.Write(page)
+}
+
+// sidebarsFor returns what stands beside the document src addresses: the server's own outline
+// and list settings with the page's query applied onto them.
+//
+// A query naming any setting draws the sidebar it belongs to, taking the default style when
+// the server was started without one, the way --outline and --list do. A query that does not
+// read leaves the settings alone, and a list takes the outline to the right.
+func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
+	beside := sidebars{Outline: s.outline, List: s.list}
+	query := request.URL.Query()
+
+	if given := query.Get("outline"); given != "" {
+		base := beside.Outline
+		if base.Style == "" {
+			base.Style = defaultOutline.Style
+		}
+		if asked, err := parseOutline(given, base); err == nil {
+			beside.Outline = asked
+		}
+	}
+	if given := query.Get("list"); given != "" {
+		base := beside.List
+		if base.Style == "" {
+			base.Style = defaultList.Style
+		}
+		if asked, err := parseList(given, base); err == nil {
+			beside.List = asked
+		}
+	}
+
+	if beside.List.Style != "" {
+		beside.Entries = s.documentList(src, beside.List.Scope)
+		carryQuery(beside.Entries, request.URL.RawQuery)
+	}
+	if len(beside.Entries) > 0 {
+		beside.Outline.Justify = "right"
+	}
+	return beside
 }
 
 // sendContent answers a /content poll with the document the route addresses, or with the

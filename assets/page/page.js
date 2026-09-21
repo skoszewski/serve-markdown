@@ -132,6 +132,30 @@ function buildOutline() {
 }
 
 /**
+ * Gives every link into this server the query the page was opened with, so that browsing from
+ * the document keeps its settings.
+ *
+ * A link that carries a query of its own, or points at another host or at this page, is left
+ * as it is.
+ */
+function carryQuery() {
+  if (!location.search) {
+    return;
+  }
+  content.querySelectorAll("a[href]").forEach((link) => {
+    const href = link.getAttribute("href");
+    if (href.startsWith("#")) {
+      return;
+    }
+    const target = new URL(href, location.href);
+    if (target.origin !== location.origin || target.search) {
+      return;
+    }
+    link.setAttribute("href", target.pathname + location.search + target.hash);
+  });
+}
+
+/**
  * Renders one version of the document, with the CSS its front matter asks for.
  *
  * @param {string} text the document, as Markdown.
@@ -152,6 +176,7 @@ function render(text, css) {
     content.querySelectorAll("pre code:not(.language-mermaid)").forEach((block) => hljs.highlightElement(block));
   }
   buildOutline();
+  carryQuery();
   renderDiagrams();
 }
 
