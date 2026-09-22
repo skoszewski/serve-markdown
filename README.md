@@ -42,8 +42,8 @@ serve-markdown [flags] [path]
 Flags stand before the path, which ends them; a flag written after it is not read:
 
 ```sh
-serve-markdown --list style:plain docs/     # the list is drawn
-serve-markdown docs/ --list style:plain     # the flag is ignored
+serve-markdown --list scope:current docs/     # the list is drawn
+serve-markdown docs/ --list scope:current     # the flag is ignored
 ```
 
 | Flag | Default | Meaning |
@@ -52,7 +52,7 @@ serve-markdown docs/ --list style:plain     # the flag is ignored
 | `--port` | `8000` | Port for the local web server |
 | `--watch-interval` | `1` | Seconds between a local page's checks for changes; an `ado://` page makes none |
 | `--outline` | off | Show an outline of the document's headings beside it; takes `style` and `justify` as a comma separated list, e.g. `style:plain,justify:right` |
-| `--list` | off | List the documents around the page's own on its left; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
+| `--list` | off | List the documents around the page's own on its left; takes `scope`, e.g. `scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--search` | `README.md,index.md` | The documents a folder is read as, looked through in the order written |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
@@ -186,19 +186,21 @@ page is served as though the parameter had not been written at all.
 ## Directory list
 
 `--list` puts the documents around the one on the page on its left. It takes its settings the
-way `--outline` does:
+way `--outline` does, `scope` being the only one it knows:
 
 ```sh
-serve-markdown --list style:plain,scope:subfolders docs/
+serve-markdown --list scope:subfolders docs/
 ```
 
 | Setting | Values | Meaning |
 |---|---|---|
-| `style` | `plain` (`p`), `numbered` (`n`), `numbered-hierarchical` (`nh`) | how the entries are numbered |
-| | `none` | no list |
 | `scope` | `current` | the documents of the folder the page's document is in |
 | | `subfolders` | those, the folders below it, and `..` to the folder above |
 | | `tree` | every document under the source, nested by folder |
+| | `none` | no list |
+
+The entries are names to open and carry no numbering of their own; `style` belongs to
+`--outline` alone.
 
 The document the page shows is marked, folders come before documents, and names beginning with
 a dot are left out. Browsing keeps the query the page was opened with: every list entry, and
@@ -208,7 +210,7 @@ a `list` query parameter of the same settings:
 
 ```
 http://127.0.0.1:8000/guides/install.md?list=scope:tree
-http://127.0.0.1:8000/guides/install.md?list=style:none
+http://127.0.0.1:8000/guides/install.md?list=scope:none
 ```
 
 It stands before the fragment, as every query parameter does.

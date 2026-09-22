@@ -301,11 +301,11 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
-		list: listSettings{Style: "plain", Scope: "current"}}
+		list: listSettings{Scope: "current"}}
 
 	_, page := get(t, handler, "/docs/guide.md")
 	for _, want := range []string{
-		`<nav id="_list" class="sidebar style-plain">`,
+		`<nav id="_list" class="sidebar">`,
 		`<a href="/docs/guide.md" class="current">guide.md</a>`,
 		`<a href="/docs/index.md">index.md</a>`,
 		// The list takes the outline to the right, whatever the outline was given.
@@ -320,13 +320,13 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 	ado := &server{defaultSource: source{kind: kindADO, organization: "org", project: "proj",
 		repository: "repo", path: "/README.md"}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
-		list: listSettings{Style: "plain", Scope: "current"}}
+		list: listSettings{Scope: "current"}}
 	if _, page := get(t, ado, "/notes.md"); !strings.Contains(page, `id="_list"`) {
 		t.Errorf("the local namespace holds no list under an ado source: %q", page)
 	}
 
 	// The query turns the list off and the outline goes back to its own side.
-	if _, page := get(t, handler, "/docs/guide.md?list=style:none"); strings.Contains(page, `id="_list"`) ||
+	if _, page := get(t, handler, "/docs/guide.md?list=scope:none"); strings.Contains(page, `id="_list"`) ||
 		!strings.Contains(page, `<body class="with-sidebar outline-left">`) {
 		t.Errorf("the query did not turn the list off: %q", page)
 	}
@@ -341,14 +341,13 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, outline: outlineSettings{Justify: "left"},
-		list: listSettings{Scope: "current"}}
+		assets: embeddedAssets, outline: outlineSettings{Justify: "left"}}
 
 	// The server was started without either sidebar; a query naming any setting draws the one
 	// it belongs to, with the default style, the way the flags do.
 	tests := map[string]string{
 		"/docs/guide.md?outline=justify:right": `<nav id="_outline" class="sidebar style-plain">`,
-		"/docs/guide.md?list=scope:current":    `<nav id="_list" class="sidebar style-plain">`,
+		"/docs/guide.md?list=scope:current":    `<nav id="_list" class="sidebar">`,
 		"/docs/guide.md?list=scope:tree":       `<a href="/plain/README.md?list=scope:tree">README.md</a>`,
 	}
 	for target, want := range tests {
@@ -527,7 +526,7 @@ func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
 	writeFile(t, filepath.Join(filepath.Dir(root), "secret.png"), pictureContent)
 
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, list: listSettings{Style: "plain", Scope: "tree"}}
+		assets: embeddedAssets, list: listSettings{Scope: "tree"}}
 
 	// A '..' that stays inside the root is followed, the way a link in a document writes it.
 	inside := map[string]string{
@@ -734,11 +733,11 @@ func TestServePageShellCarriesTheADOVersion(t *testing.T) {
 func TestServePageShellCarriesTheListLink(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, list: listSettings{Style: "plain", Scope: "current"}}
+		assets: embeddedAssets, list: listSettings{Scope: "current"}}
 
 	// The link above a repository's documents leads back to the repositories of its project,
 	// carrying the settings the page was opened with.
-	beside := sidebars{List: listSettings{Style: "plain"},
+	beside := sidebars{List: listSettings{Scope: "current"},
 		Up: adoUpLink(source{kind: kindADO, organization: "my org", project: "my proj",
 			repository: "repo", path: "/docs/guide.md"})}
 	if !beside.HoldsList() {
@@ -756,7 +755,7 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 		repository: "repo"})
 	up.Label = "Back to projects"
 	page = string(renderPage("README.md", "?path=/", 1000, embeddedAssets, pageSettings{
-		Sidebars:     sidebars{List: listSettings{Style: "plain"}, Up: up},
+		Sidebars:     sidebars{List: listSettings{Scope: "current"}, Up: up},
 		ContentWidth: defaultContentWidth}))
 	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Back to projects</a>`; !strings.Contains(page, want) {
 		t.Errorf("the page does not hold %q: %q", want, page)

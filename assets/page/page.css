@@ -197,7 +197,17 @@ nav.sidebar a.current {
   font-weight: 600;
 }
 
-/* Each style numbers a sidebar in CSS alone. */
+/* The list's entries carry no numbering. */
+#_list ol {
+  list-style: none;
+  padding-left: 1em;
+}
+
+#_list > ol {
+  padding-left: 0;
+}
+
+/* Each outline style numbers it in CSS alone. */
 nav.sidebar.style-plain ol {
   list-style: none;
   padding-left: 1em;

@@ -246,16 +246,12 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 		}
 	}
 	if given := query.Get("list"); given != "" {
-		base := beside.List
-		if base.Style == "" {
-			base.Style = defaultList.Style
-		}
-		if asked, err := parseList(given, base); err == nil {
+		if asked, err := parseList(given, beside.List); err == nil {
 			beside.List = asked
 		}
 	}
 
-	if beside.List.Style != "" {
+	if beside.List.Scope != "" {
 		beside.Entries, beside.Up = s.documentList(src, beside.List.Scope)
 		carryQuery(beside.Entries, request.URL.RawQuery)
 		beside.Up.Route = withQuery(beside.Up.Route, request.URL.RawQuery)

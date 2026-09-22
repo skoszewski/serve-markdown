@@ -46,19 +46,19 @@ var contentWidths = []string{"small", "medium", "large", widthFull}
 // else, and defaultList the same for a directory list.
 var (
 	defaultOutline = outlineSettings{Style: "plain", Justify: "left"}
-	defaultList    = listSettings{Style: "plain", Scope: "current"}
+	defaultList    = listSettings{Scope: "current"}
 )
 
-// outlineStyles are the styles --outline and --list take, each with the shorthand that also
-// names it: entries without numbers, entries numbered within each level, and entries numbered
-// as 1., 1.1., 1.1.1. down the levels.
+// outlineStyles are the styles --outline takes, each with the shorthand that also names it:
+// entries without numbers, entries numbered within each level, and entries numbered as 1.,
+// 1.1., 1.1.1. down the levels.
 var outlineStyles = []struct{ name, shorthand string }{
 	{"plain", "p"},
 	{"numbered", "n"},
 	{"numbered-hierarchical", "nh"},
 }
 
-// outlineNone is the style that asks for no outline or no list at all.
+// outlineNone is the style that asks for no outline, and the scope that asks for no list.
 const outlineNone = "none"
 
 // outlineJustifications are the sides of the document the outline stands on, and listScopes
@@ -142,9 +142,9 @@ func readConfiguration() (configuration, error) {
 		outlineStyleList(), strings.Join(outlineJustifications, "|")))
 	list := flag.String("list", "", fmt.Sprintf(
 		"List the documents around the one on the page, on its left, as a comma separated list "+
-			"of settings: style:%s, scope:%s. It takes the outline to the right, and a page "+
-			"takes a 'list' query parameter of the same settings",
-		outlineStyleList(), strings.Join(listScopes, "|")))
+			"of settings: scope:%s. It takes the outline to the right, and a page takes a "+
+			"'list' query parameter of the same settings",
+		strings.Join(append(slices.Clone(listScopes), outlineNone), "|")))
 	ado := flag.String("ado", "", fmt.Sprintf(
 		"Read Azure Repos at the version named by a comma separated list of settings: %s. "+
 			"One of them at a time, the repository's default branch without any; a page takes "+
@@ -211,13 +211,13 @@ func readConfiguration() (configuration, error) {
 	}
 
 	// Without an outline the style is empty and the side still stands, for a query to turn
-	// the outline on without naming one; a list keeps its scope the same way.
+	// the outline on without naming one; a list is its scope alone, empty for no list.
 	if settings.outline, err = chooseSettings(*outline, written["outline"], fromFile.Outline,
 		outlineSettings{Justify: defaultOutline.Justify}, defaultOutline, parseOutline); err != nil {
 		return configuration{}, err
 	}
 	if settings.list, err = chooseSettings(*list, written["list"], fromFile.List,
-		listSettings{Scope: defaultList.Scope}, defaultList, parseList); err != nil {
+		listSettings{}, defaultList, parseList); err != nil {
 		return configuration{}, err
 	}
 	if settings.ado, err = chooseSettings(*ado, written["ado"], fromFile.ADO,
@@ -233,11 +233,8 @@ func printUsage() {
 	fmt.Fprintf(flag.CommandLine.Output(),
 		"Usage: %s [flags] [path]\n\n"+
 			"Render Markdown from local files or Azure Repos as GitHub-styled pages.\n\n"+
-			"  path\n    \t%s\n\n"+
-			"Flags stand before the path, which ends them; a flag written after it is not read:\n\n"+
-			"  %s --list style:plain docs/\n    \tthe list is drawn\n"+
-			"  %s docs/ --list style:plain\n    \tthe flag is ignored\n\nFlags:\n",
-		name, pathUsage, name, name)
+			"  path\n    \t%s\n\nFlags:\n",
+		name, pathUsage)
 	flag.PrintDefaults()
 }
 
@@ -497,20 +494,20 @@ func parseOutline(given string, settings outlineSettings) (outlineSettings, erro
 	return settings, err
 }
 
-// parseList reads the "style" and "scope" settings onto the ones it is given, and returns the
-// list the settings ask for.
+// parseList reads the "scope" setting onto the one it is given, and returns the list the
+// setting asks for. A scope of outlineNone leaves no list at all.
 func parseList(given string, settings listSettings) (listSettings, error) {
+	scopes := append(slices.Clone(listScopes), outlineNone)
 	err := parseSettings(given, map[string]func(string) error{
-		"style": func(value string) error {
-			style, known := outlineStyle(value)
-			if !known {
-				return fmt.Errorf("'%s' is not a list style; expected one of %s",
-					value, outlineStyleList())
+		"scope": func(value string) error {
+			if err := settingFrom("a list scope", scopes, &settings.Scope)(value); err != nil {
+				return err
 			}
-			settings.Style = style
+			if settings.Scope == outlineNone {
+				settings.Scope = ""
+			}
 			return nil
 		},
-		"scope": settingFrom("a list scope", listScopes, &settings.Scope),
 	})
 	return settings, err
 }

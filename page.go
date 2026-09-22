@@ -70,10 +70,9 @@ type outlineSettings struct {
 	Justify string
 }
 
-// listSettings is how a page's directory list is drawn: the style its entries are numbered
-// in, empty for no list at all, and how much of the source it reaches.
+// listSettings is how a page's directory list is drawn: how much of the source it reaches,
+// empty for no list at all.
 type listSettings struct {
-	Style string
 	Scope string
 }
 
