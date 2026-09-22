@@ -268,6 +268,13 @@ while a repository changes when someone pushes to it, so the page is read once a
 when the browser is refreshed. The document, the sidebar and the pictures are all read afresh
 then. A local page keeps checking every `--watch-interval` seconds.
 
+What an organization and a project hold - its projects, its Git repositories - is kept for
+half an hour after it is read, the same half hour the access token is kept for. Those listings
+back the sidebar of every page below them, and they change when someone creates or deletes a
+project or a repository rather than while a document is being read. A project or repository
+made meanwhile appears once the half hour is up, or when the server is started again; a
+repository's own documents are read afresh every time.
+
 With `--index-only`, a folder holding neither is served as the page saying no Markdown files
 were found, rather than with the error the read raises.
 

@@ -87,6 +87,45 @@ var adoToken = struct {
 	acquiredAt time.Time
 }{}
 
+// adoListings keeps what an organization and a project hold, since both are read to draw the
+// sidebar of every page below them, and both change when someone creates or deletes a project
+// or a repository rather than while a document is being read.
+var adoListings = adoCache{held: map[string]adoListing{}}
+
+// adoCache keeps listings read from Azure DevOps under a name, each for adoTokenLifetime -
+// the age the access token is kept for, so that there is one age to think about.
+type adoCache struct {
+	sync.Mutex
+	held map[string]adoListing
+}
+
+// adoListing is one listing the cache holds, and when it was read.
+type adoListing struct {
+	names  []string
+	readAt time.Time
+}
+
+// read returns the listing named, reading it with read when none is held or the one held has
+// aged out.
+//
+// The cache is held while the listing is read, so that pages asking for the same one at once
+// read it once; a read that fails is not kept, and is tried again by whoever asks next.
+func (c *adoCache) read(name string, read func() ([]string, error)) ([]string, error) {
+	c.Lock()
+	defer c.Unlock()
+
+	if held, found := c.held[name]; found && time.Since(held.readAt) <= adoTokenLifetime {
+		return held.names, nil
+	}
+
+	names, err := read()
+	if err != nil {
+		return nil, err
+	}
+	c.held[name] = adoListing{names: names, readAt: time.Now()}
+	return names, nil
+}
+
 // accessTokenFromAZ acquires an Azure DevOps access token through the az CLI, reusing the one
 // last acquired until it is adoTokenLifetime old.
 func accessTokenFromAZ() (string, error) {
@@ -246,50 +285,54 @@ func readADOItems(src source, folder string, recursive bool) ([]gitItem, error) 
 
 // readADOProjects lists the projects of the organization source names.
 func readADOProjects(src source) ([]string, error) {
-	query := url.Values{}
-	query.Set("api-version", adoGitAPIVersion)
+	return adoListings.read("projects\n"+src.organization, func() ([]string, error) {
+		query := url.Values{}
+		query.Set("api-version", adoGitAPIVersion)
 
-	var answer struct {
-		Value []struct {
-			Name string `json:"name"`
-		} `json:"value"`
-	}
-	description := fmt.Sprintf("listing the projects of %s", src.organization)
-	if err := adoGetJSON(adoURL(src, false, "_apis/projects", query), description, &answer); err != nil {
-		return nil, err
-	}
+		var answer struct {
+			Value []struct {
+				Name string `json:"name"`
+			} `json:"value"`
+		}
+		description := fmt.Sprintf("listing the projects of %s", src.organization)
+		if err := adoGetJSON(adoURL(src, false, "_apis/projects", query), description, &answer); err != nil {
+			return nil, err
+		}
 
-	names := make([]string, 0, len(answer.Value))
-	for _, project := range answer.Value {
-		names = append(names, project.Name)
-	}
-	return names, nil
+		names := make([]string, 0, len(answer.Value))
+		for _, project := range answer.Value {
+			names = append(names, project.Name)
+		}
+		return names, nil
+	})
 }
 
 // readADORepositories lists the Git repositories of the project source names, leaving out the
 // ones that are disabled.
 func readADORepositories(src source) ([]string, error) {
-	query := url.Values{}
-	query.Set("api-version", adoGitAPIVersion)
+	return adoListings.read("repositories\n"+src.organization+"\n"+src.project, func() ([]string, error) {
+		query := url.Values{}
+		query.Set("api-version", adoGitAPIVersion)
 
-	var answer struct {
-		Value []struct {
-			Name       string `json:"name"`
-			IsDisabled bool   `json:"isDisabled"`
-		} `json:"value"`
-	}
-	description := fmt.Sprintf("listing the repositories of %s", src.project)
-	if err := adoGetJSON(adoURL(src, true, "_apis/git/repositories", query), description, &answer); err != nil {
-		return nil, err
-	}
-
-	names := make([]string, 0, len(answer.Value))
-	for _, repository := range answer.Value {
-		if !repository.IsDisabled {
-			names = append(names, repository.Name)
+		var answer struct {
+			Value []struct {
+				Name       string `json:"name"`
+				IsDisabled bool   `json:"isDisabled"`
+			} `json:"value"`
 		}
-	}
-	return names, nil
+		description := fmt.Sprintf("listing the repositories of %s", src.project)
+		if err := adoGetJSON(adoURL(src, true, "_apis/git/repositories", query), description, &answer); err != nil {
+			return nil, err
+		}
+
+		names := make([]string, 0, len(answer.Value))
+		for _, repository := range answer.Value {
+			if !repository.IsDisabled {
+				names = append(names, repository.Name)
+			}
+		}
+		return names, nil
+	})
 }
 
 // adoRoute returns the route that addresses itemPath in what source names: the organization,

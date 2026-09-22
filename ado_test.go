@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseADOLocation(t *testing.T) {
@@ -137,6 +139,48 @@ func TestNamedEntries(t *testing.T) {
 		if entry.Name != want[index].Name || entry.Route != want[index].Route || entry.Current != want[index].Current {
 			t.Errorf("entry %d = %+v, want %+v", index, entry, want[index])
 		}
+	}
+}
+
+func TestADOCache(t *testing.T) {
+	cache := adoCache{held: map[string]adoListing{}}
+	reads := 0
+	read := func() ([]string, error) {
+		reads++
+		return []string{"first", "second"}, nil
+	}
+
+	names, err := cache.read("projects\norg", read)
+	if err != nil || len(names) != 2 || reads != 1 {
+		t.Fatalf("names = %v, err = %v after %d reads", names, err, reads)
+	}
+
+	// A listing already held is not read again, and another name is read on its own.
+	if _, err := cache.read("projects\norg", read); err != nil || reads != 1 {
+		t.Errorf("a held listing was read again: %d reads, %v", reads, err)
+	}
+	if _, err := cache.read("projects\nother", read); err != nil || reads != 2 {
+		t.Errorf("another listing was not read: %d reads, %v", reads, err)
+	}
+
+	// One that has aged out is read again.
+	held := cache.held["projects\norg"]
+	held.readAt = time.Now().Add(-adoTokenLifetime - time.Second)
+	cache.held["projects\norg"] = held
+	if _, err := cache.read("projects\norg", read); err != nil || reads != 3 {
+		t.Errorf("an aged listing was not read again: %d reads, %v", reads, err)
+	}
+
+	// A read that fails is not kept, and is tried again by whoever asks next.
+	failing := func() ([]string, error) {
+		reads++
+		return nil, errors.New("cannot list")
+	}
+	if _, err := cache.read("projects\nrefused", failing); err == nil {
+		t.Error("a failing read raised no error")
+	}
+	if _, err := cache.read("projects\nrefused", failing); err == nil || reads != 5 {
+		t.Errorf("a failing read was kept: %d reads, %v", reads, err)
 	}
 }
 

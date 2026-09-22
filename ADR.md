@@ -165,6 +165,20 @@ still counts as having written it.
 Unknown keys are refused rather than passed over. A file that quietly ignores `outlyne: true`
 teaches the reader that the setting does not work, and says nothing about why.
 
+## What an organization and a project hold is kept for half an hour
+
+Every page below a repository draws a sidebar from the organization's projects, and often from
+a project's repositories too, so browsing a repository asked Azure DevOps the same two
+questions again on every page. Both answers change when someone creates or deletes a project
+or a repository - rarely, and never while a document is being written - so they are kept under
+their names for `adoTokenLifetime`, the half hour the access token is already kept for. One
+age is easier to hold in mind than two, and both are about the same thing: how stale the
+server is willing to be.
+
+A repository's own documents are not kept: they change with every push, which is what the
+reader is there to see. A read that fails is not kept either, so a listing refused while a
+token is expiring is asked for again rather than remembered as empty.
+
 ## An ado:// page is read on refresh, not on a timer
 
 A local file changes while it is being written, which is what the page's checks are for: an
