@@ -175,10 +175,11 @@ func TestLoadDocumentReadsADirectory(t *testing.T) {
 		text string
 	}{
 		// A directory is the document it holds, and the listing of its documents when it holds
-		// neither index.md nor README.md. A local directory names its index first.
+		// none of the ones --search names, which are README.md then index.md unless it says
+		// otherwise.
 		"/docs":    {"index.md", "# Docs\n"},
 		"/plain":   {"README.md", "# Plain\n"},
-		"/both":    {"index.md", "# Both index\n"},
+		"/both":    {"README.md", "# Both readme\n"},
 		"/listing": {"", "# listing\n\n- [one.md](one.md)\n- [two.md](two.md)\n"},
 		"/empty":   {"", "# empty\n\nNo Markdown files found.\n"},
 	}
@@ -241,6 +242,61 @@ func TestLoadDocumentReadsOnlyTheIndex(t *testing.T) {
 	entries, _ := handler.documentList(source{kind: kindLocal, route: "/listing"}, "current")
 	if len(entries) != 2 {
 		t.Errorf("the list holds %+v, want both documents of the folder", entries)
+	}
+}
+
+func TestLoadDocumentReadsTheSearchedDocument(t *testing.T) {
+	root := documentRoot(t)
+
+	// The search says which document a folder is read as, and in what order they are tried.
+	tests := map[string]struct {
+		search indexSearch
+		name   string
+		text   string
+	}{
+		"README.md,index.md": {indexSearch{"README.md", "index.md"}, "README.md", "# Both readme\n"},
+		"index.md,README.md": {indexSearch{"index.md", "README.md"}, "index.md", "# Both index\n"},
+		"index.md":           {indexSearch{"index.md"}, "index.md", "# Both index\n"},
+		// A folder holding none of them is listed, whatever else it holds.
+		"guide.md": {indexSearch{"guide.md"}, "", "# both\n\n- [index.md](index.md)\n- [README.md](README.md)\n"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, search: test.search}
+			read, err := handler.loadDocument(source{kind: kindLocal, route: "/both"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if read.name != test.name || read.text != test.text {
+				t.Errorf("document = %q, %q, want %q, %q", read.name, read.text, test.name, test.text)
+			}
+		})
+	}
+
+	// A server built without a search reads the documents named by default.
+	plain := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
+	if got := plain.searched(); strings.Join(got, ",") != strings.Join(defaultSearch, ",") {
+		t.Errorf("searched = %v, want %v", got, defaultSearch)
+	}
+}
+
+func TestIndexSearch(t *testing.T) {
+	search := indexSearch{"README.md", "index.md"}
+
+	if !search.holds("readme.md") || !search.holds("INDEX.MD") {
+		t.Error("a document of the search is not held, its letters' case aside")
+	}
+	if search.holds("guide.md") {
+		t.Error("a document the search does not name is held")
+	}
+	if search.rank("README.md") >= search.rank("index.md") {
+		t.Error("the search does not rank its documents in the order they are looked for")
+	}
+	if search.rank("guide.md") != len(search) {
+		t.Errorf("rank of a document outside the search = %d, want %d", search.rank("guide.md"), len(search))
+	}
+	if want := "README.md or index.md"; search.named() != want {
+		t.Errorf("named = %q, want %q", search.named(), want)
 	}
 }
 

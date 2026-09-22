@@ -33,24 +33,14 @@ const (
 	adoScheme    = "ado://"
 )
 
-// A folder is read as the first of these documents it holds: a local directory names its
-// index first, an Azure Repos folder its README, as each is usually written.
-var (
-	localCandidates = []string{"index.md", "README.md"}
-	adoCandidates   = []string{"README.md", "index.md"}
-)
-
-// indexNames are the names a folder's own document goes by, whichever source it is read from.
-var indexNames = []string{"index.md", "README.md"}
-
 const routeHelp = `Routes:
   /<path>                                              a local file or directory under the server's directory
   /_/ado/<organization>                                the projects of an Azure DevOps organization
   /_/ado/<organization>/<project>                      the Git repositories of a project
   /_/ado/<organization>/<project>/<repository><path>   a file in an Azure Repos repository
 
-A directory resolves to the README.md or index.md within it, and is listed when it holds
-neither; an organization and a project are always listed.`
+A directory resolves to the first document of --search within it, and is listed when it holds
+none of them; an organization and a project are always listed.`
 
 // source names one document to read: a route below the server's directory for a local
 // source, or a repository path for an Azure Repos one.
@@ -80,8 +70,21 @@ type server struct {
 	list          listSettings
 	ado           adoSettings
 	contentWidth  string
+	search        indexSearch
 	mermaid       bool
 	indexOnly     bool
+	// versions reads the branches and tags a page offers, and is Azure Repos' own answer
+	// unless a test gives another.
+	versions func(source) *versionPicker
+}
+
+// searched returns the documents a folder is read as: the ones --search names, and the ones
+// it names by default for a server built without them.
+func (s *server) searched() indexSearch {
+	if len(s.search) == 0 {
+		return defaultSearch
+	}
+	return s.search
 }
 
 // adoVersion returns src carrying the version Azure Repos is read at: what --ado was given,
@@ -160,16 +163,42 @@ func isDir(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// findIndexFile returns the first of localCandidates that exists as a file under directory,
+// indexSearch is what --search names: the documents a folder is read as, in the order they
+// are looked for, for a local directory and an Azure Repos folder alike.
+type indexSearch []string
+
+// indexFile returns the first document of the search that exists as a file under directory,
 // or "" when none does.
-func findIndexFile(directory string) string {
-	for _, candidate := range localCandidates {
+func (search indexSearch) indexFile(directory string) string {
+	for _, candidate := range search {
 		path := filepath.Join(directory, candidate)
 		if isFile(path) {
 			return path
 		}
 	}
 	return ""
+}
+
+// holds reports whether name is one of the documents a folder is read as, whatever its
+// letters' case, a repository answering paths without regard to it.
+func (search indexSearch) holds(name string) bool {
+	return search.rank(name) < len(search)
+}
+
+// rank returns how early name stands among the documents a folder is read as, and the length
+// of the search for a name that is not among them, so that the earlier of two wins.
+func (search indexSearch) rank(name string) int {
+	for rank, candidate := range search {
+		if strings.EqualFold(name, candidate) {
+			return rank
+		}
+	}
+	return len(search)
+}
+
+// named writes the documents a folder is read as, for the pages and errors that name them.
+func (search indexSearch) named() string {
+	return strings.Join(search, " or ")
 }
 
 // resolveRoute resolves a URL route to the file or directory under rootDir it addresses, or
@@ -219,8 +248,8 @@ func markdownFilesIn(directory string) ([]string, error) {
 // renderDirectoryListing returns the Markdown document listing names as the files directory
 // holds, or saying that it holds none.
 //
-// It is the document of a directory holding neither index.md nor README.md; --index-only asks
-// for it with no names at all, having stopped looking for the rest.
+// It is the document of a directory holding none of the documents --search names;
+// --index-only asks for it with no names at all, having stopped looking for the rest.
 func renderDirectoryListing(directory string, names []string) string {
 	lines := []string{"# " + filepath.Base(directory), ""}
 	if len(names) == 0 {
@@ -294,7 +323,7 @@ func (s *server) documentList(src source, scope string) ([]listEntry, listLink) 
 		return documentTree(tree, scope), listLink{}
 
 	case kindADO:
-		return adoList(src, scope, s.indexOnly)
+		return adoList(src, scope, s.indexOnly, s.searched())
 	}
 	return nil, listLink{}
 }
@@ -424,7 +453,7 @@ func (s *server) documentTitle(src source) string {
 	if path == "" {
 		return ""
 	}
-	if index := findIndexFile(path); isDir(path) && index != "" {
+	if index := s.searched().indexFile(path); isDir(path) && index != "" {
 		return filepath.Base(index)
 	}
 	return filepath.Base(path)
@@ -445,11 +474,12 @@ type document struct {
 
 // loadDocument reads the document source addresses.
 //
-// A directory is the index.md or README.md within it; holding neither, it is the listing of
-// the Markdown files it does hold, which --index-only leaves out, having stopped looking.
+// A directory is the first document of --search within it; holding none of them, it is the
+// listing of the Markdown files it does hold, which --index-only leaves out, having stopped
+// looking.
 func (s *server) loadDocument(src source) (document, error) {
 	if src.kind == kindADO {
-		return readADOSource(src, s.indexOnly)
+		return readADOSource(src, s.indexOnly, s.searched())
 	}
 
 	path := resolveRoute(src.route, s.rootDir, s.defaultFile)
@@ -459,7 +489,7 @@ func (s *server) loadDocument(src source) (document, error) {
 	if !isDir(path) {
 		return readLocalFile(path)
 	}
-	if index := findIndexFile(path); index != "" {
+	if index := s.searched().indexFile(path); index != "" {
 		return readLocalFile(index)
 	}
 

@@ -120,6 +120,39 @@ func TestADOListingDocument(t *testing.T) {
 	}
 }
 
+func TestADONothingRead(t *testing.T) {
+	repository := source{kind: kindADO, organization: "org", project: "proj",
+		repository: "bootstrap-lz", path: "/"}
+	folder := source{kind: kindADO, organization: "org", project: "proj",
+		repository: "bootstrap-lz", path: "/docs/"}
+
+	tests := map[string]struct {
+		src       source
+		indexOnly bool
+		want      string
+	}{
+		// The page names what was read, the repository at its root and the folder below it.
+		"a repository": {repository, false,
+			"# bootstrap-lz\n\nNo README.md or index.md found here.\n"},
+		"a folder": {folder, false,
+			"# docs\n\nNo README.md or index.md found here.\n"},
+		// Under --index-only nothing else was looked for, so the page says as much.
+		"a repository read as its index alone": {repository, true,
+			"# bootstrap-lz\n\nNo Markdown files found.\n"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			read := adoNothingRead(test.src, test.indexOnly, defaultSearch)
+			if read.text != test.want {
+				t.Errorf("text = %q, want %q", read.text, test.want)
+			}
+			if read.marker == "" {
+				t.Error("the document carries no change marker")
+			}
+		})
+	}
+}
+
 func TestNamedEntries(t *testing.T) {
 	src := source{kind: kindADO, organization: "org", project: "proj"}
 	entries := namedEntries([]string{"Second", "my repo", "first"}, "my repo", func(name string) string {
@@ -143,23 +176,23 @@ func TestNamedEntries(t *testing.T) {
 }
 
 func TestADOCache(t *testing.T) {
-	cache := adoCache{held: map[string]adoListing{}}
+	cache := adoCache{held: map[string]adoHeld{}}
 	reads := 0
 	read := func() ([]string, error) {
 		reads++
 		return []string{"first", "second"}, nil
 	}
 
-	names, err := cache.read("projects\norg", read)
+	names, err := cached(&cache, "projects\norg", read)
 	if err != nil || len(names) != 2 || reads != 1 {
 		t.Fatalf("names = %v, err = %v after %d reads", names, err, reads)
 	}
 
 	// A listing already held is not read again, and another name is read on its own.
-	if _, err := cache.read("projects\norg", read); err != nil || reads != 1 {
+	if _, err := cached(&cache, "projects\norg", read); err != nil || reads != 1 {
 		t.Errorf("a held listing was read again: %d reads, %v", reads, err)
 	}
-	if _, err := cache.read("projects\nother", read); err != nil || reads != 2 {
+	if _, err := cached(&cache, "projects\nother", read); err != nil || reads != 2 {
 		t.Errorf("another listing was not read: %d reads, %v", reads, err)
 	}
 
@@ -167,7 +200,7 @@ func TestADOCache(t *testing.T) {
 	held := cache.held["projects\norg"]
 	held.readAt = time.Now().Add(-adoTokenLifetime - time.Second)
 	cache.held["projects\norg"] = held
-	if _, err := cache.read("projects\norg", read); err != nil || reads != 3 {
+	if _, err := cached(&cache, "projects\norg", read); err != nil || reads != 3 {
 		t.Errorf("an aged listing was not read again: %d reads, %v", reads, err)
 	}
 
@@ -176,11 +209,21 @@ func TestADOCache(t *testing.T) {
 		reads++
 		return nil, errors.New("cannot list")
 	}
-	if _, err := cache.read("projects\nrefused", failing); err == nil {
+	if _, err := cached(&cache, "projects\nrefused", failing); err == nil {
 		t.Error("a failing read raised no error")
 	}
-	if _, err := cache.read("projects\nrefused", failing); err == nil || reads != 5 {
+	if _, err := cached(&cache, "projects\nrefused", failing); err == nil || reads != 5 {
 		t.Errorf("a failing read was kept: %d reads, %v", reads, err)
+	}
+
+	// What is held under one name is answered to whoever asks for that kind of thing, and
+	// read afresh for another.
+	repositories, err := cached(&cache, "repositories\norg\nproj", func() ([]adoRepository, error) {
+		reads++
+		return []adoRepository{{Name: "repo", DefaultBranch: "refs/heads/main"}}, nil
+	})
+	if err != nil || len(repositories) != 1 || reads != 6 {
+		t.Errorf("repositories = %+v, err = %v after %d reads", repositories, err, reads)
 	}
 }
 
@@ -283,7 +326,7 @@ func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
 		return read
 	}
 
-	all := adoTree{src: src}.items(found, "/")
+	all := adoTree{src: src, search: defaultSearch}.items(found, "/")
 	if got := strings.Join(names(all), ","); got != "docs,index.md,README.md,CHANGELOG.md" {
 		t.Errorf("items = %s, want the folders and every document", got)
 	}
@@ -291,7 +334,7 @@ func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
 	// Under --index-only a document the page will never open is left out, and a folder holds
 	// the one document it is read as - the README.md of an Azure Repos folder - and no other,
 	// so a repository holding those two documents lists nothing to browse.
-	indexed := adoTree{src: src, indexOnly: true}.items(found, "/")
+	indexed := adoTree{src: src, indexOnly: true, search: defaultSearch}.items(found, "/")
 	if got := strings.Join(names(indexed), ","); got != "docs,README.md" {
 		t.Errorf("items = %s, want the folders and the one document each is read as", got)
 	}
@@ -305,7 +348,7 @@ func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
 		{Path: "/notes", IsFolder: true},
 		{Path: "/notes/index.md"},
 	}
-	tree := adoTree{src: src, indexOnly: true}
+	tree := adoTree{src: src, indexOnly: true, search: defaultSearch}
 	held := map[string]bool{}
 	for _, item := range tree.items(nested, "/") {
 		held[item.path] = true
@@ -343,7 +386,7 @@ func TestHoldsNothingToBrowse(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := holdsNothingToBrowse(test.entries); got != test.want {
+			if got := holdsNothingToBrowse(test.entries, defaultSearch); got != test.want {
 				t.Errorf("holdsNothingToBrowse = %v, want %v", got, test.want)
 			}
 		})

@@ -108,15 +108,16 @@ An Azure Repos picture is read as the item's own stream rather than through the 
 the documents are read with, since a binary file does not survive being carried as a JSON
 string.
 
-## A folder's document is looked for the way its source writes it
+## A folder's document is named by one list, the same for both sources
 
-A local directory is read as its `index.md` before its `README.md`, and an Azure Repos folder
-the other way round, since that is the name each is usually given where it stands. The order
-is the source's, not a setting, so a folder resolves to the same document however it is
-reached.
+`--search` names the documents a folder is read as, looked through in the order written, and
+`README.md` then `index.md` is the default, that being the name a folder's document usually
+carries. The list is one for both sources rather than one per scheme: a folder resolves to the
+same document however it is reached, and a repository whose folders are written another way is
+served by naming that way once.
 
-`--index-only` stops the search at those two names: a folder is the document it holds or a
-page saying none was found, and the listing of whatever else stands there is left out.
+`--index-only` stops the search at those names: a folder is the document it holds or a page
+saying none was found, and the listing of whatever else stands there is left out.
 
 Within an Azure Repos repository the list beside the page follows it as well, naming the
 folders and their index documents alone: an entry the page would never open leads nowhere,
@@ -165,13 +166,28 @@ still counts as having written it.
 Unknown keys are refused rather than passed over. A file that quietly ignores `outlyne: true`
 teaches the reader that the setting does not work, and says nothing about why.
 
-## What an organization and a project hold is kept for half an hour
+## The version is chosen on the page, from lists the page already holds
+
+A repository read at a branch or a tag was reachable only by writing `?ado=branch:...` into
+the address, which means knowing the branch names by heart. The page now draws the choice
+above the document: the default branch in a box of its own, since it answers "what am I
+reading?" without a list being opened, then Branch and Tag as one mutually exclusive pair, and
+the names of whichever is chosen.
+
+Both lists travel with the page rather than being fetched when a button is pressed. They are
+small, they are already read and kept for half an hour, and a picker that asks the server
+before it can show its options is a picker that feels broken on a slow link. Choosing a name
+writes the `ado` parameter into the address and opens the same document there, so what the
+picker does and what a typed URL does are the same thing.
+
+## What an organization, a project and a repository hold is kept for half an hour
 
 Every page below a repository draws a sidebar from the organization's projects, and often from
-a project's repositories too, so browsing a repository asked Azure DevOps the same two
-questions again on every page. Both answers change when someone creates or deletes a project
-or a repository - rarely, and never while a document is being written - so they are kept under
-their names for `adoTokenLifetime`, the half hour the access token is already kept for. One
+a project's repositories too, while a page reading a repository draws its picker from the
+branches and tags; so browsing asked Azure DevOps the same few questions again on every page.
+Those answers change when someone creates or deletes a project, a repository, a branch or a
+tag - rarely, and never while a document is being written - so they are kept under their names
+for `adoTokenLifetime`, the half hour the access token is already kept for. One
 age is easier to hold in mind than two, and both are about the same thing: how stale the
 server is willing to be.
 
@@ -223,8 +239,8 @@ The `scope` reaches below those entries the way it does within a repository: `su
 nests the repositories of the project on the page, and `tree` those of every project, which
 costs one read per project and is asked for rather than assumed.
 
-A repository holding a `README.md` and nothing else would list that one document, which is the
-document the reader is already looking at. The list is then the project's repositories, the
+A repository holding its index document and nothing else would list that one document, which
+is the document the reader is already looking at. The list is then the project's repositories, the
 one on the page marked, so the sidebar always offers somewhere to go. The link above them
 leads to the project as it always does, under a label naming what the list now holds.
 
@@ -234,9 +250,9 @@ link above the list is the one that takes it: **Up** below the root, **Browse to
 repositories** at it.
 
 Telling that case apart takes more than the entry's mark: a repository's own route addresses
-the document inside it without naming it, so nothing in the list is marked. An only entry
-named `README.md` or `index.md` is therefore read as the document on the page, while an only
-entry under another name is kept - the page did not resolve to it, and that entry is the only
+the document inside it without naming it, so nothing in the list is marked. An only entry that
+`--search` names is therefore read as the document on the page, while an only entry under
+another name is kept - the page did not resolve to it, and that entry is the only
 way to reach it.
 
 ## A local file has one route, and ado:// its own namespace

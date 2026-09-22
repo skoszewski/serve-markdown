@@ -54,6 +54,7 @@ serve-markdown docs/ --list style:plain     # the flag is ignored
 | `--outline` | off | Show an outline of the document's headings beside it; takes `style` and `justify` as a comma separated list, e.g. `style:plain,justify:right` |
 | `--list` | off | List the documents around the page's own on its left; takes `style` and `scope`, e.g. `style:plain,scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
+| `--search` | `README.md,index.md` | The documents a folder is read as, looked through in the order written |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
 | `--content-width` | `full` | How wide the document is drawn: `small`, `medium`, `large` or `full` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
@@ -69,23 +70,27 @@ The path names what to serve:
   repository, served under `/_/ado/<organization>/<project>/<repository>`;
 - nothing, which serves the current directory.
 
-A directory - the one the server was started with or any below it - is the `index.md` or
-`README.md` within it, looked for in that order; a directory holding neither is served as a
-list of its Markdown files, and one holding no Markdown file at all as a page saying so. An
-`ado://` folder is read the same way, with `README.md` looked for first, as an Azure Repos
-folder usually names it.
+A directory - the one the server was started with or any below it - is the first document of
+`--search` it holds, `README.md` then `index.md` unless another list is given; a directory
+holding none of them is served as a list of its Markdown files, and one holding no Markdown
+file at all as a page saying so. An `ado://` folder is read the same way, the search being one
+list for both:
+
+```sh
+serve-markdown --search index.md,README.md docs/
+serve-markdown --search HOME.md ado://myorg/myproject/myrepo
+```
 
 `--index-only` stops the looking there: a folder is its index document or nothing, and a
-folder holding neither is served as the page saying no Markdown files were found, whatever
-else stands in it.
+folder holding none is served as the page saying no Markdown files were found, whatever else
+stands in it.
 
 Within an `ado://` repository the list beside the page follows that rule too, holding the
 folders and their index documents alone, since a document the page will never open is not
-somewhere to browse. A folder contributes one document at most - the one it is read as, which
-is its `README.md` where both it and an `index.md` stand there - or none. A repository root
-left with nothing to browse then falls back to the project's repositories, the way it does for
-a repository holding a `README.md` alone. A local directory's list still names every Markdown
-file it finds.
+somewhere to browse. A folder contributes one document at most - the one it is read as, the
+first of `--search` standing there - or none. A repository root left with nothing to browse
+then falls back to the project's repositories, the way it does for a repository holding its
+index document alone. A local directory's list still names every Markdown file it finds.
 
 An `ado://` source is reached through its own route alone, since the repository is named by
 the route itself, and the server prints that route at startup.
@@ -261,22 +266,25 @@ directory, and an `ado://` document's pictures over the same REST API as the doc
 
 An `ado://` source reads the file over the Azure DevOps REST API, and takes its access token
 from the Azure CLI, so `az login` must have been run. A path naming a folder, or ending in a
-slash, resolves to the `README.md` or `index.md` within it, in that order.
+slash, resolves to the first document of `--search` within it.
 
 An `ado://` page does not check for changes on its own: a local file changes as it is written,
 while a repository changes when someone pushes to it, so the page is read once and read again
 when the browser is refreshed. The document, the sidebar and the pictures are all read afresh
 then. A local page keeps checking every `--watch-interval` seconds.
 
-What an organization and a project hold - its projects, its Git repositories - is kept for
-half an hour after it is read, the same half hour the access token is kept for. Those listings
+What an organization, a project and a repository hold - its projects, its Git repositories,
+its branches and tags - is kept for half an hour after it is read, the same half hour the
+access token is kept for. Those listings
 back the sidebar of every page below them, and they change when someone creates or deletes a
 project or a repository rather than while a document is being read. A project or repository
 made meanwhile appears once the half hour is up, or when the server is started again; a
 repository's own documents are read afresh every time.
 
-With `--index-only`, a folder holding neither is served as the page saying no Markdown files
-were found, rather than with the error the read raises.
+A folder holding neither is served as a page titled after it - after the repository at its
+root - naming the documents of `--search` it does not hold; the documents it does hold
+are named by the list beside the page. With `--index-only` the page says that no Markdown
+files were found, nothing else having been looked for.
 
 A URL may stop short of a file:
 
@@ -325,6 +333,16 @@ The version reaches everything read from the repository: the document, the pictu
 and the file list. A project's repositories and an organization's projects have no version of
 their own, so it does not touch them.
 
+A page reading a repository draws a picker above the document: a box naming the branch the
+repository is read at unasked, a **Branch** and a **Tag** button, one of them chosen at a
+time, and a list of what that button holds. A repository holding no tags is offered its
+branches alone, the two buttons being left out where there is nothing to choose between.
+Choosing a name opens the same document at that version, which is the `ado` parameter written
+for you. Both lists come with the page, so
+moving between branches and tags asks the server for nothing; each is read from Azure DevOps
+once and kept for half an hour, as the projects and repositories are. A repository whose
+branches cannot be read carries no picker.
+
 With `--list` - written before the URL, the way every flag is - the sidebar follows the level
 above the page, so the way back is always beside the way down:
 
@@ -345,8 +363,8 @@ one:
 | `tree` | the projects, each with its repositories - one read of the repositories per project |
 
 A repository whose root would list nothing but the document already on the page - a repository
-with a `README.md` and no other Markdown - carries the project's repositories instead, the one
-on the page marked, and the link above them reads **Back to projects**, leading to the project
+with its index document and no other Markdown - carries the project's repositories instead,
+the one on the page marked, and the link above them reads **Back to projects**, leading to the project
 the way it always does. A repository holding one document under another name keeps it, since
 that entry is the only way to reach it, and a folder within a repository always keeps its own
 list, however short, the **Up** link being the way out of it.

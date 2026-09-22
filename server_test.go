@@ -615,7 +615,7 @@ func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 	// Without --list nothing is read from Azure DevOps to build the page shell, so the titles
 	// are answered whatever the network does.
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets}
+		assets: embeddedAssets, versions: noVersions}
 
 	tests := map[string]string{
 		"/_/ado/myorg":                "<title>myorg</title>",
@@ -640,10 +640,14 @@ func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 	}
 }
 
+// noVersions stands for Azure Repos where a test has no business asking it what a repository
+// holds.
+func noVersions(source) *versionPicker { return nil }
+
 func TestServePageShellChecksLocalDocumentsAlone(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets}
+		assets: embeddedAssets, versions: noVersions}
 
 	// A local page re-reads its document on its own; one reading Azure Repos waits for the
 	// browser's refresh, the document being read over the network.
@@ -655,10 +659,45 @@ func TestServePageShellChecksLocalDocumentsAlone(t *testing.T) {
 	}
 }
 
+func TestServePageShellCarriesTheVersions(t *testing.T) {
+	root := documentRoot(t)
+	// The branches and the tags stand for what Azure Repos would answer.
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		assets: embeddedAssets, versions: func(src source) *versionPicker {
+			if src.kind != kindADO || src.repository == "" {
+				return nil
+			}
+			return &versionPicker{DefaultBranch: "main", Branches: []string{"main", "release/2.1"},
+				Tags: []string{"v1.0"}, Kind: src.versionType, Version: src.version}
+		}}
+
+	// Both lists travel with the page, so choosing between them asks the server for nothing.
+	_, page := get(t, handler, "/_/ado/myorg/myproject/repo?ado=tag:v1.0")
+	for _, want := range []string{
+		`"defaultBranch":"main"`,
+		`"branches":["main","release/2.1"]`,
+		`"tags":["v1.0"]`,
+		`"kind":"tag"`,
+		`"version":"v1.0"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page does not hold %q: %q", want, page)
+		}
+	}
+
+	// A page reading no repository carries no picker at all.
+	for _, route := range []string{"/", "/_/ado/myorg", "/_/ado/myorg/myproject"} {
+		if _, page := get(t, handler, route); !strings.Contains(page, `"versions":null`) {
+			t.Errorf("%s carries a picker: %q", route, page)
+		}
+	}
+}
+
 func TestServePageShellCarriesTheADOVersion(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, ado: adoSettings{Version: "main", VersionType: "branch"}}
+		assets: embeddedAssets, ado: adoSettings{Version: "main", VersionType: "branch"},
+		versions: noVersions}
 
 	// The page polls at the version it was asked for, so the document and the shell agree.
 	_, page := get(t, handler, "/_/ado/myorg/myproject/repo?ado=tag:v1.0")

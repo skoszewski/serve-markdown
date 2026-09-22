@@ -43,9 +43,24 @@ var embeddedAssets = assetURLs{
 // pageConfig is what the page script reads its settings from. MermaidJS is empty unless
 // --mermaid is given, and a fenced mermaid block then stays a code block.
 type pageConfig struct {
-	ContentQuery    string `json:"contentQuery"`
-	WatchIntervalMS int    `json:"watchIntervalMS"`
-	MermaidJS       string `json:"mermaidJS"`
+	ContentQuery    string         `json:"contentQuery"`
+	WatchIntervalMS int            `json:"watchIntervalMS"`
+	MermaidJS       string         `json:"mermaidJS"`
+	Versions        *versionPicker `json:"versions"`
+}
+
+// versionPicker is what the page draws above a document read from Azure Repos: the branch the
+// repository is read at unasked, the branches and tags it holds, and which of them the page
+// was asked for.
+//
+// Both lists travel with the page, so choosing between branches and tags asks the server for
+// nothing. Kind is "branch" or "tag", empty where no version was asked for.
+type versionPicker struct {
+	DefaultBranch string   `json:"defaultBranch"`
+	Branches      []string `json:"branches"`
+	Tags          []string `json:"tags"`
+	Kind          string   `json:"kind"`
+	Version       string   `json:"version"`
 }
 
 // outlineSettings is how a page's outline is drawn: the style its entries are numbered in,
@@ -98,6 +113,7 @@ type pageSettings struct {
 	Sidebars     sidebars
 	ContentWidth string
 	Mermaid      bool
+	Versions     *versionPicker
 }
 
 // bodyClass returns the classes the page's body carries: how wide the document is drawn, the
@@ -145,7 +161,8 @@ func renderPage(title, contentQuery string, watchIntervalMS int, assets assetURL
 		BodyClass: settings.bodyClass(),
 		PageCSS:   pageAssetRoute + "page.css",
 		PageJS:    pageAssetRoute + "page.js",
-		Config:    pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS},
+		Config: pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS,
+			Versions: settings.Versions},
 	}
 	if settings.Mermaid {
 		data.Config.MermaidJS = assets.MermaidJS

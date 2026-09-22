@@ -141,6 +141,52 @@ func TestParseSettings(t *testing.T) {
 	}
 }
 
+func TestReadConfigSearch(t *testing.T) {
+	root := documentRoot(t)
+
+	// A file writes the documents a folder is read as either way it writes a list.
+	tests := map[string][]string{
+		"search:\n  - index.md\n  - HOME.md\n": {"index.md", "HOME.md"},
+		"search: index.md, HOME.md\n":          {"index.md", "HOME.md"},
+		"search: HOME.md\n":                    {"HOME.md"},
+	}
+	for content, want := range tests {
+		t.Run(content, func(t *testing.T) {
+			name := writeConfig(t, root, "given.yaml", content)
+			config, _, err := readConfigFile(name, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.Search == nil || strings.Join(config.Search.names, ",") != strings.Join(want, ",") {
+				t.Errorf("search = %+v, want %v", config.Search, want)
+			}
+		})
+	}
+
+	// A mapping is no list of names.
+	name := writeConfig(t, root, "given.yaml", "search:\n  first: index.md\n")
+	if _, _, err := readConfigFile(name, root); err == nil {
+		t.Error("a mapping was read as a list of names")
+	}
+}
+
+func TestSplitNames(t *testing.T) {
+	tests := map[string][]string{
+		"README.md,index.md":    {"README.md", "index.md"},
+		" README.md , index.md": {"README.md", "index.md"},
+		"README.md,,":           {"README.md"},
+		"":                      nil,
+		",":                     nil,
+	}
+	for given, want := range tests {
+		t.Run(given, func(t *testing.T) {
+			if got := splitNames(given); strings.Join(got, ",") != strings.Join(want, ",") {
+				t.Errorf("splitNames(%q) = %v, want %v", given, got, want)
+			}
+		})
+	}
+}
+
 func TestBodyClass(t *testing.T) {
 	outline := sidebars{Outline: outlineSettings{Style: "plain", Justify: "right"}}
 

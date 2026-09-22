@@ -20,7 +20,9 @@
 {{if .Sidebars.HoldsList}}<nav id="_list" class="sidebar style-{{.Sidebars.List.Style}}">{{if .Sidebars.Up.Label}}<a class="up" href="{{.Sidebars.Up.Route}}">{{.Sidebars.Up.Label}}</a>
 {{end}}{{template "entries" .Sidebars.Entries}}</nav>
 {{end}}{{if .Sidebars.Outline.Style}}<nav id="_outline" class="sidebar style-{{.Sidebars.Outline.Style}}"></nav>
-{{end}}<article id="_content" class="markdown-body">Loading...</article>
+{{end}}<div id="_column">
+<article id="_content" class="markdown-body">Loading...</article>
+</div>
 </body>
 </html>
 {{define "entries"}}<ol>{{range .}}<li>{{if .Route}}<a href="{{.Route}}"{{if .Current}} class="current"{{end}}>{{.Name}}</a>{{else}}<span>{{.Name}}</span>{{end}}{{if .Children}}{{template "entries" .Children}}{{end}}</li>{{end}}</ol>{{end}}

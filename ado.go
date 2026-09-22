@@ -87,43 +87,46 @@ var adoToken = struct {
 	acquiredAt time.Time
 }{}
 
-// adoListings keeps what an organization and a project hold, since both are read to draw the
-// sidebar of every page below them, and both change when someone creates or deletes a project
-// or a repository rather than while a document is being read.
-var adoListings = adoCache{held: map[string]adoListing{}}
+// adoListings keeps what an organization, a project and a repository hold, since each is read
+// to draw the pages below it, and each changes when someone creates or deletes a project, a
+// repository, a branch or a tag rather than while a document is being read.
+var adoListings = adoCache{held: map[string]adoHeld{}}
 
-// adoCache keeps listings read from Azure DevOps under a name, each for adoTokenLifetime -
+// adoCache keeps what was read from Azure DevOps under a name, each for adoTokenLifetime -
 // the age the access token is kept for, so that there is one age to think about.
 type adoCache struct {
 	sync.Mutex
-	held map[string]adoListing
+	held map[string]adoHeld
 }
 
-// adoListing is one listing the cache holds, and when it was read.
-type adoListing struct {
-	names  []string
+// adoHeld is one answer the cache holds, and when it was read.
+type adoHeld struct {
+	value  any
 	readAt time.Time
 }
 
-// read returns the listing named, reading it with read when none is held or the one held has
-// aged out.
+// cached returns what name holds, reading it with read when nothing is held under it or what
+// is held has aged out.
 //
-// The cache is held while the listing is read, so that pages asking for the same one at once
-// read it once; a read that fails is not kept, and is tried again by whoever asks next.
-func (c *adoCache) read(name string, read func() ([]string, error)) ([]string, error) {
-	c.Lock()
-	defer c.Unlock()
+// The cache is held while the reading is done, so that pages asking for the same thing at
+// once read it once; a read that fails is not kept, and is tried again by whoever asks next.
+func cached[T any](cache *adoCache, name string, read func() (T, error)) (T, error) {
+	cache.Lock()
+	defer cache.Unlock()
 
-	if held, found := c.held[name]; found && time.Since(held.readAt) <= adoTokenLifetime {
-		return held.names, nil
+	if held, found := cache.held[name]; found && time.Since(held.readAt) <= adoTokenLifetime {
+		if value, held := held.value.(T); held {
+			return value, nil
+		}
 	}
 
-	names, err := read()
+	value, err := read()
 	if err != nil {
-		return nil, err
+		var nothing T
+		return nothing, err
 	}
-	c.held[name] = adoListing{names: names, readAt: time.Now()}
-	return names, nil
+	cache.held[name] = adoHeld{value: value, readAt: time.Now()}
+	return value, nil
 }
 
 // accessTokenFromAZ acquires an Azure DevOps access token through the az CLI, reusing the one
@@ -285,7 +288,7 @@ func readADOItems(src source, folder string, recursive bool) ([]gitItem, error) 
 
 // readADOProjects lists the projects of the organization source names.
 func readADOProjects(src source) ([]string, error) {
-	return adoListings.read("projects\n"+src.organization, func() ([]string, error) {
+	return cached(&adoListings, "projects\n"+src.organization, func() ([]string, error) {
 		query := url.Values{}
 		query.Set("api-version", adoGitAPIVersion)
 
@@ -307,32 +310,143 @@ func readADOProjects(src source) ([]string, error) {
 	})
 }
 
-// readADORepositories lists the Git repositories of the project source names, leaving out the
-// ones that are disabled.
-func readADORepositories(src source) ([]string, error) {
-	return adoListings.read("repositories\n"+src.organization+"\n"+src.project, func() ([]string, error) {
+// adoRepository is a Git repository of a project, as the listing of them answers it.
+type adoRepository struct {
+	Name          string `json:"name"`
+	DefaultBranch string `json:"defaultBranch"`
+	IsDisabled    bool   `json:"isDisabled"`
+}
+
+// readADOProjectRepositories lists the Git repositories of the project source names, leaving
+// out the ones that are disabled.
+//
+// The default branch of each comes with the listing, so a page asking which branch it reads
+// costs no request of its own.
+func readADOProjectRepositories(src source) ([]adoRepository, error) {
+	name := "repositories\n" + src.organization + "\n" + src.project
+	return cached(&adoListings, name, func() ([]adoRepository, error) {
 		query := url.Values{}
 		query.Set("api-version", adoGitAPIVersion)
 
 		var answer struct {
-			Value []struct {
-				Name       string `json:"name"`
-				IsDisabled bool   `json:"isDisabled"`
-			} `json:"value"`
+			Value []adoRepository `json:"value"`
 		}
 		description := fmt.Sprintf("listing the repositories of %s", src.project)
 		if err := adoGetJSON(adoURL(src, true, "_apis/git/repositories", query), description, &answer); err != nil {
 			return nil, err
 		}
 
-		names := make([]string, 0, len(answer.Value))
+		held := make([]adoRepository, 0, len(answer.Value))
 		for _, repository := range answer.Value {
 			if !repository.IsDisabled {
-				names = append(names, repository.Name)
+				held = append(held, repository)
 			}
 		}
+		return held, nil
+	})
+}
+
+// readADORepositories names the Git repositories of the project source names.
+func readADORepositories(src source) ([]string, error) {
+	repositories, err := readADOProjectRepositories(src)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(repositories))
+	for _, repository := range repositories {
+		names = append(names, repository.Name)
+	}
+	return names, nil
+}
+
+// readADODefaultBranch returns the branch the repository source names is read at when no
+// version is asked for, empty when the repository says none.
+func readADODefaultBranch(src source) (string, error) {
+	repositories, err := readADOProjectRepositories(src)
+	if err != nil {
+		return "", err
+	}
+
+	for _, repository := range repositories {
+		if strings.EqualFold(repository.Name, src.repository) {
+			return refName(repository.DefaultBranch), nil
+		}
+	}
+	return "", nil
+}
+
+// readADORefs names the branches or the tags of the repository source names, kind being the
+// "heads" or "tags" the REST API files them under.
+func readADORefs(src source, kind string) ([]string, error) {
+	name := "refs " + kind + "\n" + src.organization + "\n" + src.project + "\n" + src.repository
+	return cached(&adoListings, name, func() ([]string, error) {
+		query := url.Values{}
+		query.Set("filter", kind+"/")
+		query.Set("$top", "1000")
+		query.Set("api-version", adoGitAPIVersion)
+
+		var answer struct {
+			Value []struct {
+				Name string `json:"name"`
+			} `json:"value"`
+		}
+		description := fmt.Sprintf("listing the %s of %s", kind, src.repository)
+		address := adoURL(src, true, "_apis/git/repositories/"+url.PathEscape(src.repository)+"/refs", query)
+		if err := adoGetJSON(address, description, &answer); err != nil {
+			return nil, err
+		}
+
+		names := make([]string, 0, len(answer.Value))
+		for _, ref := range answer.Value {
+			names = append(names, refName(ref.Name))
+		}
+		sort.SliceStable(names, func(i, j int) bool {
+			return strings.ToLower(names[i]) < strings.ToLower(names[j])
+		})
 		return names, nil
 	})
+}
+
+// refName returns the branch or tag a ref names, the API writing them as refs/heads/main and
+// refs/tags/v1.0.
+func refName(ref string) string {
+	for _, prefix := range []string{"refs/heads/", "refs/tags/"} {
+		if after, found := strings.CutPrefix(ref, prefix); found {
+			return after
+		}
+	}
+	return ref
+}
+
+// versionsOf returns what the page draws its branch and tag picker from, and nothing for a
+// source that is not a document of an Azure Repos repository.
+//
+// The branches and the tags are both read, so that the page can offer either without asking
+// again; a repository whose branches cannot be read carries no picker rather than a broken
+// one.
+func versionsOf(src source) *versionPicker {
+	if src.kind != kindADO || src.repository == "" {
+		return nil
+	}
+
+	branches, err := readADORefs(src, "heads")
+	if err != nil {
+		logInfo("  %scannot list the branches of %s: %v%s", colorYellow, src.repository, err, colorReset)
+		return nil
+	}
+	tags, err := readADORefs(src, "tags")
+	if err != nil {
+		logInfo("  %scannot list the tags of %s: %v%s", colorYellow, src.repository, err, colorReset)
+		tags = nil
+	}
+	defaultBranch, err := readADODefaultBranch(src)
+	if err != nil {
+		logInfo("  %scannot read the default branch of %s: %v%s", colorYellow, src.repository, err, colorReset)
+	}
+
+	return &versionPicker{DefaultBranch: defaultBranch, Branches: branches, Tags: tags,
+		Kind: src.versionType, Version: src.version}
 }
 
 // adoRoute returns the route that addresses itemPath in what source names: the organization,
@@ -358,6 +472,7 @@ func adoRoute(src source, itemPath string) string {
 type adoTree struct {
 	src        source
 	folderPath string
+	search     indexSearch
 	indexOnly  bool
 	isFolder   func(source, string) bool
 }
@@ -406,7 +521,7 @@ func (t adoTree) read(folder string, recursive bool) []treeItem {
 // opened from folder, leaving out the hidden names and the files that are not Markdown.
 //
 // Under --index-only a folder holds the one document it is read as and no other, so a folder
-// naming both index.md and README.md contributes the one that is read first.
+// naming several of the documents --search names contributes the one that is read first.
 func (t adoTree) items(found []gitItem, folder string) []treeItem {
 	var items []treeItem
 	documents := map[string]gitItem{}
@@ -420,10 +535,10 @@ func (t adoTree) items(found []gitItem, folder string) []treeItem {
 		case !markdownExtensions[strings.ToLower(path.Ext(found.Path))]:
 		case !t.indexOnly:
 			items = append(items, treeItem{path: found.Path, name: name})
-		case isIndexName(name):
+		case t.search.holds(name):
 			within := path.Dir(found.Path)
 			held, taken := documents[within]
-			if !taken || adoIndexRank(name) < adoIndexRank(path.Base(held.Path)) {
+			if !taken || t.search.rank(name) < t.search.rank(path.Base(held.Path)) {
 				documents[within] = found
 			}
 		}
@@ -433,17 +548,6 @@ func (t adoTree) items(found []gitItem, folder string) []treeItem {
 		items = append(items, treeItem{path: document.Path, name: path.Base(document.Path)})
 	}
 	return items
-}
-
-// adoIndexRank returns how early name stands among the names an Azure Repos folder is read
-// as, for choosing between them when a folder holds more than one.
-func adoIndexRank(name string) int {
-	for rank, candidate := range adoCandidates {
-		if strings.EqualFold(name, candidate) {
-			return rank
-		}
-	}
-	return len(adoCandidates)
 }
 
 // adoItemIsFolder reports whether itemPath names a folder in the repository source names.
@@ -461,13 +565,13 @@ var errNoIndexDocument = errors.New("no index document")
 
 // readADODocument reads the document source addresses, resolving a folder to its index file.
 //
-// A folder is read the way a local directory is: the adoCandidates are tried in order and the
-// first one that exists is the document. A path that does not end in a slash is read
+// A folder is read the way a local directory is: the documents of the search are tried in
+// order and the first one that exists is the document. A path that does not end in a slash is read
 // directly, and looked up as a folder only if the repository says it is one.
 //
 // A folder holding none of them raises errNoIndexDocument, which the caller answers as the
 // scope holding no Markdown at all.
-func readADODocument(src source) (itemPath, content, objectID string, err error) {
+func readADODocument(src source, search indexSearch) (itemPath, content, objectID string, err error) {
 	itemPath = src.path
 	if !strings.HasSuffix(itemPath, "/") {
 		item, readErr := readADOItem(src, itemPath, true)
@@ -481,7 +585,7 @@ func readADODocument(src source) (itemPath, content, objectID string, err error)
 		itemPath += "/"
 	}
 
-	for _, candidate := range adoCandidates {
+	for _, candidate := range search {
 		item, readErr := readADOItem(src, itemPath+candidate, true)
 		if readErr != nil {
 			continue
@@ -489,7 +593,7 @@ func readADODocument(src source) (itemPath, content, objectID string, err error)
 		return itemPath + candidate, item.Content, item.ObjectID, nil
 	}
 	return "", "", "", fmt.Errorf("%w: none of %s found in '%s'",
-		errNoIndexDocument, strings.Join(adoCandidates, ", "), itemPath)
+		errNoIndexDocument, strings.Join(search, ", "), itemPath)
 }
 
 // readADOSource reads the document source addresses in Azure DevOps.
@@ -500,7 +604,7 @@ func readADODocument(src source) (itemPath, content, objectID string, err error)
 //
 // With indexOnly, a folder holding neither of the documents a folder is read as is answered
 // as one holding no Markdown at all, rather than with the error the read raised.
-func readADOSource(src source, indexOnly bool) (document, error) {
+func readADOSource(src source, indexOnly bool, search indexSearch) (document, error) {
 	switch {
 	case src.project == "":
 		names, err := readADOProjects(src)
@@ -517,14 +621,10 @@ func readADOSource(src source, indexOnly bool) (document, error) {
 		return listingDocument(src.project, "repositories", names), nil
 	}
 
-	itemPath, content, objectID, err := readADODocument(src)
+	itemPath, content, objectID, err := readADODocument(src, search)
 	if err != nil {
-		if indexOnly && errors.Is(err, errNoIndexDocument) {
-			folder := strings.TrimSuffix(src.path, "/")
-			if folder == "" {
-				folder = src.repository
-			}
-			return listingDocument(path.Base(folder), "Markdown files", nil), nil
+		if errors.Is(err, errNoIndexDocument) {
+			return adoNothingRead(src, indexOnly, search), nil
 		}
 		return document{}, err
 	}
@@ -534,6 +634,25 @@ func readADOSource(src source, indexOnly bool) (document, error) {
 	}
 	css, markdown := asMarkdownDocument(name, content)
 	return document{marker: objectID, name: name, text: markdown, css: css}, nil
+}
+
+// adoNothingRead returns the document a folder holding neither of the documents a folder is
+// read as is served as: one titled after the folder, or after the repository at its root, so
+// that the page names what was read rather than a message alone.
+//
+// Under --index-only nothing else was looked for; otherwise the documents the folder does
+// hold are named by the list beside the page.
+func adoNothingRead(src source, indexOnly bool, search indexSearch) document {
+	folder := strings.TrimSuffix(src.path, "/")
+	if folder == "" || folder == "/" {
+		folder = src.repository
+	}
+
+	title := path.Base(folder)
+	if indexOnly {
+		return listingDocument(title, "Markdown files", nil)
+	}
+	return textDocument(fmt.Sprintf("# %s\n\nNo %s found here.\n", title, search.named()))
 }
 
 // listingDocument returns the document listing what an organization or a project holds, each
@@ -553,7 +672,12 @@ func listingDocument(title, held string, names []string) document {
 		lines = append(lines, fmt.Sprintf("- [%s](%s)", name, url.PathEscape(name)))
 	}
 
-	text := strings.Join(lines, "\n") + "\n"
+	return textDocument(strings.Join(lines, "\n") + "\n")
+}
+
+// textDocument returns a document the server wrote itself, marked by the text it holds, since
+// it has no modification time or object ID of its own.
+func textDocument(text string) document {
 	return document{marker: textMarker(text), text: text}
 }
 
@@ -570,17 +694,17 @@ func listingDocument(title, held string, names []string) document {
 // marked. The link above them leads where it always does, under the label that names
 // what the list now holds. A folder below the root keeps its own list, however short, since
 // the folder above it is where the way out lies.
-func adoList(src source, scope string, indexOnly bool) ([]listEntry, listLink) {
+func adoList(src source, scope string, indexOnly bool, search indexSearch) ([]listEntry, listLink) {
 	if src.repository == "" {
 		return adoProjectEntries(src, scope), listLink{}
 	}
 
-	tree := adoTree{src: src, indexOnly: indexOnly}
+	tree := adoTree{src: src, indexOnly: indexOnly, search: search}
 	tree.folderPath = tree.folder()
 
 	entries := documentTree(tree, scope)
 	up := adoListLink(src, tree.folderPath)
-	if tree.folderPath == tree.root() && holdsNothingToBrowse(entries) {
+	if tree.folderPath == tree.root() && holdsNothingToBrowse(entries, search) {
 		entries = adoRepositoryEntries(src, src.project)
 		up.Label = "Back to projects"
 	}
@@ -653,25 +777,14 @@ func namedEntries(names []string, current string, route func(string) string) []l
 // within it without naming it, so the entry cannot be marked; an only entry named as one of
 // the indexNames is that document, whatever its letters' case, since the folder resolves to
 // it.
-func holdsNothingToBrowse(entries []listEntry) bool {
+func holdsNothingToBrowse(entries []listEntry, search indexSearch) bool {
 	if len(entries) == 0 {
 		return true
 	}
 	if len(entries) != 1 || len(entries[0].Children) != 0 {
 		return false
 	}
-	return entries[0].Current || isIndexName(entries[0].Name)
-}
-
-// isIndexName reports whether name is one a folder's own document goes by, whatever its
-// letters' case, the repository answering paths without regard to it.
-func isIndexName(name string) bool {
-	for _, candidate := range indexNames {
-		if strings.EqualFold(name, candidate) {
-			return true
-		}
-	}
-	return false
+	return entries[0].Current || search.holds(entries[0].Name)
 }
 
 // adoUpLink returns the link standing above a repository's documents, leading back to the

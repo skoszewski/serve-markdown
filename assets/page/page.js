@@ -9,6 +9,81 @@ let lastMtime = null;
 let mermaidScript = null;
 
 /**
+ * Draws the branch and tag picker above the document, for a page reading Azure Repos.
+ *
+ * The branches and the tags both came with the page, so choosing between them asks the server
+ * for nothing; choosing one of them opens the same document at that version. A repository
+ * holding no tags is offered its branches alone, there being nothing to choose between.
+ */
+function drawVersions() {
+  const versions = pageConfig.versions;
+  if (!versions) {
+    return;
+  }
+  const tagged = (versions.tags || []).length > 0;
+
+  const picker = document.createElement("div");
+  picker.id = "_versions";
+
+  if (versions.defaultBranch) {
+    const standing = document.createElement("span");
+    standing.className = "default-branch";
+    standing.textContent = "Default branch: " + versions.defaultBranch;
+    picker.appendChild(standing);
+  }
+
+  const kinds = document.createElement("span");
+  kinds.className = "kinds";
+  const choices = document.createElement("select");
+  choices.className = "versions";
+
+  // The kind the page was asked for, or the one holding what it is read at.
+  let kind = versions.kind === "tag" && tagged ? "tag" : "branch";
+
+  const fill = () => {
+    const names = kind === "tag" ? versions.tags : versions.branches;
+    choices.textContent = "";
+    (names || []).forEach((name) => {
+      const choice = document.createElement("option");
+      choice.value = name;
+      choice.textContent = name;
+      choice.selected = name === versions.version ||
+        (versions.kind === "" && kind === "branch" && name === versions.defaultBranch);
+      choices.appendChild(choice);
+    });
+    choices.disabled = choices.childElementCount === 0;
+    [...kinds.children].forEach((button) => {
+      button.classList.toggle("chosen", button.dataset.kind === kind);
+    });
+  };
+
+  ["branch", "tag"].forEach((name) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.kind = name;
+    button.textContent = name === "branch" ? "Branch" : "Tag";
+    button.addEventListener("click", () => {
+      kind = name;
+      fill();
+    });
+    kinds.appendChild(button);
+  });
+
+  choices.addEventListener("change", () => {
+    const target = new URL(location.href);
+    target.searchParams.set("ado", kind + ":" + choices.value);
+    location.assign(target);
+  });
+
+  if (tagged) {
+    picker.appendChild(kinds);
+  }
+  picker.appendChild(choices);
+  fill();
+  content.parentNode.insertBefore(picker, content);
+}
+
+/**
  * Loads the mermaid bundle, once, the first time a document holds a diagram.
  *
  * @returns {Promise<void>} resolved once the bundle has run.
@@ -213,6 +288,7 @@ async function poll() {
 
 // The document is read once, and again on every check the page was given one to make; a page
 // without one is read again when the browser is asked to refresh it.
+drawVersions();
 poll();
 if (pageConfig.watchIntervalMS > 0) {
   setInterval(poll, pageConfig.watchIntervalMS);

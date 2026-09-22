@@ -31,6 +31,9 @@ const (
 	defaultContentWidth  = "full"
 )
 
+// defaultSearch names the documents a folder is read as, in the order they are looked for.
+var defaultSearch = []string{"README.md", "index.md"}
+
 // widthFull is the width that caps the document at nothing, giving it the window.
 const widthFull = "full"
 
@@ -66,8 +69,8 @@ var (
 )
 
 const pathUsage = "Markdown file or directory to serve; defaults to the current directory. " +
-	"A directory is served at its own URL path, resolving to index.md or README.md within it " +
-	"and listing its Markdown files when it holds neither. An " +
+	"A directory is served at its own URL path, resolving to the first document of --search " +
+	"within it and listing its Markdown files when it holds none of them. An " +
 	"'ado://<organization>/<project>/<repository>/<path to file>' URL serves a file from an " +
 	"Azure Repos Git repository, under its own /_/ado/ route rather than at the root. " +
 	"Whichever is given, the /_/ado/ routes reach a repository while the server runs."
@@ -85,6 +88,7 @@ type configuration struct {
 	mermaid       bool
 	indexOnly     bool
 	contentWidth  string
+	search        indexSearch
 	outline       outlineSettings
 	list          listSettings
 	ado           adoSettings
@@ -150,12 +154,14 @@ func readConfiguration() (configuration, error) {
 		"How wide the document is rendered: %s. The sidebars keep their own width, so a wider "+
 			"document fills what they leave of the window",
 		strings.Join(contentWidths, ", ")))
+	search := flag.String("search", strings.Join(defaultSearch, ","),
+		"The documents a folder is read as, a comma separated list looked through in the order "+
+			"it is written, for local directories and Azure Repos folders alike")
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
-	indexOnly := flag.Bool("index-only", false, fmt.Sprintf(
-		"Read a folder as the first of %s it holds and look no further; a folder holding "+
-			"neither is served as one holding no Markdown at all, rather than as a listing of "+
-			"the files it does hold",
-		strings.Join(localCandidates, " or ")))
+	indexOnly := flag.Bool("index-only", false,
+		"Read a folder as the first document of --search it holds and look no further; a folder "+
+			"holding none is served as one holding no Markdown at all, rather than as a listing "+
+			"of the files it does hold")
 	named := flag.String("config", "", fmt.Sprintf(
 		"Read the flags from a YAML file, each written as the flag it is named after. Without "+
 			"this, a %s beside the path is read when there is one; a flag on the command line "+
@@ -193,6 +199,15 @@ func readConfiguration() (configuration, error) {
 	if !slices.Contains(contentWidths, settings.contentWidth) {
 		return configuration{}, fmt.Errorf("'%s' is not a content width; expected one of %s",
 			settings.contentWidth, strings.Join(contentWidths, ", "))
+	}
+
+	settings.search = splitNames(*search)
+	if !written["search"] && fromFile.Search != nil {
+		settings.search = fromFile.Search.names
+	}
+	if len(settings.search) == 0 {
+		return configuration{}, fmt.Errorf("'search' names no document; expected one or more, as %s",
+			strings.Join(defaultSearch, ","))
 	}
 
 	// Without an outline the style is empty and the side still stands, for a query to turn
@@ -279,6 +294,41 @@ type fileConfig struct {
 	Online        *bool          `yaml:"online"`
 	IndexOnly     *bool          `yaml:"index-only"`
 	ContentWidth  *string        `yaml:"content-width"`
+	Search        *namesValue    `yaml:"search"`
+}
+
+// namesValue is how a list of names is written in a file: a sequence of them, or the comma
+// separated list the command line takes.
+type namesValue struct {
+	names []string
+}
+
+// UnmarshalYAML reads a list of names from the node the file holds.
+func (v *namesValue) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		var written string
+		if err := node.Decode(&written); err != nil {
+			return fmt.Errorf("line %d: expected a name, or a list of them", node.Line)
+		}
+		v.names = splitNames(written)
+		return nil
+	case yaml.SequenceNode:
+		return node.Decode(&v.names)
+	}
+	return fmt.Errorf("line %d: expected a name, or a list of them", node.Line)
+}
+
+// splitNames reads a comma separated list of names, leaving out the empty ones and the space
+// around each.
+func splitNames(written string) []string {
+	var names []string
+	for _, name := range strings.Split(written, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // settingsValue is how a flag taking a settings list is written in a file: true to draw it
