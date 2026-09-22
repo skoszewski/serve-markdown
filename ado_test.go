@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/url"
 	"strings"
@@ -459,5 +460,18 @@ func TestADODocumentTitle(t *testing.T) {
 				t.Errorf("documentTitle = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestADOAuthorizationFromAPAT(t *testing.T) {
+	// The token is carried as basic authentication under no user name.
+	t.Setenv(adoPATVariable, "secret")
+
+	got, err := adoAuthorization()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Basic " + base64.StdEncoding.EncodeToString([]byte(":secret")); got != want {
+		t.Errorf("adoAuthorization = %q, want %q", got, want)
 	}
 }

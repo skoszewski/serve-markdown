@@ -3,3 +3,4 @@
 /serve-markdown-*
 /dist/
 /tmp/
+.env

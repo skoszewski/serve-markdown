@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path"
 	"sort"
@@ -15,6 +17,9 @@ import (
 
 // Azure DevOps AAD resource ID used to acquire access tokens for the REST API.
 const adoResourceID = "499b84ac-1321-427f-aa17-267ca6975798"
+
+// adoPATVariable is the environment variable a personal access token is read from.
+const adoPATVariable = "AZURE_DEVOPS_PAT"
 
 const adoGitAPIVersion = "7.1"
 
@@ -129,6 +134,21 @@ func cached[T any](cache *adoCache, name string, read func() (T, error)) (T, err
 	return value, nil
 }
 
+// adoAuthorization returns the Authorization header an Azure DevOps request carries: the
+// personal access token adoPATVariable holds, written as basic authentication under an empty
+// user name, or a bearer token acquired through the az CLI.
+func adoAuthorization() (string, error) {
+	if pat := os.Getenv(adoPATVariable); pat != "" {
+		return "Basic " + base64.StdEncoding.EncodeToString([]byte(":"+pat)), nil
+	}
+
+	token, err := accessTokenFromAZ()
+	if err != nil {
+		return "", err
+	}
+	return "Bearer " + token, nil
+}
+
 // accessTokenFromAZ acquires an Azure DevOps access token through the az CLI, reusing the one
 // last acquired until it is adoTokenLifetime old.
 func accessTokenFromAZ() (string, error) {
@@ -141,7 +161,8 @@ func accessTokenFromAZ() (string, error) {
 
 	az, err := exec.LookPath("az")
 	if err != nil {
-		return "", fmt.Errorf("the az CLI is needed to read Azure Repos, but was not found on the PATH")
+		return "", fmt.Errorf("the az CLI is needed to read Azure Repos, but was not found on the "+
+			"PATH; set %s to a personal access token to read them without it", adoPATVariable)
 	}
 
 	output, err := exec.Command(az, "account", "get-access-token",

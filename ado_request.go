@@ -39,7 +39,7 @@ func adoItemsURL(src source, query url.Values) string {
 // description names what was being read, for the error a failure raises. accept is the media
 // type asked for, since the API answers with the item itself as readily as with JSON.
 func adoGet(requestURL, accept, description string) ([]byte, error) {
-	token, err := accessTokenFromAZ()
+	authorization, err := adoAuthorization()
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func adoGet(requestURL, accept, description string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Authorization", authorization)
 	request.Header.Set("Accept", accept)
 
 	response, err := http.DefaultClient.Do(request)

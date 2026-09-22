@@ -266,9 +266,20 @@ directory, and an `ado://` document's pictures over the same REST API as the doc
 
 ## Azure Repos
 
-An `ado://` source reads the file over the Azure DevOps REST API, and takes its access token
-from the Azure CLI, so `az login` must have been run. A path naming a folder, or ending in a
-slash, resolves to the first document of `--search` within it.
+An `ado://` source reads the file over the Azure DevOps REST API. A path naming a folder, or
+ending in a slash, resolves to the first document of `--search` within it.
+
+The request is authenticated with the personal access token `AZURE_DEVOPS_PAT` holds, and
+with an access token from the Azure CLI when that variable is empty, which asks that
+`az login` has been run:
+
+```sh
+AZURE_DEVOPS_PAT=$(cat ~/.ado-token) serve-markdown ado://myorg/myproject/myrepo
+```
+
+A token needs the **Code (read)** scope, and is carried as basic authentication under an empty
+user name, the way Azure DevOps takes it. Reading a repository without the Azure CLI installed
+- from a container among others - asks for that variable.
 
 An `ado://` page does not check for changes on its own: a local file changes as it is written,
 while a repository changes when someone pushes to it, so the page is read once and read again

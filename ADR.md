@@ -180,6 +180,24 @@ before it can show its options is a picker that feels broken on a slow link. Cho
 writes the `ado` parameter into the address and opens the same document there, so what the
 picker does and what a typed URL does are the same thing.
 
+## A personal access token stands before the az CLI
+
+Reading Azure Repos through `az account get-access-token` asks that the Azure CLI is installed
+and signed in, which a container image built from a static binary, a CI job and a server
+without a browser to sign in with all lack. An environment variable is what those places
+already carry a credential in, so `AZURE_DEVOPS_PAT` is read first and the CLI is the
+fallback. That name is the one the REST API documentation writes, and belongs to no particular
+tool, where `AZURE_DEVOPS_EXT_PAT` is the `az devops` extension's own.
+
+The token is carried as basic authentication under an empty user name - `Basic` of
+`:{token}` - which is how Azure DevOps takes a PAT, while the CLI's token is a bearer. Since
+the two differ in more than their value, what is built is the whole header rather than a token
+the caller must know the scheme of.
+
+The variable is read on every request rather than kept, because it costs nothing to read and a
+token replaced in the environment of a restarted server should not have a stale copy standing
+against it. The CLI's token keeps its half hour, as acquiring it costs a process.
+
 ## What an organization, a project and a repository hold is kept for half an hour
 
 Every page below a repository draws a sidebar from the organization's projects, and often from
