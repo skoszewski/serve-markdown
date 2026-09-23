@@ -18,18 +18,20 @@ import (
 	"time"
 )
 
-// contentPayload is the JSON the page polls for. Its mtime, text, css and base are null when
-// the document could not be read.
+// contentPayload is the JSON the page polls for. Its mtime, text, css, base and info are null
+// when the document could not be read.
 //
 // base is the route the document's relative links are resolved against, which the page cannot
 // work out for itself: a route naming a folder resolves to a document inside it, and the
-// browser would resolve the links beside the folder instead.
+// browser would resolve the links beside the folder instead. info is what the front matter
+// says of the document, its author and date left out under --front-matter title-only.
 type contentPayload struct {
-	MTime *string `json:"mtime"`
-	Text  *string `json:"text"`
-	CSS   *string `json:"css"`
-	Base  *string `json:"base"`
-	Error *string `json:"error"`
+	MTime *string       `json:"mtime"`
+	Text  *string       `json:"text"`
+	CSS   *string       `json:"css"`
+	Base  *string       `json:"base"`
+	Info  *documentInfo `json:"info"`
+	Error *string       `json:"error"`
 }
 
 // version returns the version this binary was built from, or "dev" outside a module build.
@@ -61,7 +63,8 @@ func run() error {
 
 	handler := &server{assets: embeddedAssets, online: settings.online, outline: settings.outline,
 		list: settings.list, ado: settings.ado, contentWidth: settings.contentWidth, separators: settings.separators,
-		search: settings.search, mermaid: settings.mermaid, indexOnly: settings.indexOnly}
+		frontMatter: settings.frontMatter, search: settings.search, mermaid: settings.mermaid,
+		indexOnly: settings.indexOnly}
 	if settings.online {
 		handler.assets = cdnAssets
 	}
@@ -281,7 +284,11 @@ func (s *server) sendContent(writer http.ResponseWriter, request *http.Request) 
 		payload.Error = &message
 	} else {
 		base := documentBase(route, read.name)
+		if s.frontMatter == frontMatterTitleOnly {
+			read.info.Author, read.info.Date = "", ""
+		}
 		payload.MTime, payload.Text, payload.CSS, payload.Base = &read.marker, &read.text, &read.css, &base
+		payload.Info = &read.info
 	}
 
 	content, err := json.Marshal(payload)

@@ -35,7 +35,15 @@ const (
 	defaultWatchInterval = 1.0
 	defaultContentWidth  = "full"
 	defaultSeparators    = "side"
+	defaultFrontMatter   = "all"
 )
+
+// frontMatterKinds are what --front-matter shows in the top row of what a document's front
+// matter says: its title with its author and date, or its title alone.
+var frontMatterKinds = []string{defaultFrontMatter, frontMatterTitleOnly}
+
+// frontMatterTitleOnly shows a document's title alone.
+const frontMatterTitleOnly = "title-only"
 
 // defaultSearch names the documents a folder is read as, in the order they are looked for.
 var defaultSearch = []string{"README.md", "index.md"}
@@ -103,6 +111,7 @@ type configuration struct {
 	indexOnly     bool
 	contentWidth  string
 	separators    string
+	frontMatter   string
 	search        indexSearch
 	outline       outlineSettings
 	list          listSettings
@@ -161,6 +170,8 @@ func readConfiguration() (configuration, error) {
 		"Width of the rendered document: %s", strings.Join(contentWidths, "|")))
 	separators := flag.String("separators", defaultSeparators, fmt.Sprintf(
 		"Lines separating the top row, the sidebars and the document: %s", strings.Join(separatorsKinds, "|")))
+	frontMatter := flag.String("front-matter", defaultFrontMatter, fmt.Sprintf(
+		"What the top row shows of the document's front matter: %s", strings.Join(frontMatterKinds, "|")))
 	search := flag.String("search", strings.Join(defaultSearch, ","),
 		"Comma separated list of the documents a folder is read as")
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
@@ -204,6 +215,12 @@ func readConfiguration() (configuration, error) {
 	if !slices.Contains(separatorsKinds, settings.separators) {
 		return configuration{}, fmt.Errorf("'%s' is not a kind of separators; expected one of %s",
 			settings.separators, strings.Join(separatorsKinds, ", "))
+	}
+
+	settings.frontMatter = choose(written, "front-matter", *frontMatter, fromFile.FrontMatter)
+	if !slices.Contains(frontMatterKinds, settings.frontMatter) {
+		return configuration{}, fmt.Errorf("'%s' is not what the front matter shows; expected one of %s",
+			settings.frontMatter, strings.Join(frontMatterKinds, ", "))
 	}
 
 	settings.search = splitNames(*search)
@@ -298,6 +315,7 @@ type fileConfig struct {
 	IndexOnly     *bool          `yaml:"index-only"`
 	ContentWidth  *string        `yaml:"content-width"`
 	Separators    *string        `yaml:"separators"`
+	FrontMatter   *string        `yaml:"front-matter"`
 	Search        *namesValue    `yaml:"search"`
 }
 

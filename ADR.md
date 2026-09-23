@@ -307,7 +307,9 @@ outline does not appear and then fold away.
 The button stands in a top row above the sidebars and the document, whose right is kept for
 the page's control buttons, so hiding the outline removes it whole and leaves the button where
 it was. The row is on every page, whether it holds a button or not, so that the layout does
-not move between pages. The button is an icon drawn inline in the page, so it needs no font or
+not move between pages. Its height follows the document's title and the line under it, so
+the page script measures the row and hands the height to the stylesheet, which the sticky
+sidebars and the scroll to a heading stand below. The button is an icon drawn inline in the page, so it needs no font or
 file of its own; the stylesheet empties its panel and mirrors it from the same classes that
 hide and place the outline, so the icon and the outline cannot disagree.
 

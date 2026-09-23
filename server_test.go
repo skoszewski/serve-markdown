@@ -108,6 +108,31 @@ func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 	}
 }
 
+func TestServeContentCarriesWhatTheFrontMatterSays(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	writeFile(t, filepath.Join(root, "described.md"), "---\ntitle: Notes\nauthor: Ann\ndate: 2024-05-01\n---\n# Notes\n")
+
+	// The author and the date are left out when the title is to stand alone.
+	tests := map[string]documentInfo{
+		defaultFrontMatter:   {Title: "Notes", Author: "Ann", Date: "2024-05-01"},
+		frontMatterTitleOnly: {Title: "Notes"},
+	}
+	for kind, want := range tests {
+		t.Run(kind, func(t *testing.T) {
+			handler.frontMatter = kind
+			_, body := get(t, handler, "/content?path=/described.md")
+			var payload contentPayload
+			if err := json.Unmarshal([]byte(body), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Info == nil || *payload.Info != want {
+				t.Errorf("info = %+v, want %+v", payload.Info, want)
+			}
+		})
+	}
+}
+
 func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
@@ -250,7 +275,8 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets}
 	if _, page := get(t, handler, "/"); strings.Contains(page, `id="_outline`) ||
-		!strings.Contains(page, `<header id="_top"><div id="_controls"></div></header>`) {
+		!strings.Contains(page, `<header id="_top"><div id="_heading"><div id="_title"></div>`+
+			`<div id="_byline"></div></div><div id="_controls"></div></header>`) {
 		t.Errorf("the page holds an outline or its button without the flag, or no top row: %q", page)
 	}
 

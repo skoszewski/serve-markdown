@@ -57,6 +57,7 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--search` | `README.md,index.md` | The documents a folder is read as, looked through in the order written |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
 | `--content-width` | `full` | How wide the document is drawn: `small`, `medium`, `large` or `full` |
+| `--front-matter` | `all` | What the top row shows of the document's front matter: `all` or `title-only` |
 | `--separators` | `side` | The lines separating the top row, the sidebars and the document: `hidden`, `top`, `side` or `all` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
@@ -268,16 +269,26 @@ comes from the file's suffix, and the fence is made longer than the longest run 
 in the file, so a file that holds its own fences stays inside its block.
 
 YAML front matter is stripped from the document rather than rendered. Its `css` key styles the
-page:
+page, and its `title`, `author` and `date` keys describe the document:
 
 ```markdown
 ---
+title: Release notes
+author: Ann Smith
+date: 2024-05-01
 css: |
   .markdown-body { max-width: 1200px; }
 ---
 
 # Notes
 ```
+
+The title is centred in the top row and names the browser's tab, which is otherwise named after
+the file. The author and the date stand under it a third smaller,
+joined by ` - ` when both are given; without a title neither is shown. `--front-matter
+title-only` shows the title alone. A date written without a time is shown as the date alone,
+one with a time as `2024-05-01 10:30`, and one YAML does not read as a date as it is written. A
+key holding a list or a mapping is not shown.
 
 A picture or a diagram linked from a document - `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`,
 `.webp`, `.avif`, `.bmp`, `.ico` or `.pdf` - is served as the bytes it holds, so

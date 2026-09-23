@@ -71,6 +71,7 @@ type server struct {
 	ado           adoSettings
 	contentWidth  string
 	separators    string
+	frontMatter   string
 	search        indexSearch
 	mermaid       bool
 	indexOnly     bool
@@ -273,9 +274,9 @@ func readLocalFile(path string) (document, error) {
 		return document{}, err
 	}
 	name := filepath.Base(path)
-	css, markdown := asMarkdownDocument(name, string(text))
+	css, about, markdown := asMarkdownDocument(name, string(text))
 	return document{marker: strconv.FormatInt(info.ModTime().UnixNano(), 10),
-		name: name, text: markdown, css: css}, nil
+		name: name, text: markdown, css: css, info: about}, nil
 }
 
 // resolveSource resolves a URL route to the document source it addresses.
@@ -484,6 +485,7 @@ type document struct {
 	name   string
 	text   string
 	css    string
+	info   documentInfo
 }
 
 // loadDocument reads the document source addresses.

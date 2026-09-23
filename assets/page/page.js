@@ -4,6 +4,9 @@
 const content = document.getElementById("_content");
 const outline = document.getElementById("_outline");
 const outlineToggle = document.getElementById("_outline-toggle");
+const title = document.getElementById("_title");
+const byline = document.getElementById("_byline");
+const pageTitle = document.title;
 const documentCSS = document.getElementById("_document-css");
 
 let lastMtime = null;
@@ -242,14 +245,21 @@ function resolveLinks(base) {
 }
 
 /**
- * Renders one version of the document, with the CSS its front matter asks for.
+ * Renders one version of the document, with the CSS its front matter asks for and its title,
+ * author and date in the top row. The title names the browser's tab as well, the server's own
+ * title standing where the document gives none.
  *
  * @param {string} text the document, as Markdown.
  * @param {string} css the CSS to style the page with.
  * @param {string} base the route the document's relative links are read from.
+ * @param {{title: string, author: string, date: string}|null} info what the front matter says
+ *     of the document.
  */
-function render(text, css, base) {
+function render(text, css, base, info) {
   documentCSS.textContent = css || "";
+  title.textContent = (info && info.title) || "";
+  document.title = title.textContent || pageTitle;
+  byline.textContent = info && info.title ? [info.author, info.date].filter(Boolean).join(" - ") : "";
   if (!window.marked || !window.DOMPurify) {
     const pre = document.createElement("pre");
     pre.textContent = text;
@@ -281,14 +291,20 @@ async function poll() {
   }
   if (data.mtime !== null && data.mtime !== lastMtime) {
     lastMtime = data.mtime;
-    render(data.text, data.css, data.base);
+    render(data.text, data.css, data.base, data.info);
   } else if (data.mtime === null) {
-    render("(file not found: " + data.error + ")", "", "/");
+    render("(file not found: " + data.error + ")", "", "/", null);
   }
 }
 
 // The document is read once, and again on every check the page was given one to make; a page
 // without one is read again when the browser is asked to refresh it.
+// The sidebars stand below the top row, however tall the document's title makes it.
+const topRow = document.getElementById("_top");
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty("--top-height", topRow.offsetHeight + "px");
+}).observe(topRow);
+
 drawVersions();
 poll();
 

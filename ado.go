@@ -653,8 +653,8 @@ func readADOSource(src source, indexOnly bool, search indexSearch) (document, er
 	if index := strings.LastIndex(name, "/"); index >= 0 {
 		name = name[index+1:]
 	}
-	css, markdown := asMarkdownDocument(name, content)
-	return document{marker: objectID, name: name, text: markdown, css: css}, nil
+	css, info, markdown := asMarkdownDocument(name, content)
+	return document{marker: objectID, name: name, text: markdown, css: css, info: info}, nil
 }
 
 // adoNothingRead returns the document a folder holding neither of the documents a folder is

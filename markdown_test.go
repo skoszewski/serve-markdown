@@ -76,7 +76,7 @@ func TestReadFrontMatter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			css, body := readFrontMatter(test.name+".md", test.text)
+			css, _, body := readFrontMatter(test.name+".md", test.text)
 			if css != test.css {
 				t.Errorf("css = %q, want %q", css, test.css)
 			}
@@ -87,12 +87,32 @@ func TestReadFrontMatter(t *testing.T) {
 	}
 }
 
+func TestReadFrontMatterDescribesTheDocument(t *testing.T) {
+	tests := map[string]documentInfo{
+		"---\ntitle: Notes\n---\n":                             {Title: "Notes"},
+		"---\ntitle: Notes\nauthor: Ann\n---\n":                {Title: "Notes", Author: "Ann"},
+		"---\ntitle: Notes\ndate: 2024-05-01\n---\n":           {Title: "Notes", Date: "2024-05-01"},
+		"---\ntitle: Notes\ndate: 2024-05-01T10:30:00Z\n---\n": {Title: "Notes", Date: "2024-05-01 10:30"},
+		"---\ntitle: Notes\ndate: May 1, 2024\n---\n":          {Title: "Notes", Date: "May 1, 2024"},
+		"---\ntitle: 1984\nauthor: [Ann, Bob]\n---\n":          {Title: "1984"},
+		"---\n- title\n---\n":                                  {},
+		"# Notes\n":                                            {},
+	}
+	for text, want := range tests {
+		t.Run(text, func(t *testing.T) {
+			if _, got, _ := readFrontMatter("described.md", text); got != want {
+				t.Errorf("info = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
 func TestReadFrontMatterReportsOncePerValue(t *testing.T) {
 	text := "---\ncss: 'p { margin: 0; }'\n---\n# Notes\n"
-	if css, _ := readFrontMatter("reported.md", text); css == "" {
+	if css, _, _ := readFrontMatter("reported.md", text); css == "" {
 		t.Fatal("the first read found no CSS")
 	}
-	if css, _ := readFrontMatter("reported.md", text); css == "" {
+	if css, _, _ := readFrontMatter("reported.md", text); css == "" {
 		t.Fatal("the second read found no CSS")
 	}
 	reportedFrontMatter.Lock()
@@ -104,7 +124,7 @@ func TestReadFrontMatterReportsOncePerValue(t *testing.T) {
 
 func TestAsMarkdownDocumentWrapsNonMarkdown(t *testing.T) {
 	text := "print('hi')\n"
-	css, markdown := asMarkdownDocument("script.py", text)
+	css, _, markdown := asMarkdownDocument("script.py", text)
 	if css != "" {
 		t.Errorf("css = %q, want empty", css)
 	}
@@ -116,7 +136,7 @@ func TestAsMarkdownDocumentWrapsNonMarkdown(t *testing.T) {
 
 func TestAsMarkdownDocumentFenceOutgrowsTheFile(t *testing.T) {
 	text := "a\n```\nfenced\n```\n````\nlonger\n````\n"
-	_, markdown := asMarkdownDocument("notes.txt", text)
+	_, _, markdown := asMarkdownDocument("notes.txt", text)
 	if !strings.HasPrefix(markdown, "# notes.txt\n\n`````plaintext\n") {
 		t.Errorf("markdown does not open with a five-backtick fence: %q", markdown)
 	}
@@ -126,14 +146,14 @@ func TestAsMarkdownDocumentFenceOutgrowsTheFile(t *testing.T) {
 }
 
 func TestAsMarkdownDocumentUnknownSuffixIsItsOwnLanguage(t *testing.T) {
-	_, markdown := asMarkdownDocument("main.go", "package main\n")
+	_, _, markdown := asMarkdownDocument("main.go", "package main\n")
 	if !strings.Contains(markdown, "```go\n") {
 		t.Errorf("markdown = %q, want a go fence", markdown)
 	}
 }
 
 func TestAsMarkdownDocumentMarkdownKeepsItsText(t *testing.T) {
-	_, markdown := asMarkdownDocument("notes.MARKDOWN", "# Notes\n")
+	_, _, markdown := asMarkdownDocument("notes.MARKDOWN", "# Notes\n")
 	if markdown != "# Notes\n" {
 		t.Errorf("markdown = %q, want the text unchanged", markdown)
 	}
