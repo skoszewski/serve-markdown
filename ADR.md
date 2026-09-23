@@ -330,6 +330,12 @@ runner already carries, rather than with a third-party action, and only for a ta
 already pushed. The history is checked out whole for the builds, so that Go reads the version
 from the tag the commit carries.
 
+A release is made for a semver tag with a leading `v` alone, the form Go reads a module
+version in. The workflow's tag filters are globs, which hold a tag to `vMAJOR.MINOR.PATCH` with
+an optional pre-release but cannot refuse leading zeros or empty identifiers, so the release
+job holds the tag to the semver grammar before publishing. Build metadata is refused, since Go
+does not take it in a version.
+
 ## A folder leading nowhere is listed as the folder above
 
 A list holding the document already on the page and `..` gives the reader nothing to choose.

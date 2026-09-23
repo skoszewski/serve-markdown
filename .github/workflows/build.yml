@@ -1,12 +1,14 @@
 # Checks the sources, builds the executable for every platform it is published for, and
-# publishes the executables as a release when a version tag is pushed.
+# publishes the executables as a release when a semver tag with a leading v is pushed.
 
 name: build
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
   pull_request:
   workflow_dispatch:
 
@@ -46,7 +48,6 @@ jobs:
           - windows/amd64
           - windows/arm64
     steps:
-      # The whole history, so that the version is read from the tag the commit carries.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -66,7 +67,6 @@ jobs:
           fi
           go build -trimpath -o "dist/$binary" .
           echo "binary=$binary" >> "$GITHUB_OUTPUT"
-      # Uploaded as it is, the artifact is named after the file and downloads as the executable.
       - uses: actions/upload-artifact@v7
         with:
           path: dist/${{ steps.build.outputs.binary }}
@@ -74,12 +74,23 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Semver tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          number='(0|[1-9][0-9]*)'
+          identifier='(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)'
+          semver="^v$number\.$number\.$number(-$identifier(\.$identifier)*)?$"
+          if ! [[ "$TAG" =~ $semver ]]; then
+            echo "'$TAG' is not a semver tag with a leading v" >&2
+            exit 1
+          fi
       - uses: actions/download-artifact@v8
         with:
           pattern: serve-markdown-*
