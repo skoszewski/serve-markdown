@@ -78,6 +78,26 @@ func documentTree(provider treeProvider, scope string) []listEntry {
 	return entries
 }
 
+// holdsNothingToBrowse reports whether entries lead nowhere: they are empty, or hold the
+// document the page shows and nothing else besides the ".." entry.
+//
+// A route naming a folder - a repository's own route among them - addresses the document
+// within it without naming it, so the entry cannot be marked; an only entry named as one of
+// the searched documents is that document, whatever its letters' case, since the folder
+// resolves to it.
+func holdsNothingToBrowse(entries []listEntry, search indexSearch) bool {
+	if len(entries) > 0 && entries[0].Name == ".." {
+		entries = entries[1:]
+	}
+	if len(entries) == 0 {
+		return true
+	}
+	if len(entries) != 1 || len(entries[0].Children) != 0 {
+		return false
+	}
+	return entries[0].Current || search.holds(entries[0].Name)
+}
+
 // sortEntries orders entries by name, ignoring case.
 func sortEntries(entries []listEntry) {
 	sort.SliceStable(entries, func(i, j int) bool {

@@ -294,3 +294,15 @@ An `ado://` source is the exception, and not served at the root: the repository 
 document two addresses, one of which dropped the part saying where it comes from, and a
 relative link from the rooted one resolved into the wrong repository. A local path below the
 server's own directory needs no such naming, the rest of the route already saying it.
+
+## A folder leading nowhere is listed as the folder above
+
+A list holding the document already on the page and `..` gives the reader nothing to choose.
+A local folder below the served directory whose list leads nowhere is listed as the folder
+above instead, the folder itself marked, the way a repository root leading nowhere carries its
+project's repositories. One check, `holdsNothingToBrowse`, decides both.
+
+The folder above is listed with `subfolders` whatever scope was asked for, since the folder on
+the page is one of its entries and `current` leaves folders out. The served directory has
+nothing above it the server may show, so it keeps its own list, and `tree` already lists
+everything.

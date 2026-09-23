@@ -411,6 +411,40 @@ func TestDocumentTreeRoutesAndMarksTheCurrentDocument(t *testing.T) {
 	}
 }
 
+func TestDocumentListShowsTheFolderAboveAFolderLeadingNowhere(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
+
+	// A folder holding its index document alone is listed as the folder above, itself marked,
+	// whether the route names the folder or the document.
+	for _, route := range []string{"/plain", "/plain/README.md", "/empty"} {
+		for _, scope := range []string{"current", "subfolders"} {
+			t.Run(route+" "+scope, func(t *testing.T) {
+				entries, _ := handler.documentList(source{kind: kindLocal, route: route}, scope)
+				var marked []string
+				for _, entry := range entries {
+					if entry.Current {
+						marked = append(marked, entry.Route)
+					}
+				}
+				folder := "/" + strings.Split(route, "/")[1]
+				if len(entries) < 2 || strings.Join(marked, ",") != folder {
+					t.Errorf("entries = %+v, want the folder above with %s marked", entries, folder)
+				}
+			})
+		}
+	}
+
+	// A folder holding more keeps its own list, and the whole tree is listed as it is.
+	if entries, _ := handler.documentList(source{kind: kindLocal, route: "/listing"}, "current"); len(entries) != 2 {
+		t.Errorf("entries = %+v, want the folder's own documents", entries)
+	}
+	if entries, _ := handler.documentList(source{kind: kindLocal, route: "/plain"}, "tree"); len(entries) < 2 ||
+		entries[0].Name != "both" {
+		t.Errorf("entries = %+v, want the whole tree", entries)
+	}
+}
+
 func TestDocumentListIgnoresARouteItCannotRead(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}

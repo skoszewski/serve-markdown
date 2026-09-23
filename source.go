@@ -307,6 +307,9 @@ func escapeRoute(path string) string {
 
 // documentList returns the directory list for the document src addresses: the entries beside
 // it, and the link leading out of them.
+//
+// A local folder below the server's directory holding nothing but the document on the page is
+// listed as the folder above it, the folder itself marked; the whole tree is listed as it is.
 func (s *server) documentList(src source, scope string) ([]listEntry, listLink) {
 	switch src.kind {
 	case kindLocal:
@@ -320,7 +323,17 @@ func (s *server) documentList(src source, scope string) ([]listEntry, listLink) 
 			tree.documentPath = resolved
 			tree.folderPath = filepath.Dir(resolved)
 		}
-		return documentTree(tree, scope), listLink{}
+
+		entries := documentTree(tree, scope)
+		if scope != "tree" && tree.folderPath != root && holdsNothingToBrowse(entries, s.searched()) {
+			here := tree.route(tree.folderPath)
+			entries = documentTree(localTree{rootDir: root, folderPath: filepath.Dir(tree.folderPath)},
+				"subfolders")
+			for index := range entries {
+				entries[index].Current = entries[index].Route == here
+			}
+		}
+		return entries, listLink{}
 
 	case kindADO:
 		return adoList(src, scope, s.indexOnly, s.searched())

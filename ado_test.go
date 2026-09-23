@@ -372,6 +372,7 @@ func TestHoldsNothingToBrowse(t *testing.T) {
 	}{
 		"the document on the page alone": {[]listEntry{{Name: "README.md", Current: true}}, true},
 		"another document beside it":     {[]listEntry{{Name: "README.md", Current: true}, {Name: "notes.md"}}, false},
+		"the document beside the parent": {[]listEntry{{Name: ".."}, {Name: "README.md", Current: true}}, true},
 		// A repository's own route addresses the README.md within it without naming it, so the
 		// entry is not marked and the name is what says it is the document on the page.
 		"an unmarked README.md":        {[]listEntry{{Name: "README.md"}}, true},

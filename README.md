@@ -207,7 +207,12 @@ The entries are names to open and carry no numbering of their own; `style` belon
 `--outline` alone.
 
 The document the page shows is marked, folders come before documents, and names beginning with
-a dot are left out. Browsing keeps the query the page was opened with: every list entry, and
+a dot are left out.
+
+A folder below the served directory holding nothing but the document on the page - or nothing
+at all - is listed as the folder above it, with the folder itself marked and `..` leading
+further up, in the `current` and `subfolders` scopes alike. The served directory keeps its own
+list, however short, and `tree` lists the whole tree as it is. Browsing keeps the query the page was opened with: every list entry, and
 every link in the document itself that points back at the server, carries it on. A page
 carrying a list always carries its outline on the right, whatever `justify` says. A page takes
 a `list` query parameter of the same settings:

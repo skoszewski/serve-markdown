@@ -791,23 +791,6 @@ func namedEntries(names []string, current string, route func(string) string) []l
 	return entries
 }
 
-// holdsNothingToBrowse reports whether entries lead nowhere: they are empty, or hold the
-// document the page shows and nothing else.
-//
-// A route naming a folder - a repository's own route among them - addresses the document
-// within it without naming it, so the entry cannot be marked; an only entry named as one of
-// the indexNames is that document, whatever its letters' case, since the folder resolves to
-// it.
-func holdsNothingToBrowse(entries []listEntry, search indexSearch) bool {
-	if len(entries) == 0 {
-		return true
-	}
-	if len(entries) != 1 || len(entries[0].Children) != 0 {
-		return false
-	}
-	return entries[0].Current || search.holds(entries[0].Name)
-}
-
 // adoUpLink returns the link standing above a repository's documents, leading back to the
 // repositories of the project it belongs to.
 func adoUpLink(src source) listLink {
