@@ -34,6 +34,7 @@ const (
 	defaultServePort     = 8000
 	defaultWatchInterval = 1.0
 	defaultContentWidth  = "full"
+	defaultSeparators    = "side"
 )
 
 // defaultSearch names the documents a folder is read as, in the order they are looked for.
@@ -50,7 +51,7 @@ var contentWidths = []string{"small", "medium", "large", widthFull}
 // defaultOutline is what an outline is drawn with before --outline or a page names anything
 // else, and defaultList the same for a directory list.
 var (
-	defaultOutline = outlineSettings{Style: "plain", Justify: "left"}
+	defaultOutline = outlineSettings{Style: "plain", Justify: "left", Display: "shown"}
 	defaultList    = listSettings{Scope: "current"}
 )
 
@@ -66,12 +67,24 @@ var outlineStyles = []struct{ name, shorthand string }{
 // outlineNone is the style that asks for no outline, and the scope that asks for no list.
 const outlineNone = "none"
 
-// outlineJustifications are the sides of the document the outline stands on, and listScopes
-// how much of the source the directory list reaches.
+// outlineJustifications are the sides of the document the outline stands on, outlineDisplays
+// whether it is shown or hidden before the reader chooses, and listScopes how much of the
+// source the directory list reaches.
 var (
 	outlineJustifications = []string{"left", "right"}
+	outlineDisplays       = []string{"shown", outlineHidden}
 	listScopes            = []string{"current", "subfolders", "tree"}
 )
+
+// outlineHidden is the display that hides the outline until the reader shows it.
+const outlineHidden = "hidden"
+
+// separatorsKinds are the lines --separators draws: none, the one under the top row, the ones
+// along the sidebars, or all of them.
+var separatorsKinds = []string{"hidden", "top", "side", separatorsAll}
+
+// separatorsAll draws every line, which the page does without a class of its own.
+const separatorsAll = "all"
 
 const pathUsage = "Markdown file, directory or " +
 	"'ado://<organization>/<project>/<repository>/<path>' URL to serve (default the current directory)"
@@ -89,6 +102,7 @@ type configuration struct {
 	mermaid       bool
 	indexOnly     bool
 	contentWidth  string
+	separators    string
 	search        indexSearch
 	outline       outlineSettings
 	list          listSettings
@@ -135,8 +149,8 @@ func readConfiguration() (configuration, error) {
 		defaultWatchInterval))
 	online := flag.Bool("online", false, "Load the browser-side libraries from their CDNs")
 	outline := flag.String("outline", "", fmt.Sprintf(
-		"Show an outline of the document's headings: style:%s, justify:%s",
-		outlineStyleList(), strings.Join(outlineJustifications, "|")))
+		"Show an outline of the document's headings: style:%s, justify:%s, display:%s",
+		outlineStyleList(), strings.Join(outlineJustifications, "|"), strings.Join(outlineDisplays, "|")))
 	list := flag.String("list", "", fmt.Sprintf(
 		"List the documents around the page's own: scope:%s",
 		strings.Join(append(slices.Clone(listScopes), outlineNone), "|")))
@@ -145,6 +159,8 @@ func readConfiguration() (configuration, error) {
 		strings.Join(adoVersionKinds, ":<name>|")+":<name>"))
 	contentWidth := flag.String("content-width", defaultContentWidth, fmt.Sprintf(
 		"Width of the rendered document: %s", strings.Join(contentWidths, "|")))
+	separators := flag.String("separators", defaultSeparators, fmt.Sprintf(
+		"Lines separating the top row, the sidebars and the document: %s", strings.Join(separatorsKinds, "|")))
 	search := flag.String("search", strings.Join(defaultSearch, ","),
 		"Comma separated list of the documents a folder is read as")
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
@@ -184,6 +200,12 @@ func readConfiguration() (configuration, error) {
 			settings.contentWidth, strings.Join(contentWidths, ", "))
 	}
 
+	settings.separators = choose(written, "separators", *separators, fromFile.Separators)
+	if !slices.Contains(separatorsKinds, settings.separators) {
+		return configuration{}, fmt.Errorf("'%s' is not a kind of separators; expected one of %s",
+			settings.separators, strings.Join(separatorsKinds, ", "))
+	}
+
 	settings.search = splitNames(*search)
 	if !written["search"] && fromFile.Search != nil {
 		settings.search = fromFile.Search.names
@@ -193,10 +215,11 @@ func readConfiguration() (configuration, error) {
 			strings.Join(defaultSearch, ","))
 	}
 
-	// Without an outline the style is empty and the side still stands, for a query to turn
-	// the outline on without naming one; a list is its scope alone, empty for no list.
+	// Without an outline the style is empty and the side and display still stand, for a query
+	// to turn the outline on without naming them; a list is its scope alone, empty for no list.
 	if settings.outline, err = chooseSettings(*outline, written["outline"], fromFile.Outline,
-		outlineSettings{Justify: defaultOutline.Justify}, defaultOutline, parseOutline); err != nil {
+		outlineSettings{Justify: defaultOutline.Justify, Display: defaultOutline.Display},
+		defaultOutline, parseOutline); err != nil {
 		return configuration{}, err
 	}
 	if settings.list, err = chooseSettings(*list, written["list"], fromFile.List,
@@ -274,6 +297,7 @@ type fileConfig struct {
 	Online        *bool          `yaml:"online"`
 	IndexOnly     *bool          `yaml:"index-only"`
 	ContentWidth  *string        `yaml:"content-width"`
+	Separators    *string        `yaml:"separators"`
 	Search        *namesValue    `yaml:"search"`
 }
 
@@ -457,7 +481,7 @@ func outlineStyleList() string {
 	return strings.Join(append(names, outlineNone), ", ")
 }
 
-// parseOutline reads the "style" and "justify" settings onto the ones it is given, and
+// parseOutline reads the "style", "justify" and "display" settings onto the ones it is given, and
 // returns the outline the list asks for.
 func parseOutline(given string, settings outlineSettings) (outlineSettings, error) {
 	err := parseSettings(given, map[string]func(string) error{
@@ -471,6 +495,7 @@ func parseOutline(given string, settings outlineSettings) (outlineSettings, erro
 			return nil
 		},
 		"justify": settingFrom("an outline justification", outlineJustifications, &settings.Justify),
+		"display": settingFrom("an outline display", outlineDisplays, &settings.Display),
 	})
 	return settings, err
 }

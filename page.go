@@ -41,11 +41,13 @@ var embeddedAssets = assetURLs{
 }
 
 // pageConfig is what the page script reads its settings from. MermaidJS is empty unless
-// --mermaid is given, and a fenced mermaid block then stays a code block.
+// --mermaid is given, and a fenced mermaid block then stays a code block. OutlineHidden hides
+// the outline until the reader chooses otherwise.
 type pageConfig struct {
 	ContentQuery    string         `json:"contentQuery"`
 	WatchIntervalMS int            `json:"watchIntervalMS"`
 	MermaidJS       string         `json:"mermaidJS"`
+	OutlineHidden   bool           `json:"outlineHidden"`
 	Versions        *versionPicker `json:"versions"`
 }
 
@@ -64,10 +66,12 @@ type versionPicker struct {
 }
 
 // outlineSettings is how a page's outline is drawn: the style its entries are numbered in,
-// empty for no outline at all, and the side of the document it stands on.
+// empty for no outline at all, the side of the document it stands on, and whether it is shown
+// or hidden before the reader chooses.
 type outlineSettings struct {
 	Style   string
 	Justify string
+	Display string
 }
 
 // listSettings is how a page's directory list is drawn: how much of the source it reaches,
@@ -107,19 +111,21 @@ func (s sidebars) HoldsList() bool {
 }
 
 // pageSettings is what a page is drawn with, beyond the document it shows: what stands beside
-// it, how wide it is drawn, and whether its diagrams are.
+// it, how wide it is drawn, whether the lines between its boxes are, and whether its diagrams
+// are.
 type pageSettings struct {
 	Sidebars     sidebars
 	ContentWidth string
+	Separators   string
 	Mermaid      bool
 	Versions     *versionPicker
 }
 
 // bodyClass returns the classes the page's body carries: how wide the document is drawn, the
-// sidebars it holds, and the side the outline stands on.
+// sidebars it holds, the side the outline stands on, and the separators it draws.
 //
 // The width carries no class where the document is given the window, which is the width it
-// has without a rule capping it.
+// has without a rule capping it, and the separators none where every one is drawn.
 func (p pageSettings) bodyClass() string {
 	var classes []string
 	if p.ContentWidth != "" && p.ContentWidth != widthFull {
@@ -130,6 +136,9 @@ func (p pageSettings) bodyClass() string {
 	}
 	if p.Sidebars.Outline.Style != "" {
 		classes = append(classes, "outline-"+p.Sidebars.Outline.Justify)
+	}
+	if p.Separators != "" && p.Separators != separatorsAll {
+		classes = append(classes, "separators-"+p.Separators)
 	}
 	return strings.Join(classes, " ")
 }
@@ -161,7 +170,7 @@ func renderPage(title, contentQuery string, watchIntervalMS int, assets assetURL
 		PageCSS:   pageAssetRoute + "page.css",
 		PageJS:    pageAssetRoute + "page.js",
 		Config: pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS,
-			Versions: settings.Versions},
+			OutlineHidden: settings.Sidebars.Outline.Display == outlineHidden, Versions: settings.Versions},
 	}
 	if settings.Mermaid {
 		data.Config.MermaidJS = assets.MermaidJS

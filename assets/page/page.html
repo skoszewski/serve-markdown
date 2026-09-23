@@ -12,16 +12,26 @@
 <script src="{{.Assets.HighlightJS}}"></script>
 <script>
   const pageConfig = {{.Config}};
+  let outlineChosen = null;
+  try {
+    outlineChosen = localStorage.getItem("serve-markdown.outline");
+  } catch {}
+  if (outlineChosen === "hidden" || (outlineChosen === null && pageConfig.outlineHidden)) {
+    document.documentElement.classList.add("outline-hidden");
+  }
 </script>
 <script src="{{.PageJS}}" defer></script>
 <style id="_document-css"></style>
 </head>
 <body{{if .BodyClass}} class="{{.BodyClass}}"{{end}}>
+<header id="_top"><div id="_controls">{{if .Sidebars.Outline.Style}}<button id="_outline-toggle" type="button" aria-controls="_outline" aria-label="Outline" title="Outline"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10.5 2.5v11" stroke="currentColor"/><rect class="panel" x="11" y="3" width="3" height="10" fill="currentColor"/></svg></button>{{end}}</div></header>
+<div id="_columns">
 {{if .Sidebars.HoldsList}}<nav id="_list" class="sidebar">{{if .Sidebars.Up.Label}}<a class="up" href="{{.Sidebars.Up.Route}}">{{.Sidebars.Up.Label}}</a>
 {{end}}{{template "entries" .Sidebars.Entries}}</nav>
 {{end}}{{if .Sidebars.Outline.Style}}<nav id="_outline" class="sidebar style-{{.Sidebars.Outline.Style}}"></nav>
 {{end}}<div id="_column">
 <article id="_content" class="markdown-body">Loading...</article>
+</div>
 </div>
 </body>
 </html>

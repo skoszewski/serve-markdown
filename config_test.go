@@ -35,7 +35,7 @@ func TestReadConfig(t *testing.T) {
 	root := documentRoot(t)
 	userConfigDir(t)
 	t.Chdir(root)
-	writeConfig(t, root, configName, "index-only: true\nlist: true\nport: 9000\n"+
+	writeConfig(t, root, configName, "index-only: true\nlist: true\nport: 9000\nseparators: hidden\n"+
 		"outline:\n  style: numbered-hierarchical\n  justify: right\n")
 
 	config, name, err := readConfigFile("")
@@ -50,6 +50,9 @@ func TestReadConfig(t *testing.T) {
 	}
 	if config.Port == nil || *config.Port != 9000 {
 		t.Errorf("port = %v, want 9000", config.Port)
+	}
+	if config.Separators == nil || *config.Separators != "hidden" {
+		t.Errorf("separators = %v, want hidden", config.Separators)
 	}
 	if config.List == nil || !config.List.on || len(config.List.settings) != 0 {
 		t.Errorf("list = %+v, want it drawn with its own settings", config.List)
@@ -236,6 +239,10 @@ func TestBodyClass(t *testing.T) {
 			"width-small with-sidebar outline-right"},
 		"the window beside an outline": {pageSettings{ContentWidth: widthFull, Sidebars: outline},
 			"with-sidebar outline-right"},
+		"no separators":           {pageSettings{Separators: "hidden"}, "separators-hidden"},
+		"the top separator alone": {pageSettings{Separators: "top"}, "separators-top"},
+		"the side separators":     {pageSettings{Separators: "side"}, "separators-side"},
+		"every separator":         {pageSettings{Separators: "all"}, ""},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -268,7 +275,7 @@ func TestWatchInterval(t *testing.T) {
 }
 
 func TestChooseSettings(t *testing.T) {
-	off := outlineSettings{Justify: "left"}
+	off := outlineSettings{Justify: "left", Display: "shown"}
 
 	tests := map[string]struct {
 		given         string
@@ -278,17 +285,17 @@ func TestChooseSettings(t *testing.T) {
 	}{
 		"neither says anything": {"", false, nil, off},
 		"the command line alone": {"style:nh", true,
-			nil, outlineSettings{Style: "numbered-hierarchical", Justify: "left"}},
+			nil, outlineSettings{Style: "numbered-hierarchical", Justify: "left", Display: "shown"}},
 		"the file alone": {"", false,
-			&settingsValue{on: true, settings: map[string]string{"style": "plain", "justify": "right"}},
-			outlineSettings{Style: "plain", Justify: "right"}},
+			&settingsValue{on: true, settings: map[string]string{"style": "plain", "display": "hidden"}},
+			outlineSettings{Style: "plain", Justify: "left", Display: "hidden"}},
 		"the file drawing it with its own settings": {"", false,
 			&settingsValue{on: true}, defaultOutline},
 		"the file turning it off": {"", false, &settingsValue{}, off},
 		// The command line stands above the file, written or written empty.
 		"the command line over the file": {"style:numbered", true,
 			&settingsValue{on: true, settings: map[string]string{"style": "plain"}},
-			outlineSettings{Style: "numbered", Justify: "left"}},
+			outlineSettings{Style: "numbered", Justify: "left", Display: "shown"}},
 		"the command line turning it off": {"", true,
 			&settingsValue{on: true, settings: map[string]string{"style": "plain"}}, off},
 	}

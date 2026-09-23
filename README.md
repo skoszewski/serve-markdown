@@ -51,12 +51,13 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--listen-address` | `127.0.0.1` | Address for the local web server to listen on |
 | `--port` | `8000` | Port for the local web server |
 | `--watch-interval` | `1` | Seconds between a local page's checks for changes; an `ado://` page makes none |
-| `--outline` | off | Show an outline of the document's headings beside it; takes `style` and `justify` as a comma separated list, e.g. `style:plain,justify:right` |
+| `--outline` | off | Show an outline of the document's headings beside it; takes `style`, `justify` and `display` as a comma separated list, e.g. `style:plain,justify:right` |
 | `--list` | off | List the documents around the page's own on its left; takes `scope`, e.g. `scope:tree` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--search` | `README.md,index.md` | The documents a folder is read as, looked through in the order written |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
 | `--content-width` | `full` | How wide the document is drawn: `small`, `medium`, `large` or `full` |
+| `--separators` | `side` | The lines separating the top row, the sidebars and the document: `hidden`, `top`, `side` or `all` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
@@ -156,9 +157,10 @@ serve-markdown --outline style:plain,justify:right docs/
 | | `numbered-hierarchical` (`nh`) | entries numbered `1.`, `1.1.`, `1.1.1.` down the levels |
 | | `none` | no outline |
 | `justify` | `left`, `right` | the side of the document the outline stands on |
+| `display` | `shown`, `hidden` | whether the outline is shown or hidden until the reader chooses with its button |
 
-A setting left out keeps what it had, so `--outline justify:right` draws a `plain` outline on
-the right, the styles' shorthands say the same as their names, and an unknown key or value
+A setting left out keeps what it had, so `--outline justify:right` draws a `plain`, `shown`
+outline on the right, the styles' shorthands say the same as their names, and an unknown key or value
 stops the server with a message naming it.
 
 A page takes an `outline` query parameter of the same settings, applied onto the server's for
@@ -170,6 +172,15 @@ http://127.0.0.1:8000/docs/guide.md?outline=style:none
 ```
 
 The outline follows the document as it is re-read, and moves above it on a narrow window.
+
+Every page carries a top row above the sidebars and the document, holding the control buttons
+on its right. A page with an outline carries the outline button there, drawn as a window with
+the outline's panel on the side the outline stands on: filled while the outline is shown, and
+empty once pressing it has hidden the outline and left the document the room it took. Pressing
+it again brings the outline back.
+The browser remembers the choice for every page of the same server, across pages and restarts,
+until the button is pressed again; `display` says how the outline starts before the reader has
+chosen.
 
 ### A query stands before the fragment
 
@@ -412,6 +423,18 @@ what the sidebars take:
 
 A cap wider than the window is simply not reached: on a 1512px screen with both sidebars every
 width above `small` draws the same 872px column.
+
+`--separators` says which lines separate the page's boxes. It is set on the command line or in
+the configuration file; a page takes no query parameter for it.
+
+| Value | Lines drawn |
+|---|---|
+| `all` | the line under the top row and the lines along the sidebars |
+| `top` | the line under the top row alone |
+| `side` | the lines along the sidebars alone, and between them on a narrow window |
+| `hidden` | none |
+
+A line left out keeps its room, so nothing moves between the values.
 
 With `--mermaid`, a fenced `mermaid` block is drawn as a diagram by
 [mermaid](https://github.com/mermaid-js/mermaid), in the theme that preference asks for. The

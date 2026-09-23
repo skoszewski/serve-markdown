@@ -1,6 +1,33 @@
+html {
+  --top-height: 40px;
+  scroll-padding-top: var(--top-height);
+}
+
 body {
   margin: 0;
   background-color: #ffffff;
+}
+
+/* The top row stands above the columns, holding the control buttons on its right. */
+#_top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--top-height);
+  padding: 0 20px;
+  border-bottom: 1px solid #d0d7de;
+  background-color: #ffffff;
+  color: #1f2328;
+  font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+#_controls {
+  display: flex;
+  gap: 8px;
 }
 
 .markdown-body {
@@ -107,7 +134,7 @@ body.width-large #_versions {
 }
 
 /* The sidebars stand beside the document, each scrolling on its own. */
-body.with-sidebar {
+body.with-sidebar #_columns {
   display: flex;
   align-items: flex-start;
 }
@@ -137,9 +164,9 @@ body.with-sidebar #_column {
 
 nav.sidebar {
   position: sticky;
-  top: 0;
+  top: var(--top-height);
   flex: 0 0 320px;
-  max-height: 100vh;
+  max-height: calc(100vh - var(--top-height));
   overflow: auto;
   box-sizing: border-box;
   padding: 45px 20px;
@@ -197,6 +224,37 @@ nav.sidebar a.current {
   font-weight: 600;
 }
 
+/* The control buttons, on the right of the top row. */
+#_controls button {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 6px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background-color: #f6f8fa;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+#_controls button:hover {
+  background-color: #eaeef2;
+}
+
+/* The outline button draws the window with the outline's panel on the side it stands on,
+   filled while the outline is shown. */
+body.outline-left #_outline-toggle svg {
+  transform: scaleX(-1);
+}
+
+html.outline-hidden #_outline-toggle .panel {
+  display: none;
+}
+
+html.outline-hidden #_outline {
+  display: none;
+}
+
 /* The list's entries carry no numbering. */
 #_list ol {
   list-style: none;
@@ -236,18 +294,26 @@ nav.sidebar.style-numbered-hierarchical li::before {
     background-color: #0d1117;
   }
 
+  #_top {
+    border-bottom-color: #30363d;
+    background-color: #0d1117;
+    color: #c9d1d9;
+  }
+
   nav.sidebar {
     border-right-color: #30363d;
     color: #c9d1d9;
   }
 
-  nav.sidebar a.up {
+  nav.sidebar a.up,
+  #_controls button {
     border-color: #30363d;
     background-color: #161b22;
     color: #c9d1d9;
   }
 
-  nav.sidebar a.up:hover {
+  nav.sidebar a.up:hover,
+  #_controls button:hover {
     background-color: #21262d;
   }
 
@@ -280,7 +346,7 @@ nav.sidebar.style-numbered-hierarchical li::before {
 
 /* Too narrow to stand beside the document, the sidebars go above it. */
 @media (max-width: 900px) {
-  body.with-sidebar {
+  body.with-sidebar #_columns {
     display: block;
   }
 
@@ -300,4 +366,17 @@ nav.sidebar.style-numbered-hierarchical li::before {
   nav.sidebar {
     border-bottom-color: #30363d;
   }
+}
+
+/* A separator left out keeps the room its line took, drawn in no colour. */
+body.separators-hidden #_top,
+body.separators-side #_top {
+  border-color: transparent;
+}
+
+body.separators-hidden nav#_list,
+body.separators-hidden nav#_outline,
+body.separators-top nav#_list,
+body.separators-top nav#_outline {
+  border-color: transparent;
 }

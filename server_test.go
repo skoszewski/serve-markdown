@@ -249,8 +249,9 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		assets: embeddedAssets}
-	if _, page := get(t, handler, "/"); strings.Contains(page, `id="_outline"`) {
-		t.Errorf("the page holds an outline without the flag: %q", page)
+	if _, page := get(t, handler, "/"); strings.Contains(page, `id="_outline`) ||
+		!strings.Contains(page, `<header id="_top"><div id="_controls"></div></header>`) {
+		t.Errorf("the page holds an outline or its button without the flag, or no top row: %q", page)
 	}
 
 	for _, style := range outlineStyles {
@@ -258,6 +259,9 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 		_, page := get(t, handler, "/")
 		if !strings.Contains(page, `<nav id="_outline" class="sidebar style-`+style.name+`">`) {
 			t.Errorf("the %s page does not hold its outline: %q", style.name, page)
+		}
+		if !strings.Contains(page, `<div id="_controls"><button id="_outline-toggle"`) {
+			t.Errorf("the %s page does not hold the button hiding its outline: %q", style.name, page)
 		}
 		if !strings.Contains(page, `<body class="with-sidebar outline-left">`) {
 			t.Errorf("the %s page does not switch the layout: %q", style.name, page)
@@ -267,6 +271,18 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	handler.outline = outlineSettings{Style: "plain", Justify: "right"}
 	if _, page := get(t, handler, "/"); !strings.Contains(page, `<body class="with-sidebar outline-right">`) {
 		t.Errorf("the page does not put the outline on the right: %q", page)
+	}
+
+	// The page is told whether to hide the outline before the reader chooses.
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `"outlineHidden":false`) {
+		t.Errorf("the page hides an outline that is shown: %q", page)
+	}
+	handler.outline.Display = "hidden"
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `"outlineHidden":true`) {
+		t.Errorf("the page shows an outline that is hidden: %q", page)
+	}
+	if _, page := get(t, handler, "/?outline=display:shown"); !strings.Contains(page, `"outlineHidden":false`) {
+		t.Errorf("the query does not show the outline: %q", page)
 	}
 }
 
@@ -373,6 +389,8 @@ func TestParseOutline(t *testing.T) {
 		"style:none":            {Style: "", Justify: "left"},
 		"":                      {Style: "numbered", Justify: "left"},
 		"justify:left,style:n,": {Style: "numbered", Justify: "left"},
+		"display:hidden":        {Style: "numbered", Justify: "left", Display: "hidden"},
+		"display:shown":         {Style: "numbered", Justify: "left", Display: "shown"},
 	}
 	given := outlineSettings{Style: "numbered", Justify: "left"}
 
@@ -388,7 +406,7 @@ func TestParseOutline(t *testing.T) {
 		})
 	}
 
-	for _, list := range []string{"plain", "style:sideways", "justify:middle", "colour:red"} {
+	for _, list := range []string{"plain", "style:sideways", "justify:middle", "colour:red", "display:folded"} {
 		t.Run(list, func(t *testing.T) {
 			if _, err := parseOutline(list, given); err == nil {
 				t.Errorf("parseOutline(%q) raised no error", list)

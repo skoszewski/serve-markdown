@@ -70,6 +70,7 @@ type server struct {
 	list          listSettings
 	ado           adoSettings
 	contentWidth  string
+	separators    string
 	search        indexSearch
 	mermaid       bool
 	indexOnly     bool

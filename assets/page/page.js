@@ -3,6 +3,7 @@
 
 const content = document.getElementById("_content");
 const outline = document.getElementById("_outline");
+const outlineToggle = document.getElementById("_outline-toggle");
 const documentCSS = document.getElementById("_document-css");
 
 let lastMtime = null;
@@ -290,6 +291,19 @@ async function poll() {
 // without one is read again when the browser is asked to refresh it.
 drawVersions();
 poll();
+
+// The outline is shown or hidden on every page of this server alike, as it was last left.
+if (outlineToggle !== null) {
+  const root = document.documentElement;
+  outlineToggle.setAttribute("aria-expanded", String(!root.classList.contains("outline-hidden")));
+  outlineToggle.addEventListener("click", () => {
+    const hidden = root.classList.toggle("outline-hidden");
+    outlineToggle.setAttribute("aria-expanded", String(!hidden));
+    try {
+      localStorage.setItem("serve-markdown.outline", hidden ? "hidden" : "shown");
+    } catch {}
+  });
+}
 if (pageConfig.watchIntervalMS > 0) {
   setInterval(poll, pageConfig.watchIntervalMS);
 }

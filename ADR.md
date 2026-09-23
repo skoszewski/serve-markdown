@@ -295,6 +295,27 @@ document two addresses, one of which dropped the part saying where it comes from
 relative link from the rooted one resolved into the wrong repository. A local path below the
 server's own directory needs no such naming, the rest of the route already saying it.
 
+## Hiding the outline is the reader's choice, kept by the browser
+
+The outline is hidden and shown by a button on the page rather than by the server: it is a
+reader's preference while reading, not a setting of what is served, and `--outline` and the
+`outline` query parameter already say whether the page carries one at all. Every link opens a
+new page, so the choice is kept in `localStorage`, which the browser holds per server origin,
+and read by the inline script in the head, before the page is first drawn, so that a hidden
+outline does not appear and then fold away.
+
+The button stands in a top row above the sidebars and the document, whose right is kept for
+the page's control buttons, so hiding the outline removes it whole and leaves the button where
+it was. The row is on every page, whether it holds a button or not, so that the layout does
+not move between pages. The button is an icon drawn inline in the page, so it needs no font or
+file of its own; the stylesheet empties its panel and mirrors it from the same classes that
+hide and place the outline, so the icon and the outline cannot disagree.
+
+The outline's `display` setting says how it starts, and the reader's choice stands above it:
+the server writes `outlineHidden` into the page, and the head script reads it only when the
+browser holds no choice. A setting that overrode the reader would undo the button on every
+page they open.
+
 ## A folder leading nowhere is listed as the folder above
 
 A list holding the document already on the page and `..` gives the reader nothing to choose.
