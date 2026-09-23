@@ -318,6 +318,18 @@ the server writes `outlineHidden` into the page, and the head script reads it on
 browser holds no choice. A setting that overrode the reader would undo the button on every
 page they open.
 
+## The GitHub workflow builds on its own
+
+The workflow runs `gofmt`, `go vet`, the tests and the builds with its own steps rather than
+through `build.sh`, so the scripts serve a developer's machine and the workflow serves GitHub,
+and neither changes for the other.
+
+Each platform's executable is uploaded unarchived, so a run's artifact downloads as the
+executable itself rather than as a zip holding it. The release is made with the `gh` CLI the
+runner already carries, rather than with a third-party action, and only for a tag that is
+already pushed. The history is checked out whole for the builds, so that Go reads the version
+from the tag the commit carries.
+
 ## A folder leading nowhere is listed as the folder above
 
 A list holding the document already on the page and `..` gives the reader nothing to choose.
