@@ -166,6 +166,13 @@ still counts as having written it.
 Unknown keys are refused rather than passed over. A file that quietly ignores `outlyne: true`
 teaches the reader that the setting does not work, and says nothing about why.
 
+The file is looked for where the server is run from, not beside the path it serves, and then
+in the user's configuration directory as `os.UserConfigDir` names it for the platform. On
+macOS `$HOME/.config` is looked in before it, since a tool used on Linux and macOS alike keeps
+its configuration there on both. The
+first file found is read alone; the files are not merged, so what a run is told can be read
+from one file.
+
 ## The version is chosen on the page, from lists the page already holds
 
 A repository read at a branch or a tag was reachable only by writing `?ado=branch:...` into

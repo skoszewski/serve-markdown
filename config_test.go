@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -14,17 +16,34 @@ func writeConfig(t *testing.T, directory, name, content string) string {
 	return path
 }
 
-func TestReadConfig(t *testing.T) {
-	root := documentRoot(t)
-	writeConfig(t, root, configName, "index-only: true\nlist: true\nport: 9000\n"+
-		"outline:\n  style: numbered-hierarchical\n  justify: right\n")
-
-	config, name, err := readConfigFile("", root)
+// userConfigDir points the user's configuration directory at an empty directory of its own and
+// returns it.
+func userConfigDir(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	for _, variable := range []string{"HOME", "XDG_CONFIG_HOME", "AppData", "home"} {
+		t.Setenv(variable, home)
+	}
+	directory, err := os.UserConfigDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name != filepath.Join(root, configName) {
-		t.Errorf("name = %q, want the file beside the source", name)
+	return directory
+}
+
+func TestReadConfig(t *testing.T) {
+	root := documentRoot(t)
+	userConfigDir(t)
+	t.Chdir(root)
+	writeConfig(t, root, configName, "index-only: true\nlist: true\nport: 9000\n"+
+		"outline:\n  style: numbered-hierarchical\n  justify: right\n")
+
+	config, name, err := readConfigFile("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != configName {
+		t.Errorf("name = %q, want the file in the directory the server was started in", name)
 	}
 	if config.IndexOnly == nil || !*config.IndexOnly {
 		t.Errorf("index-only = %v, want true", config.IndexOnly)
@@ -44,32 +63,47 @@ func TestReadConfig(t *testing.T) {
 	}
 }
 
-func TestReadConfigFindsTheFileBesideTheSource(t *testing.T) {
+func TestReadConfigLooksForTheFileInOrder(t *testing.T) {
 	root := documentRoot(t)
-	writeConfig(t, root, configName, "mermaid: true\n")
+	started := filepath.Join(root, "started")
+	user := filepath.Join(userConfigDir(t), userConfigName)
+	named := writeConfig(t, root, "named.yaml", "port: 1\n")
+	if err := os.Mkdir(started, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(started)
 
-	// A path naming a file is the file's own directory; one naming a directory is itself.
-	for _, path := range []string{root, filepath.Join(root, "README.md")} {
-		t.Run(path, func(t *testing.T) {
-			config, name, err := readConfigFile("", path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if name == "" || config.Mermaid == nil || !*config.Mermaid {
-				t.Errorf("config = %+v from %q, want the file beside the source", config, name)
-			}
-		})
+	// Without a file anywhere everything is left to the command line, and quietly.
+	config, name, err := readConfigFile("")
+	if err != nil || name != "" || config.Port != nil {
+		t.Errorf("readConfigFile() = %+v, %q, %v; want nothing at all", config, name, err)
 	}
 
-	// A directory holding no file leaves everything to the command line, and says so quietly.
-	empty := filepath.Join(root, "empty")
-	config, name, err := readConfigFile("", empty)
-	if err != nil || name != "" || config.Mermaid != nil {
-		t.Errorf("readConfigFile(%q) = %+v, %q, %v; want nothing at all", empty, config, name, err)
+	type step struct {
+		write, named, want string
+	}
+	steps := []step{{user, "", user}}
+	if runtime.GOOS == "darwin" {
+		dotConfig := filepath.Join(os.Getenv("HOME"), ".config", userConfigName)
+		steps = append(steps, step{dotConfig, "", dotConfig})
+	}
+	steps = append(steps, step{filepath.Join(started, configName), "", configName},
+		step{"", named, named})
+	for _, step := range steps {
+		if step.write != "" {
+			writeConfig(t, filepath.Dir(step.write), filepath.Base(step.write), "port: 2\n")
+		}
+		config, name, err := readConfigFile(step.named)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if name != step.want || config.Port == nil {
+			t.Errorf("readConfigFile(%q) read %q, want %q", step.named, name, step.want)
+		}
 	}
 
 	// A file named on the command line must be there.
-	if _, _, err := readConfigFile(filepath.Join(root, "nowhere.yaml"), root); err == nil {
+	if _, _, err := readConfigFile(filepath.Join(root, "nowhere.yaml")); err == nil {
 		t.Error("a file that is not there was read")
 	}
 }
@@ -87,7 +121,7 @@ func TestReadConfigRefusesWhatItCannotRead(t *testing.T) {
 	for content, want := range tests {
 		t.Run(content, func(t *testing.T) {
 			name := writeConfig(t, root, "given.yaml", content)
-			_, _, err := readConfigFile(name, root)
+			_, _, err := readConfigFile(name)
 			if err == nil {
 				t.Fatalf("readConfigFile(%q) raised no error", content)
 			}
@@ -153,7 +187,7 @@ func TestReadConfigSearch(t *testing.T) {
 	for content, want := range tests {
 		t.Run(content, func(t *testing.T) {
 			name := writeConfig(t, root, "given.yaml", content)
-			config, _, err := readConfigFile(name, root)
+			config, _, err := readConfigFile(name)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -165,7 +199,7 @@ func TestReadConfigSearch(t *testing.T) {
 
 	// A mapping is no list of names.
 	name := writeConfig(t, root, "given.yaml", "search:\n  first: index.md\n")
-	if _, _, err := readConfigFile(name, root); err == nil {
+	if _, _, err := readConfigFile(name); err == nil {
 		t.Error("a mapping was read as a list of names")
 	}
 }

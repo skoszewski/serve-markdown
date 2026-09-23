@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -20,8 +21,12 @@ import (
 // without being told, how they are written on the command line and in a file, and which of
 // the two is believed. Nothing else reads a flag or a file to find out.
 
-// configName is the file read as the configuration when --config names none.
-const configName = "serve-markdown.yaml"
+// The files read as the configuration when --config names none: configName in the directory
+// the server was started in, then userConfigName in the user's configuration directories.
+const (
+	configName     = "serve-markdown.yaml"
+	userConfigName = "serve-markdown/config.yaml"
+)
 
 // What the server does when it is told nothing.
 const (
@@ -68,12 +73,8 @@ var (
 	listScopes            = []string{"current", "subfolders", "tree"}
 )
 
-const pathUsage = "Markdown file or directory to serve; defaults to the current directory. " +
-	"A directory is served at its own URL path, resolving to the first document of --search " +
-	"within it and listing its Markdown files when it holds none of them. An " +
-	"'ado://<organization>/<project>/<repository>/<path to file>' URL serves a file from an " +
-	"Azure Repos Git repository, under its own /_/ado/ route rather than at the root. " +
-	"Whichever is given, the /_/ado/ routes reach a repository while the server runs."
+const pathUsage = "Markdown file, directory or " +
+	"'ado://<organization>/<project>/<repository>/<path>' URL to serve (default the current directory)"
 
 // configuration is everything the server was told, the command line and the file read into
 // one answer.
@@ -130,43 +131,25 @@ func readConfiguration() (configuration, error) {
 		"Address for the local web server to listen on")
 	port := flag.Int("port", defaultServePort, "Port for the local web server")
 	watchInterval := flag.Float64("watch-interval", 0, fmt.Sprintf(
-		"Seconds between checks for changes to the file, polled by the browser page (default "+
-			"%g). A page reading %s checks for none, the browser's own refresh reading it again",
-		defaultWatchInterval, adoScheme))
-	online := flag.Bool("online", false,
-		"Load the Markdown and highlighting libraries from their CDNs instead of from inside this binary")
+		"Seconds between the page's checks for changes to the document (default %g)",
+		defaultWatchInterval))
+	online := flag.Bool("online", false, "Load the browser-side libraries from their CDNs")
 	outline := flag.String("outline", "", fmt.Sprintf(
-		"Show an outline of the document's headings beside it, as a comma separated list of "+
-			"settings: style:%s, justify:%s. A page takes an 'outline' query parameter of the "+
-			"same settings, which overrides this one",
+		"Show an outline of the document's headings: style:%s, justify:%s",
 		outlineStyleList(), strings.Join(outlineJustifications, "|")))
 	list := flag.String("list", "", fmt.Sprintf(
-		"List the documents around the one on the page, on its left, as a comma separated list "+
-			"of settings: scope:%s. It takes the outline to the right, and a page takes a "+
-			"'list' query parameter of the same settings",
+		"List the documents around the page's own: scope:%s",
 		strings.Join(append(slices.Clone(listScopes), outlineNone), "|")))
 	ado := flag.String("ado", "", fmt.Sprintf(
-		"Read Azure Repos at the version named by a comma separated list of settings: %s. "+
-			"One of them at a time, the repository's default branch without any; a page takes "+
-			"an 'ado' query parameter of the same settings",
-		strings.Join(adoVersionKinds, ":<name>, ")+":<name>"))
+		"Read Azure Repos at a version: %s",
+		strings.Join(adoVersionKinds, ":<name>|")+":<name>"))
 	contentWidth := flag.String("content-width", defaultContentWidth, fmt.Sprintf(
-		"How wide the document is rendered: %s. The sidebars keep their own width, so a wider "+
-			"document fills what they leave of the window",
-		strings.Join(contentWidths, ", ")))
+		"Width of the rendered document: %s", strings.Join(contentWidths, "|")))
 	search := flag.String("search", strings.Join(defaultSearch, ","),
-		"The documents a folder is read as, a comma separated list looked through in the order "+
-			"it is written, for local directories and Azure Repos folders alike")
+		"Comma separated list of the documents a folder is read as")
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
-	indexOnly := flag.Bool("index-only", false,
-		"Read a folder as the first document of --search it holds and look no further; a folder "+
-			"holding none is served as one holding no Markdown at all, rather than as a listing "+
-			"of the files it does hold")
-	named := flag.String("config", "", fmt.Sprintf(
-		"Read the flags from a YAML file, each written as the flag it is named after. Without "+
-			"this, a %s beside the path is read when there is one; a flag on the command line "+
-			"stands above what the file says",
-		configName))
+	indexOnly := flag.Bool("index-only", false, "Read a folder as its index document alone")
+	named := flag.String("config", "", "Read the server configuration from the file")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 
 	flag.Usage = printUsage
@@ -182,7 +165,7 @@ func readConfiguration() (configuration, error) {
 	written := map[string]bool{}
 	flag.Visit(func(given *flag.Flag) { written[given.Name] = true })
 
-	fromFile, file, err := readConfigFile(*named, settings.path)
+	fromFile, file, err := readConfigFile(*named)
 	if err != nil {
 		return configuration{}, err
 	}
@@ -350,46 +333,44 @@ func (v *settingsValue) UnmarshalYAML(node *yaml.Node) error {
 	return fmt.Errorf("line %d: expected true, false or a mapping of settings", node.Line)
 }
 
-// readConfigFile reads the configuration file the command line names, or the one beside the
-// source when it names none.
+// readConfigFile reads the configuration file the command line names or, when it names none,
+// the first of configName in the directory the server was started in and userConfigName in the
+// user's configuration directory, looked for in $HOME/.config first on macOS.
 //
-// A file named by --config must be there; the one looked for beside the source need not be,
-// and leaves the command line to say everything. The second result is the file that was read.
-func readConfigFile(named, path string) (fileConfig, string, error) {
+// A file named by --config must be there; the ones looked for need not be, and leave the
+// command line to say everything. The second result is the file that was read.
+func readConfigFile(named string) (fileConfig, string, error) {
 	var config fileConfig
 
-	name, required := named, true
-	if name == "" {
-		name, required = filepath.Join(configDir(path), configName), false
-	}
-
-	content, err := os.ReadFile(name)
-	if err != nil {
-		if !required && errors.Is(err, fs.ErrNotExist) {
-			return config, "", nil
+	candidates, required := []string{named}, true
+	if named == "" {
+		candidates, required = []string{configName}, false
+		if home, err := os.UserHomeDir(); err == nil && runtime.GOOS == "darwin" {
+			candidates = append(candidates, filepath.Join(home, ".config", userConfigName))
 		}
-		return config, "", err
+		if directory, err := os.UserConfigDir(); err == nil {
+			candidates = append(candidates, filepath.Join(directory, userConfigName))
+		}
 	}
 
-	// Unknown keys are refused, so that a misspelled setting is told of rather than ignored.
-	decoder := yaml.NewDecoder(bytes.NewReader(content))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&config); err != nil {
-		return fileConfig{}, "", fmt.Errorf("cannot read %s: %s", name, configError(err))
-	}
-	return config, name, nil
-}
+	for _, name := range candidates {
+		content, err := os.ReadFile(name)
+		if !required && errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return config, "", err
+		}
 
-// configDir returns the directory the configuration file is looked for in: the one the path
-// names, or the one the server was started in when it names a file or a repository.
-func configDir(path string) string {
-	switch {
-	case path == "" || strings.HasPrefix(path, adoScheme):
-		return "."
-	case isDir(path):
-		return path
+		// Unknown keys are refused, so that a misspelled setting is told of rather than ignored.
+		decoder := yaml.NewDecoder(bytes.NewReader(content))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&config); err != nil {
+			return fileConfig{}, "", fmt.Errorf("cannot read %s: %s", name, configError(err))
+		}
+		return config, name, nil
 	}
-	return filepath.Dir(path)
+	return config, "", nil
 }
 
 // unknownKeyPattern matches what the YAML reader says of a key no flag is named after.

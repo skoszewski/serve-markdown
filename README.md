@@ -58,7 +58,7 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
 | `--content-width` | `full` | How wide the document is drawn: `small`, `medium`, `large` or `full` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
-| `--config` | `serve-markdown.yaml` beside the path | Read the flags from a YAML file |
+| `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
 | `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
 
@@ -104,10 +104,14 @@ serve-markdown ado://myorg/myproject/myrepo/README.md
 
 ## Configuration file
 
-The flags may be written in a YAML file instead, one key per flag, named as the flag is. A
-`serve-markdown.yaml` beside the path is read when there is one - the directory the path
-names, the directory of the file it names, or the directory the server was started in for an
-`ado://` source - and `--config` names another file, which must be there.
+The server configuration may be written in a YAML file instead, one key per flag, named as the
+flag is. The first file found of these is read, and the rest are not:
+
+1. the file `--config` names, which must be there;
+2. `serve-markdown.yaml` in the directory the server was started in;
+3. `serve-markdown/config.yaml` in the user's configuration directory: `$XDG_CONFIG_HOME`, or
+   `$HOME/.config` without it, on Linux; `$HOME/.config`, then
+   `$HOME/Library/Application Support` on macOS; `%AppData%` on Windows.
 
 ```yaml
 index-only: true
@@ -128,7 +132,7 @@ directory while one run tweaks a setting:
 
 ```sh
 serve-markdown --outline style:plain docs/     # the file's outline settings are set aside
-serve-markdown --config ~/reading.yaml docs/   # another file, read instead of the one beside
+serve-markdown --config ~/reading.yaml docs/   # another file, read instead of the others
 ```
 
 A key no flag is named after, a setting a flag does not know, or a value of the wrong kind
