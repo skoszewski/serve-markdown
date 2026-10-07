@@ -336,6 +336,10 @@ an optional pre-release but cannot refuse leading zeros or empty identifiers, so
 job holds the tag to the semver grammar before publishing. Build metadata is refused, since Go
 does not take it in a version.
 
+`dev` is checked on every push and not built, since nothing is published from it; the builds
+run for tags alone. A release is refused for a tag whose commit is not on `main`, since `main`
+holds the stable code and releases are made from it.
+
 ## A folder leading nowhere is listed as the folder above
 
 A list holding the document already on the page and `..` gives the reader nothing to choose.

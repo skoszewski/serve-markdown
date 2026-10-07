@@ -15,10 +15,11 @@ go install github.com/skoszewski/serve-markdown@latest
 
 Every release carries the executable for Linux, macOS and Windows on `amd64` and `arm64`, named
 `serve-markdown-<goos>-<goarch>` (`.exe` on Windows), to download from the repository's
-Releases page. The `build` workflow in `.github/workflows/build.yml` checks the sources and
-builds all six on every push to `main` and every pull request, keeping them as the run's
-artifacts; pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - publishes them
-as the release of that tag.
+Releases page. The `build` workflow in `.github/workflows/build.yml` checks the formatting,
+vets and tests the sources on every push to `dev`. Pushing a semver tag with a leading `v` -
+`v1.2.0`, `v1.3.0-rc.1` - on a commit on `main` checks the sources, builds all six and
+publishes them as the release of that tag; `main` is pushed before the tag or together with
+it.
 
 From a clone, `./build.sh` on Linux and macOS, or `./build.ps1` wherever PowerShell Core runs,
 writes the executable beside the sources. Both take the same action as their argument:
