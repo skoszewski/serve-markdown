@@ -94,6 +94,8 @@ var separatorsKinds = []string{"hidden", "top", "side", separatorsAll}
 // separatorsAll draws every line, which the page does without a class of its own.
 const separatorsAll = "all"
 
+var debugLevel int
+
 const pathUsage = "Markdown file, directory or " +
 	"'ado://<organization>/<project>/<repository>/<path>' URL to serve (default the current directory)"
 
@@ -178,6 +180,7 @@ func readConfiguration() (configuration, error) {
 	indexOnly := flag.Bool("index-only", false, "Read a folder as its index document alone")
 	named := flag.String("config", "", "Read the server configuration from the file")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
+	flag.IntVar(&debugLevel, "debug", 0, "Debugging level: 0 for none, >0 for debugging turned on")
 
 	flag.Usage = printUsage
 	flag.Parse()
@@ -396,6 +399,9 @@ func readConfigFile(named string) (fileConfig, string, error) {
 	}
 
 	for _, name := range candidates {
+		if debugLevel > 0 {
+			logError("[DEBUG] Trying configuration file '%s'", name)
+		}
 		content, err := os.ReadFile(name)
 		if !required && errors.Is(err, fs.ErrNotExist) {
 			continue
