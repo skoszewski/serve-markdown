@@ -96,6 +96,23 @@ const separatorsAll = "all"
 
 var debugLevel int
 
+// pdfPapers are the paper sizes --pdf-page prints on, and pdfOrientations the ways the paper is
+// turned; defaultPDFPage is what a PDF is printed on unless --pdf-page says otherwise.
+var (
+	pdfPapers       = []string{"a3", "a4", "a5", "letter", "legal", "tabloid"}
+	pdfOrientations = []string{"portrait", pdfLandscape}
+	defaultPDFPage  = pdfPageSettings{Paper: "a4", Orientation: "portrait"}
+)
+
+// pdfLandscape turns the paper on its side.
+const pdfLandscape = "landscape"
+
+// pdfPageSettings is the page a PDF is printed on: its paper size and the way it is turned.
+type pdfPageSettings struct {
+	Paper       string
+	Orientation string
+}
+
 const pathUsage = "Markdown file, directory or " +
 	"'ado://<organization>/<project>/<repository>/<path>' URL to serve (default the current directory)"
 
@@ -103,8 +120,11 @@ const pathUsage = "Markdown file, directory or " +
 // one answer.
 //
 // watch is the seconds asked for between the page's checks for changes, zero leaving the
-// source to say; file is the configuration file that was read, empty when there was none.
+// source to say; file is the configuration file that was read, empty when there was none;
+// pdf is the file the document is printed to instead of being served, empty to serve it.
 type configuration struct {
+	pdf           string
+	pdfPage       pdfPageSettings
 	path          string
 	listenAddress string
 	port          int
@@ -176,6 +196,12 @@ func readConfiguration() (configuration, error) {
 		"Comma separated list of the documents a folder is read as")
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	indexOnly := flag.Bool("index-only", false, "Read a folder as its index document alone")
+	pdf := flag.String("pdf", "", "Print the Markdown document the path names to this PDF file with "+
+		"headless Chrome, and exit")
+	pdfPage := flag.String("pdf-page", "", fmt.Sprintf(
+		"The page --pdf prints on: paper:%s, orientation:%s (default paper:%s,orientation:%s)",
+		strings.Join(pdfPapers, "|"), strings.Join(pdfOrientations, "|"),
+		defaultPDFPage.Paper, defaultPDFPage.Orientation))
 	named := flag.String("config", "", "Read the server configuration from the file")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 	flag.IntVar(&debugLevel, "debug", 0, "Debugging level: 0 for none, >0 for debugging turned on")
@@ -183,9 +209,12 @@ func readConfiguration() (configuration, error) {
 	flag.Usage = printUsage
 	flag.Parse()
 
-	settings := configuration{path: flag.Arg(0), showVersion: *showVersion}
+	settings := configuration{path: flag.Arg(0), showVersion: *showVersion, pdf: *pdf}
 	if settings.showVersion {
 		return settings, nil
+	}
+	if settings.pdf != "" && settings.path == "" {
+		return configuration{}, errors.New("--pdf needs the Markdown document to render")
 	}
 
 	// A flag written on the command line stands above what the file says, so the ones that
@@ -246,6 +275,10 @@ func readConfiguration() (configuration, error) {
 	}
 	if settings.ado, err = chooseSettings(*ado, written["ado"], fromFile.ADO,
 		adoSettings{}, adoSettings{}, parseADO); err != nil {
+		return configuration{}, err
+	}
+	if settings.pdfPage, err = chooseSettings(*pdfPage, written["pdf-page"], fromFile.PDFPage,
+		defaultPDFPage, defaultPDFPage, parsePDFPage); err != nil {
 		return configuration{}, err
 	}
 	return settings, nil
@@ -317,6 +350,7 @@ type fileConfig struct {
 	Separators    *string        `yaml:"separators"`
 	FrontMatter   *string        `yaml:"front-matter"`
 	Search        *namesValue    `yaml:"search"`
+	PDFPage       *settingsValue `yaml:"pdf-page"`
 }
 
 // namesValue is how a list of names is written in a file: a sequence of them, or the comma
@@ -536,6 +570,16 @@ func parseList(given string, settings listSettings) (listSettings, error) {
 			return nil
 		},
 		"display": settingFrom("a list display", outlineDisplays, &settings.Display),
+	})
+	return settings, err
+}
+
+// parsePDFPage reads the "paper" and "orientation" settings onto the ones it is given, and
+// returns the page the settings ask for.
+func parsePDFPage(given string, settings pdfPageSettings) (pdfPageSettings, error) {
+	err := parseSettings(given, map[string]func(string) error{
+		"paper":       settingFrom("a paper size", pdfPapers, &settings.Paper),
+		"orientation": settingFrom("a page orientation", pdfOrientations, &settings.Orientation),
 	})
 	return settings, err
 }

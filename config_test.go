@@ -328,4 +328,21 @@ func TestChooseSettings(t *testing.T) {
 	if want := (listSettings{Scope: "current", Display: "hidden"}); list != want {
 		t.Errorf("list = %+v, want %+v", list, want)
 	}
+
+	// The PDF page is the default one unless a file or the command line names another.
+	pdfPage, err := chooseSettings("", false, nil, defaultPDFPage, defaultPDFPage, parsePDFPage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pdfPage != defaultPDFPage {
+		t.Errorf("pdf page = %+v, want %+v", pdfPage, defaultPDFPage)
+	}
+	fromFile = &settingsValue{on: true, settings: map[string]string{"paper": "letter"}}
+	if pdfPage, err = chooseSettings("", false, fromFile, defaultPDFPage, defaultPDFPage,
+		parsePDFPage); err != nil {
+		t.Fatal(err)
+	}
+	if want := (pdfPageSettings{Paper: "letter", Orientation: "portrait"}); pdfPage != want {
+		t.Errorf("pdf page = %+v, want %+v", pdfPage, want)
+	}
 }

@@ -171,21 +171,26 @@ function headingSlug(text, taken) {
 }
 
 /**
- * Rebuilds the outline from the headings of the rendered document.
+ * Names the headings of the rendered document, so that links can address them, and rebuilds
+ * the outline from them.
  *
  * The lists follow the heading levels, a level that skips a step opening the list between
  * them. The numbering is the outline's styling, not this function's doing.
  */
 function buildOutline() {
+  const headings = content.querySelectorAll("h1, h2, h3, h4, h5, h6");
+  const taken = new Set();
+  headings.forEach((heading) => {
+    heading.id = headingSlug(heading.textContent, taken);
+  });
   if (outline === null) {
     return;
   }
 
   const root = document.createElement("ol");
-  const taken = new Set();
   const lists = [];
 
-  content.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+  headings.forEach((heading) => {
     const level = Number(heading.tagName.substring(1));
     if (lists.length === 0) {
       lists.push({ level: level, list: root });
@@ -201,7 +206,6 @@ function buildOutline() {
       lists.push({ level: parent.level + 1, list: nested });
     }
 
-    heading.id = headingSlug(heading.textContent, taken);
     const link = document.createElement("a");
     link.href = "#" + heading.id;
     link.textContent = heading.textContent;
@@ -222,7 +226,9 @@ function buildOutline() {
  *
  * The base the server sends is the folder's route, which the browser cannot work out from the
  * page's own address: a route naming a folder resolves to a document inside it. An anchor, a
- * link to another host, and a link carrying a query of its own are left as they are.
+ * link to another host, and a link carrying a query of its own are left as they are. A page
+ * printed to a PDF keeps a link into this server as its text alone, the server being gone
+ * once the PDF is written.
  *
  * @param {string} base the route the document's relative links are read from.
  */
@@ -236,6 +242,10 @@ function resolveLinks(base) {
     }
     const target = new URL(href, from);
     if (target.origin !== location.origin) {
+      return;
+    }
+    if (pageConfig.print) {
+      link.removeAttribute("href");
       return;
     }
     const query = target.search || location.search;
@@ -270,7 +280,12 @@ function render(text, css, base, info) {
   content.querySelectorAll("pre code:not(.language-mermaid)").forEach((block) => hljs.highlightElement(block));
   buildOutline();
   resolveLinks(base);
-  renderDiagrams();
+  // The page says it is drawn once its diagrams and pictures are, which is what a PDF is
+  // printed after; a picture that does not load is not waited for again.
+  const pictures = [...content.querySelectorAll("img")].map((picture) => picture.decode().catch(() => {}));
+  Promise.all([renderDiagrams(), ...pictures]).then(() => {
+    document.documentElement.dataset.rendered = "true";
+  });
 }
 
 /**

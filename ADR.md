@@ -390,3 +390,23 @@ The folder above is listed with `subfolders` whatever scope was asked for, since
 the page is one of its entries and `current` leaves folders out. The served directory has
 nothing above it the server may show, so it keeps its own list, and `tree` already lists
 everything.
+
+## A PDF is printed by headless Chrome from the page itself
+
+The document is rendered in the browser - marked, highlight.js, mermaid - so a PDF made by a
+Go library from the Markdown would draw it differently and leave the diagrams out. `--pdf`
+prints the page instead: the server serves it on a loopback port of its own, headless Chrome
+draws it and prints it with `Page.printToPDF`, and the server stops. The PDF is then what the
+reader sees, from one renderer.
+
+Chrome is driven with chromedp rather than run as a command printing a URL, since the page
+draws itself after loading - it fetches the document, then its diagrams and pictures - and
+only a driver can wait for that. The page marks itself drawn once all of it is, and the export
+waits for the mark.
+
+The page knows it is printed from `pageConfig.print`: it takes the light theme whatever the
+reader chose in the browser, and keeps a link into the server as text, the server being gone
+once the PDF is written. What it leaves out - the buttons, the sidebars, the version picker -
+is left out by print styles, so the same rules hold when a reader prints a page from the
+browser. No browser is bundled: chromedp finds the one installed, and the container image,
+built for serving, carries none.

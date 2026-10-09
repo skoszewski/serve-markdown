@@ -26,7 +26,11 @@
   try {
     themeChosen = localStorage.getItem("serve-markdown.theme");
   } catch {}
-  setTheme(["light", "dark"].includes(themeChosen) ? themeChosen : "auto");
+  if (pageConfig.print) {
+    setTheme("light");
+  } else {
+    setTheme(["light", "dark"].includes(themeChosen) ? themeChosen : "auto");
+  }
 
   let outlineChosen = null;
   try {

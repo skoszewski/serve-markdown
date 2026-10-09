@@ -465,6 +465,54 @@ func TestParseList(t *testing.T) {
 	}
 }
 
+func TestParsePDFPage(t *testing.T) {
+	tests := map[string]pdfPageSettings{
+		"paper:letter":                   {Paper: "letter", Orientation: "portrait"},
+		"orientation:landscape":          {Paper: "a4", Orientation: "landscape"},
+		"paper:a3,orientation:landscape": {Paper: "a3", Orientation: "landscape"},
+		"":                               {Paper: "a4", Orientation: "portrait"},
+	}
+	for given, want := range tests {
+		t.Run(given, func(t *testing.T) {
+			got, err := parsePDFPage(given, defaultPDFPage)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Errorf("parsePDFPage(%q) = %+v, want %+v", given, got, want)
+			}
+		})
+	}
+
+	for _, given := range []string{"a4", "paper:b5", "orientation:sideways", "scope:tree"} {
+		t.Run(given, func(t *testing.T) {
+			if _, err := parsePDFPage(given, defaultPDFPage); err == nil {
+				t.Errorf("parsePDFPage(%q) raised no error", given)
+			}
+		})
+	}
+
+	// Every paper the flag takes is one the export knows the size of.
+	for _, paper := range pdfPapers {
+		if _, known := pdfPaperSizes[paper]; !known {
+			t.Errorf("no size for paper %q", paper)
+		}
+	}
+}
+
+func TestServePageShellIsDrawnForPrinting(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
+
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `"print":false`) {
+		t.Errorf("a page to read is drawn for printing: %q", page)
+	}
+	handler.print = true
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `"print":true`) {
+		t.Errorf("a page to print is not drawn for printing: %q", page)
+	}
+}
+
 func TestOutlineStyle(t *testing.T) {
 	tests := map[string]struct {
 		style string

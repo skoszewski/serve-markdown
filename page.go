@@ -30,13 +30,16 @@ var pageAssets = assetURLs{
 
 // pageConfig is what the page script reads its settings from. MermaidJS is empty unless
 // --mermaid is given, and a fenced mermaid block then stays a code block. OutlineHidden and
-// ListHidden hide the outline and the directory list until the reader chooses otherwise.
+// ListHidden hide the outline and the directory list until the reader chooses otherwise. Print
+// draws the page in the light theme, with the links into the server left as text, to be printed
+// to a PDF.
 type pageConfig struct {
 	ContentQuery    string         `json:"contentQuery"`
 	WatchIntervalMS int            `json:"watchIntervalMS"`
 	MermaidJS       string         `json:"mermaidJS"`
 	OutlineHidden   bool           `json:"outlineHidden"`
 	ListHidden      bool           `json:"listHidden"`
+	Print           bool           `json:"print"`
 	Versions        *versionPicker `json:"versions"`
 }
 
@@ -101,14 +104,15 @@ func (s sidebars) HoldsList() bool {
 }
 
 // pageSettings is what a page is drawn with, beyond the document it shows: what stands beside
-// it, how wide it is drawn, whether the lines between its boxes are, and whether its diagrams
-// are.
+// it, how wide it is drawn, whether the lines between its boxes are, whether its diagrams are,
+// and whether it is drawn to be printed to a PDF.
 type pageSettings struct {
 	Sidebars     sidebars
 	ContentWidth string
 	Separators   string
 	Mermaid      bool
 	Versions     *versionPicker
+	Print        bool
 }
 
 // bodyClass returns the classes the page's body carries: how wide the document is drawn, the
@@ -161,7 +165,8 @@ func renderPage(title, contentQuery string, watchIntervalMS int, settings pageSe
 		PageCSSDark: pageAssetRoute + "page-dark.css",
 		Config: pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS,
 			OutlineHidden: settings.Sidebars.Outline.Display == outlineHidden,
-			ListHidden:    settings.Sidebars.List.Display == outlineHidden, Versions: settings.Versions},
+			ListHidden:    settings.Sidebars.List.Display == outlineHidden, Print: settings.Print,
+			Versions: settings.Versions},
 	}
 	if settings.Mermaid {
 		data.Config.MermaidJS = pageAssets.MermaidJS

@@ -50,7 +50,7 @@ func main() {
 }
 
 // run reads what the server is to do, resolves the source to serve, and serves it until
-// interrupted.
+// interrupted, or prints it to a PDF when --pdf names one.
 func run() error {
 	settings, err := readConfiguration()
 	if err != nil {
@@ -70,6 +70,24 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
+	// A PDF is printed from one document, drawn without sidebars, and the server stops once it
+	// is written.
+	if settings.pdf != "" {
+		local := handler.defaultSource.kind == kindLocal && handler.defaultFile != ""
+		remote := handler.defaultSource.kind == kindADO && handler.defaultSource.repository != "" &&
+			markdownExtensions[strings.ToLower(filepath.Ext(handler.defaultSource.path))]
+		if !local && !remote {
+			return fmt.Errorf("%s is not a Markdown document; --pdf prints one", sourceDescription)
+		}
+		handler.outline, handler.list, handler.print = outlineSettings{}, listSettings{}, true
+		if err := exportPDF(handler, settings.pdf, settings.pdfPage); err != nil {
+			return err
+		}
+		logInfo("Printed '%s' to '%s'", settings.path, settings.pdf)
+		return nil
+	}
+
 	// The seconds a local page checks at; a page reading Azure Repos checks for nothing.
 	handler.watchInterval = settings.watchInterval(kindLocal)
 
@@ -221,7 +239,7 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	watch := watchIntervalFor(src.kind, s.watchInterval)
 	page := renderPage(title, query, int(math.Round(watch*1000)), pageSettings{
 		Sidebars: s.sidebarsFor(request, src), ContentWidth: s.contentWidth, Separators: s.separators,
-		Mermaid: s.mermaid, Versions: readVersions(src)})
+		Mermaid: s.mermaid, Versions: readVersions(src), Print: s.print})
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.Write(page)
 }

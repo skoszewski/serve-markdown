@@ -366,3 +366,34 @@ body.separators-top nav#_list,
 body.separators-top nav#_outline {
   border-color: transparent;
 }
+
+/* Printed, the page is its title and its document: the buttons, the sidebars and the version
+   picker are left out, the document takes the width of the paper, and a long code line wraps
+   rather than being cut at the edge. */
+@media print {
+  #_controls,
+  nav.sidebar,
+  #_versions {
+    display: none;
+  }
+
+  #_top {
+    position: static;
+    border: none;
+  }
+
+  #_top:has(#_title:empty) {
+    display: none;
+  }
+
+  .markdown-body,
+  body[class] .markdown-body {
+    max-width: none;
+    padding: 0;
+  }
+
+  .markdown-body pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}

@@ -73,6 +73,8 @@ type server struct {
 	search        indexSearch
 	mermaid       bool
 	indexOnly     bool
+	// print draws pages to be printed to a PDF rather than read in a browser.
+	print bool
 	// versions reads the branches and tags a page offers, and is Azure Repos' own answer
 	// unless a test gives another.
 	versions func(source) *versionPicker

@@ -70,6 +70,8 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--separators` | `side` | The lines separating the top row, the sidebars and the document: `hidden`, `top`, `side` or `all` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
+| `--pdf` | | Print the Markdown document the path names to this PDF file and exit, see [PDF export](#pdf-export) |
+| `--pdf-page` | `paper:a4,orientation:portrait` | The page `--pdf` prints on; takes `paper` and `orientation` as a comma separated list |
 | `--version` | | Print the version and exit |
 
 The path names what to serve:
@@ -499,6 +501,38 @@ and PowerShell (`powershell`, `pwsh`, `ps`, `ps1`). Another language is one impo
 `assets/build/` is not kept in the repository: `./build.mjs` builds it before the executable,
 the `build` workflow before every check and build, and the `Dockerfile` in a Node.js stage of
 its own.
+
+## PDF export
+
+`--pdf` prints one Markdown document to a PDF file instead of serving it, and exits. The path
+is then required and names the document: a local Markdown file, or an `ado://` URL of a
+Markdown file. A directory, or an `ado://` organization, project, repository or folder, is
+refused.
+
+```sh
+serve-markdown --pdf guide.pdf docs/guide.md
+serve-markdown --mermaid --pdf-page paper:letter,orientation:landscape --pdf guide.pdf docs/guide.md
+serve-markdown --pdf guide.pdf ado://myorg/myproject/myrepo/docs/guide.md
+```
+
+The document is drawn by the same page as in a browser, by headless Chrome, so the PDF reads
+as the page does, in the light theme. It holds the title row the front matter gives, and the
+document; the buttons, the sidebars and the version picker are left out. Long code lines wrap,
+the headings become the PDF's bookmarks, and `--mermaid` draws the diagrams. Links to other
+hosts and to headings within the document are kept; a link to another document of the
+server is printed as its text, since the server is gone once the PDF is written.
+
+`--pdf-page` takes the page the PDF is printed on, written on the command line or as
+`pdf-page` in the configuration file:
+
+| Setting | Values | Default |
+|---|---|---|
+| `paper` | `a3`, `a4`, `a5`, `letter`, `legal`, `tabloid` | `a4` |
+| `orientation` | `portrait`, `landscape` | `portrait` |
+
+Chrome or Chromium must be installed where the server runs, and is found where
+[chromedp](https://github.com/chromedp/chromedp) looks for it. The container image carries
+no browser, so it does not print.
 
 ## Licence
 
