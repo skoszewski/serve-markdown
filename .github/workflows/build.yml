@@ -1,5 +1,6 @@
 # Checks the sources on every push to dev. A semver tag with a leading v on a commit on main
-# is checked, built for every platform it is published for, and published as a release.
+# is checked, built for every platform it is published for, and published as a release. The
+# browser assets the executable embeds are built from web/ before any Go step.
 
 name: build
 
@@ -21,6 +22,16 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Assets
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
       - name: Formatting
         run: |
           unformatted="$(gofmt -l .)"
@@ -53,6 +64,16 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Assets
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
       - name: Build
         id: build
         env:

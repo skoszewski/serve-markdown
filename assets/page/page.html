@@ -7,9 +7,6 @@
 <link rel="stylesheet" href="{{.Assets.HighlightCSSLite}}" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" href="{{.Assets.HighlightCSSDark}}" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="{{.PageCSS}}">
-<script src="{{.Assets.MarkedJS}}"></script>
-<script src="{{.Assets.DOMPurifyJS}}"></script>
-<script src="{{.Assets.HighlightJS}}"></script>
 <script>
   const pageConfig = {{.Config}};
   let outlineChosen = null;
@@ -27,7 +24,7 @@
     document.documentElement.classList.add("list-hidden");
   }
 </script>
-<script src="{{.PageJS}}" defer></script>
+<script src="{{.Assets.PageJS}}" defer></script>
 <style id="_document-css"></style>
 </head>
 <body{{if .BodyClass}} class="{{.BodyClass}}"{{end}}>

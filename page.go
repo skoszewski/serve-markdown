@@ -6,37 +6,23 @@ import (
 	"strings"
 )
 
-// assetURLs names the browser-side libraries the page shell loads. The fields are read by
-// the page template.
+// assetURLs names the built assets the page shell loads. The fields are read by the page
+// template.
 type assetURLs struct {
 	MarkdownCSS      string
 	HighlightCSSLite string
 	HighlightCSSDark string
-	MarkedJS         string
-	DOMPurifyJS      string
-	HighlightJS      string
+	PageJS           string
 	MermaidJS        string
 }
 
-// cdnAssets loads the libraries from their public CDNs, as --online asks for.
-var cdnAssets = assetURLs{
-	MarkdownCSS:      "https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown.min.css",
-	HighlightCSSLite: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css",
-	HighlightCSSDark: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css",
-	MarkedJS:         "https://cdn.jsdelivr.net/npm/marked@15/marked.min.js",
-	DOMPurifyJS:      "https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js",
-	HighlightJS:      "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js",
-	MermaidJS:        "https://cdn.jsdelivr.net/npm/mermaid@12/dist/mermaid.min.js",
-}
-
-// embeddedAssets loads the same libraries from the copies built into the binary.
-var embeddedAssets = assetURLs{
-	MarkdownCSS:      assetRoute + "github-markdown.min.css",
-	HighlightCSSLite: assetRoute + "github.min.css",
-	HighlightCSSDark: assetRoute + "github-dark.min.css",
-	MarkedJS:         assetRoute + "marked.min.js",
-	DOMPurifyJS:      assetRoute + "purify.min.js",
-	HighlightJS:      assetRoute + "highlight.min.js",
+// pageAssets loads the assets built into the binary: the stylesheets, the page script bundled
+// with the libraries it uses, and mermaid.
+var pageAssets = assetURLs{
+	MarkdownCSS:      assetRoute + "github-markdown.css",
+	HighlightCSSLite: assetRoute + "highlight-light.css",
+	HighlightCSSDark: assetRoute + "highlight-dark.css",
+	PageJS:           assetRoute + "page.js",
 	MermaidJS:        assetRoute + "mermaid.min.js",
 }
 
@@ -152,7 +138,6 @@ type pageData struct {
 	Sidebars  sidebars
 	BodyClass string
 	PageCSS   string
-	PageJS    string
 	Config    pageConfig
 }
 
@@ -163,20 +148,19 @@ var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html
 // contentQuery is the query string, including its leading '?', appended to the /content
 // request, and watchIntervalMS the milliseconds between polls, zero for a page that makes
 // none. A sidebar with an empty style, or a list without entries, is left out of the page.
-func renderPage(title, contentQuery string, watchIntervalMS int, assets assetURLs, settings pageSettings) []byte {
+func renderPage(title, contentQuery string, watchIntervalMS int, settings pageSettings) []byte {
 	data := pageData{
 		Title:     title,
-		Assets:    assets,
+		Assets:    pageAssets,
 		Sidebars:  settings.Sidebars,
 		BodyClass: settings.bodyClass(),
 		PageCSS:   pageAssetRoute + "page.css",
-		PageJS:    pageAssetRoute + "page.js",
 		Config: pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS,
 			OutlineHidden: settings.Sidebars.Outline.Display == outlineHidden,
 			ListHidden:    settings.Sidebars.List.Display == outlineHidden, Versions: settings.Versions},
 	}
 	if settings.Mermaid {
-		data.Config.MermaidJS = assets.MermaidJS
+		data.Config.MermaidJS = pageAssets.MermaidJS
 	}
 
 	var page bytes.Buffer

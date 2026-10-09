@@ -27,7 +27,7 @@ func get(t *testing.T, handler *server, target string) (*http.Response, string) 
 
 func TestServeRootReturnsThePageShell(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	response, body := get(t, handler, "/")
 	if response.StatusCode != http.StatusOK {
@@ -36,7 +36,7 @@ func TestServeRootReturnsThePageShell(t *testing.T) {
 	if contentType := response.Header.Get("Content-Type"); contentType != "text/html; charset=utf-8" {
 		t.Errorf("Content-Type = %q", contentType)
 	}
-	for _, want := range []string{"<title>README.md</title>", embeddedAssets.MarkedJS, `"?path=%2F"`, `"watchIntervalMS":1000`, pageAssetRoute + "page.js"} {
+	for _, want := range []string{"<title>README.md</title>", pageAssets.PageJS, `"?path=%2F"`, `"watchIntervalMS":1000`, pageAssetRoute + "page.css"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page does not hold %q", want)
 		}
@@ -45,7 +45,7 @@ func TestServeRootReturnsThePageShell(t *testing.T) {
 
 func TestServeContentReturnsTheDocument(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	response, body := get(t, handler, "/content?path=/docs/guide.md")
 	if response.StatusCode != http.StatusOK {
@@ -75,7 +75,7 @@ func TestServeContentReturnsTheDocument(t *testing.T) {
 
 func TestServeContentReportsAMissingDocument(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	_, body := get(t, handler, "/content?path=/nowhere.md")
 	var payload contentPayload
@@ -92,7 +92,7 @@ func TestServeContentReportsAMissingDocument(t *testing.T) {
 
 func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 	writeFile(t, filepath.Join(root, "styled.md"), "---\ncss: 'p { margin: 0; }'\n---\n# Styled\n")
 
 	_, body := get(t, handler, "/content?path=/styled.md")
@@ -110,7 +110,7 @@ func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 
 func TestServeContentCarriesWhatTheFrontMatterSays(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 	writeFile(t, filepath.Join(root, "described.md"), "---\ntitle: Notes\nauthor: Ann\ndate: 2024-05-01\n---\n# Notes\n")
 
 	// The author and the date are left out when the title is to stand alone.
@@ -135,7 +135,7 @@ func TestServeContentCarriesWhatTheFrontMatterSays(t *testing.T) {
 
 func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	response, body := get(t, handler, "/nowhere.md")
 	if response.StatusCode != http.StatusNotFound {
@@ -151,8 +151,7 @@ func TestServeUnknownRouteReturnsTheRouteHelp(t *testing.T) {
 
 func TestServeEmbeddedAssetsByDefault(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	_, page := get(t, handler, "/")
 	for _, host := range []string{"cdn.jsdelivr.net", "cdnjs.cloudflare.com", "http://", "https://"} {
@@ -161,8 +160,8 @@ func TestServeEmbeddedAssetsByDefault(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"marked.min.js", "purify.min.js", "highlight.min.js",
-		"github-markdown.min.css", "github.min.css", "github-dark.min.css"} {
+	for _, name := range []string{"page.js", "mermaid.min.js", "github-markdown.css",
+		"highlight-light.css", "highlight-dark.css"} {
 		response, body := get(t, handler, assetRoute+name)
 		if response.StatusCode != http.StatusOK {
 			t.Errorf("%s: status = %d, want 200", name, response.StatusCode)
@@ -173,29 +172,9 @@ func TestServeEmbeddedAssetsByDefault(t *testing.T) {
 	}
 }
 
-func TestServeOnlineReferencesTheCDNs(t *testing.T) {
-	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: cdnAssets, online: true}
-
-	_, page := get(t, handler, "/")
-	for _, want := range []string{cdnAssets.MarkedJS, cdnAssets.DOMPurifyJS, cdnAssets.HighlightJS,
-		cdnAssets.MarkdownCSS, cdnAssets.HighlightCSSLite, cdnAssets.HighlightCSSDark} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the online page does not reference %q", want)
-		}
-	}
-
-	// The embedded copies are not served once the page loads them from the CDNs.
-	response, _ := get(t, handler, assetRoute+"marked.min.js")
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", response.StatusCode)
-	}
-}
-
 func TestServeDirectoryReadsItsDocumentOrListsIt(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	// A directory holding index.md or README.md is that document, written with a trailing
 	// slash or without one.
@@ -230,8 +209,7 @@ func TestServeDirectoryReadsItsDocumentOrListsIt(t *testing.T) {
 
 func TestServeContentCarriesTheDocumentBase(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	// A route naming a folder is answered with the document inside it, and its links are read
 	// from that folder rather than from beside it, whatever the route's shape.
@@ -257,7 +235,7 @@ func TestServeContentCarriesTheDocumentBase(t *testing.T) {
 
 func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1, assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	_, body := get(t, handler, "/content?path=/docs/guide.md")
 	var payload contentPayload
@@ -272,8 +250,7 @@ func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	root := documentRoot(t)
 
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 	if _, page := get(t, handler, "/"); strings.Contains(page, `id="_outline`) ||
 		!strings.Contains(page, `<header id="_top"><div id="_heading"><div id="_title"></div>`+
 			`<div id="_byline"></div></div><div id="_controls"></div></header>`) {
@@ -315,7 +292,7 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"}}
+		outline: outlineSettings{Style: "numbered", Justify: "left"}}
 
 	tests := map[string]string{
 		"/?outline=style:plain":           `class="sidebar style-plain"`,
@@ -342,8 +319,8 @@ func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
-		list: listSettings{Scope: "current"}}
+		outline: outlineSettings{Style: "numbered", Justify: "left"},
+		list:    listSettings{Scope: "current"}}
 
 	_, page := get(t, handler, "/docs/guide.md")
 	for _, want := range []string{
@@ -376,8 +353,8 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 	// An ado source the server cannot read holds no list, so its outline keeps its own side.
 	ado := &server{defaultSource: source{kind: kindADO, organization: "org", project: "proj",
 		repository: "repo", path: "/README.md"}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, outline: outlineSettings{Style: "numbered", Justify: "left"},
-		list: listSettings{Scope: "current"}}
+		outline: outlineSettings{Style: "numbered", Justify: "left"},
+		list:    listSettings{Scope: "current"}}
 	if _, page := get(t, ado, "/notes.md"); !strings.Contains(page, `id="_list"`) {
 		t.Errorf("the local namespace holds no list under an ado source: %q", page)
 	}
@@ -398,7 +375,7 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, outline: outlineSettings{Justify: "left"}}
+		outline: outlineSettings{Justify: "left"}}
 
 	// The server was started without either sidebar; a query naming any setting draws the one
 	// it belongs to, with the default style, the way the flags do.
@@ -517,26 +494,23 @@ func TestOutlineStyle(t *testing.T) {
 
 func TestServePageShellCarriesMermaidOnlyWhenAsked(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	if _, page := get(t, handler, "/"); strings.Contains(page, "mermaid.min.js") {
 		t.Errorf("the page loads mermaid without the flag: %q", page)
 	}
 
 	handler.mermaid = true
-	if _, page := get(t, handler, "/"); !strings.Contains(page, embeddedAssets.MermaidJS) {
+	if _, page := get(t, handler, "/"); !strings.Contains(page, pageAssets.MermaidJS) {
 		t.Errorf("the page does not name the mermaid bundle: %q", page)
 	}
 }
 
 func TestServePageAssets(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: cdnAssets, online: true}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
-	// They are the server's own, so they are served from the binary even with --online.
-	for _, name := range []string{"page.css", "page.js"} {
+	for _, name := range []string{"page.css"} {
 		response, body := get(t, handler, pageAssetRoute+name)
 		if response.StatusCode != http.StatusOK {
 			t.Errorf("%s: status = %d, want 200", name, response.StatusCode)
@@ -549,8 +523,7 @@ func TestServePageAssets(t *testing.T) {
 
 func TestServeRawAssets(t *testing.T) {
 	root := documentRoot(t)
-	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	tests := []struct {
 		route       string
@@ -582,7 +555,7 @@ func TestServeRawAssets(t *testing.T) {
 func TestServeRawAssetRejectsTraversal(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: filepath.Join(root, "docs"),
-		watchInterval: 1, assets: embeddedAssets}
+		watchInterval: 1}
 
 	response, _ := get(t, handler, "/../picture.png")
 	if response.StatusCode != http.StatusNotFound {
@@ -593,7 +566,7 @@ func TestServeRawAssetRejectsTraversal(t *testing.T) {
 func TestServeRejectsTraversal(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: filepath.Join(root, "docs"),
-		watchInterval: 1, assets: embeddedAssets}
+		watchInterval: 1}
 
 	response, _ := get(t, handler, "/../notes.md")
 	if response.StatusCode != http.StatusNotFound {
@@ -617,7 +590,7 @@ func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
 	writeFile(t, filepath.Join(filepath.Dir(root), "secret.png"), pictureContent)
 
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, list: listSettings{Scope: "tree"}}
+		list: listSettings{Scope: "tree"}}
 
 	// A '..' that stays inside the root is followed, the way a link in a document writes it.
 	inside := map[string]string{
@@ -705,7 +678,7 @@ func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 	// Without --list nothing is read from Azure DevOps to build the page shell, so the titles
 	// are answered whatever the network does.
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, versions: noVersions}
+		versions: noVersions}
 
 	tests := map[string]string{
 		"/_/ado/myorg":                "<title>myorg</title>",
@@ -737,7 +710,7 @@ func noVersions(source) *versionPicker { return nil }
 func TestServePageShellChecksLocalDocumentsAlone(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, versions: noVersions}
+		versions: noVersions}
 
 	// A local page re-reads its document on its own; one reading Azure Repos waits for the
 	// browser's refresh, the document being read over the network.
@@ -753,7 +726,7 @@ func TestServePageShellCarriesTheVersions(t *testing.T) {
 	root := documentRoot(t)
 	// The branches and the tags stand for what Azure Repos would answer.
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, versions: func(src source) *versionPicker {
+		versions: func(src source) *versionPicker {
 			if src.kind != kindADO || src.repository == "" {
 				return nil
 			}
@@ -786,7 +759,7 @@ func TestServePageShellCarriesTheVersions(t *testing.T) {
 func TestServePageShellCarriesTheADOVersion(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, ado: adoSettings{Version: "main", VersionType: "branch"},
+		ado:      adoSettings{Version: "main", VersionType: "branch"},
 		versions: noVersions}
 
 	// The page polls at the version it was asked for, so the document and the shell agree.
@@ -824,7 +797,7 @@ func TestServePageShellCarriesTheADOVersion(t *testing.T) {
 func TestServePageShellCarriesTheListLink(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		assets: embeddedAssets, list: listSettings{Scope: "current"}}
+		list: listSettings{Scope: "current"}}
 
 	// The link above a repository's documents leads back to the repositories of its project,
 	// carrying the settings the page was opened with.
@@ -835,7 +808,7 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 		t.Error("a list holding only the link above it is left out of the page")
 	}
 
-	page := string(renderPage("guide.md", "?path=/", 1000, embeddedAssets,
+	page := string(renderPage("guide.md", "?path=/", 1000,
 		pageSettings{Sidebars: beside, ContentWidth: defaultContentWidth}))
 	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Browse to repositories</a>`; !strings.Contains(page, want) {
 		t.Errorf("the page does not hold %q: %q", want, page)
@@ -845,7 +818,7 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 	up := adoUpLink(source{kind: kindADO, organization: "my org", project: "my proj",
 		repository: "repo"})
 	up.Label = "Back to projects"
-	page = string(renderPage("README.md", "?path=/", 1000, embeddedAssets, pageSettings{
+	page = string(renderPage("README.md", "?path=/", 1000, pageSettings{
 		Sidebars:     sidebars{List: listSettings{Scope: "current"}, Up: up},
 		ContentWidth: defaultContentWidth}))
 	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Back to projects</a>`; !strings.Contains(page, want) {

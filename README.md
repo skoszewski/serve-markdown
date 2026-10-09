@@ -9,36 +9,37 @@ side show the same file. A page reading Azure Repos is read once and again on re
 
 ## Installation
 
-```sh
-go install github.com/skoszewski/serve-markdown@latest
-```
-
 Every release carries the executable for Linux, macOS and Windows on `amd64` and `arm64`, named
 `serve-markdown-<goos>-<goarch>` (`.exe` on Windows), to download from the repository's
-Releases page. The `build` workflow in `.github/workflows/build.yml` checks the formatting,
-vets and tests the sources on every push to `dev`. Pushing a semver tag with a leading `v` -
-`v1.2.0`, `v1.3.0-rc.1` - on a commit on `main` checks the sources, builds all six and
-publishes them as the release of that tag; `main` is pushed before the tag or together with
-it.
+Releases page. The `build` workflow in `.github/workflows/build.yml` builds the browser assets,
+checks the formatting, vets and tests the sources on every push to `dev`. Pushing a semver tag
+with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on `main` checks the sources, builds
+all six and publishes them as the release of that tag; `main` is pushed before the tag or
+together with it.
 
-From a clone, `./build.sh` on Linux and macOS, or `./build.ps1` wherever PowerShell Core runs,
-writes the executable beside the sources. Both take the same action as their argument:
+From a clone, with Go and Node.js installed, `./build.mjs` writes the executable beside the
+sources; on Windows it is run as `node build.mjs`. It takes the action as its argument:
 
 - `build`, the default, writes the executable;
 - `test` runs the tests;
 - `check` runs the formatting check, `go vet` and the tests;
-- `clean` removes the executables.
+- `clean` removes the executables;
+- `assets` builds the browser assets alone (see [Browser assets](#browser-assets));
+- `update` moves every package `web/package.json` names to its latest release, major versions
+  included, rewriting `web/package-lock.json`, and builds the assets from them. A new esbuild
+  release runs its install script only once `npm install-scripts approve esbuild` in `web/`
+  has approved it.
+
+Every action but `clean` first installs the packages pinned in `web/package-lock.json` and
+builds the browser assets into `assets/build/`, since the executable embeds them. A plain
+`go build` or `go test` works once they have been built.
 
 A second argument names the destination platform as `<goos>/<goarch>`, building for it rather
 than for the host and writing `serve-markdown-<goos>-<goarch>`. Go needs no extra toolchain to
 do it, and the result is a static binary.
 
 ```sh
-./build.sh build linux/arm64
-```
-
-```powershell
-./build.ps1 build windows/amd64
+./build.mjs build linux/arm64
 ```
 
 ## Usage
@@ -69,7 +70,6 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--separators` | `side` | The lines separating the top row, the sidebars and the document: `hidden`, `top`, `side` or `all` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
-| `--online` | off | Load the browser-side libraries from their CDNs rather than from inside the binary |
 | `--version` | | Print the version and exit |
 
 The path names what to serve:
@@ -469,16 +469,30 @@ With `--mermaid`, a fenced `mermaid` block is drawn as a diagram by
 bundle is loaded the first time a document holds such a block, so a document without diagrams
 does not pay for it; a block mermaid cannot draw keeps its source visible.
 
-They are served from copies built into the binary, so the page references no external host and
-the server needs no network of its own. The copies and their licences are listed in
-[assets/vendor/LICENSES.md](assets/vendor/LICENSES.md).
+### Browser assets
 
-`--online` loads the same builds from their CDNs instead, leaving the embedded copies unused.
-The page's own styling and script always come from the binary.
+Everything the page loads is served from inside the binary, so the page references no external
+host and the server needs no network of its own.
 
-`./vendor.sh` on Linux and macOS, or `./vendor.ps1` wherever PowerShell Core runs, downloads
-the libraries into `assets/vendor/` at the versions pinned at the top of the script; `list`
-as the argument prints them with the URLs they come from instead.
+The assets are built from `web/`: `web/package.json` names the libraries, `web/package-lock.json`
+pins their versions, and `web/build.mjs` builds them with [esbuild](https://esbuild.github.io)
+into `assets/build/`:
+
+| File | Built from |
+|---|---|
+| `page.js` | `web/src/page.js` bundled with marked, DOMPurify and highlight.js |
+| `github-markdown.css` | github-markdown-css |
+| `highlight-light.css`, `highlight-dark.css` | highlight.js's GitHub themes |
+| `mermaid.min.js` | mermaid's single-file bundle, copied as it is |
+| `LICENSES.md` | the name, version and licence of every package above |
+
+`web/src/highlight.js` chooses the languages code is highlighted in: highlight.js's common set
+and PowerShell (`powershell`, `pwsh`, `ps`, `ps1`). Another language is one import and one
+`registerLanguage` line there.
+
+`assets/build/` is not kept in the repository: `./build.mjs` builds it before the executable,
+the `build` workflow before every check and build, and the `Dockerfile` in a Node.js stage of
+its own.
 
 ## Licence
 

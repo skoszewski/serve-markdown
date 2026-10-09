@@ -6,23 +6,22 @@ import (
 	"net/http"
 )
 
-// assetRoute is the URL prefix the embedded libraries are served under.
+// assetRoute is the URL prefix the built assets are served under.
 const assetRoute = "/" + routeNamespace + "/assets/"
 
-// pageAssetRoute is the URL prefix the page shell's own styling and script are served under.
+// pageAssetRoute is the URL prefix the page shell's own styling is served under.
 const pageAssetRoute = "/" + routeNamespace + "/page/"
 
-//go:embed assets/vendor
-var vendorFS embed.FS
+//go:embed assets/build
+var buildFS embed.FS
 
 //go:embed assets/page
 var pageFS embed.FS
 
-// vendorFiles serves the embedded libraries under assetRoute.
-var vendorFiles = embeddedHandler(vendorFS, "assets/vendor", assetRoute)
+// buildFiles serves the assets web/build.mjs builds under assetRoute.
+var buildFiles = embeddedHandler(buildFS, "assets/build", assetRoute)
 
-// pageFiles serves the page shell's styling and script under pageAssetRoute, from the binary
-// whether or not --online is given.
+// pageFiles serves the page shell's styling under pageAssetRoute.
 var pageFiles = embeddedHandler(pageFS, "assets/page", pageAssetRoute)
 
 // embeddedHandler serves directory, as embedded in files, under route.

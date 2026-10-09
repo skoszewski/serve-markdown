@@ -1,6 +1,10 @@
 // The page shell: it polls the server for the document this route addresses and renders it,
 // reading its settings from the pageConfig the server wrote into the page.
 
+import { marked } from "marked";
+import DOMPurify from "dompurify";
+import hljs from "./highlight.js";
+
 const content = document.getElementById("_content");
 const outline = document.getElementById("_outline");
 const outlineToggle = document.getElementById("_outline-toggle");
@@ -261,18 +265,8 @@ function render(text, css, base, info) {
   title.textContent = (info && info.title) || "";
   document.title = title.textContent || pageTitle;
   byline.textContent = info && info.title ? [info.author, info.date].filter(Boolean).join(" - ") : "";
-  if (!window.marked || !window.DOMPurify) {
-    const pre = document.createElement("pre");
-    pre.textContent = text;
-    content.innerHTML = "";
-    content.appendChild(pre);
-    return;
-  }
-
   content.innerHTML = DOMPurify.sanitize(marked.parse(text, { gfm: true }));
-  if (window.hljs) {
-    content.querySelectorAll("pre code:not(.language-mermaid)").forEach((block) => hljs.highlightElement(block));
-  }
+  content.querySelectorAll("pre code:not(.language-mermaid)").forEach((block) => hljs.highlightElement(block));
   buildOutline();
   resolveLinks(base);
   renderDiagrams();

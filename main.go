@@ -61,13 +61,10 @@ func run() error {
 		return nil
 	}
 
-	handler := &server{assets: embeddedAssets, online: settings.online, outline: settings.outline,
-		list: settings.list, ado: settings.ado, contentWidth: settings.contentWidth, separators: settings.separators,
+	handler := &server{outline: settings.outline, list: settings.list, ado: settings.ado,
+		contentWidth: settings.contentWidth, separators: settings.separators,
 		frontMatter: settings.frontMatter, search: settings.search, mermaid: settings.mermaid,
 		indexOnly: settings.indexOnly}
-	if settings.online {
-		handler.assets = cdnAssets
-	}
 
 	sourceDescription, err := handler.resolveStartupSource(settings.path)
 	if err != nil {
@@ -181,8 +178,8 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	if !s.online && strings.HasPrefix(request.URL.Path, assetRoute) {
-		vendorFiles.ServeHTTP(writer, request)
+	if strings.HasPrefix(request.URL.Path, assetRoute) {
+		buildFiles.ServeHTTP(writer, request)
 		return
 	}
 
@@ -222,7 +219,7 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	watch := watchIntervalFor(src.kind, s.watchInterval)
-	page := renderPage(title, query, int(math.Round(watch*1000)), s.assets, pageSettings{
+	page := renderPage(title, query, int(math.Round(watch*1000)), pageSettings{
 		Sidebars: s.sidebarsFor(request, src), ContentWidth: s.contentWidth, Separators: s.separators,
 		Mermaid: s.mermaid, Versions: readVersions(src)})
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")

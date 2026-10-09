@@ -6,12 +6,12 @@ The shell was two Go string constants assembled with `fmt.Sprintf`, whose positi
 arguments had to be kept in step by hand. The outline and the diagram support roughly tripled
 the script.
 
-The shell is now `assets/page/page.html`, `page.css` and `page.js`, embedded with `go:embed`.
-The HTML is rendered with `html/template` and the settings the script needs are written into
-the page as one `pageConfig` object, which `html/template` escapes for a script context. The
-styling and the script are served from the binary under `/_/page/`, whatever `--online` says,
-since they are the server's own rather than a third party's, and the browser caches them
-between page loads.
+The shell is now `assets/page/page.html` and `page.css`, embedded with `go:embed`, and the
+script built from `web/src/page.js`. The HTML is rendered with `html/template` and the
+settings the script needs are written into the page as one `pageConfig` object, which
+`html/template` escapes for a script context. The styling is served under `/_/page/` and the
+script with the other built assets under `/_/assets/`, and the browser caches them between
+page loads.
 
 ## The outline is numbered in CSS, not in JavaScript
 
@@ -24,8 +24,8 @@ numbering at all, so a style is added by writing a rule.
 
 Mermaid publishes an ES module that pulls its diagram types from a `chunks` directory of some
 twenty megabytes, and a single self-contained `dist/mermaid.min.js` that sets
-`globalThis.mermaid`. The single file is vendored, so one more file keeps the server free of
-a network of its own, at 5.5 MB of the binary.
+`globalThis.mermaid`. The single file is copied into the built assets, so one more file keeps
+the server free of a network of its own, at 5.5 MB of the binary.
 
 It is injected by the script the first time a document holds a `mermaid` block, rather than
 loaded by the page shell, so that a document without diagrams does not carry it. `--mermaid`
@@ -322,7 +322,7 @@ from the outline's, so hiding one leaves the other as the reader left it.
 ## The GitHub workflow builds on its own
 
 The workflow runs `gofmt`, `go vet`, the tests and the builds with its own steps rather than
-through `build.sh`, so the scripts serve a developer's machine and the workflow serves GitHub,
+through `build.mjs`, so the script serves a developer's machine and the workflow serves GitHub,
 and neither changes for the other.
 
 Each platform's executable is uploaded unarchived, so a run's artifact downloads as the
@@ -340,6 +340,29 @@ does not take it in a version.
 `dev` is checked on every push and not built, since nothing is published from it; the builds
 run for tags alone. A release is refused for a tag whose commit is not on `main`, since `main`
 holds the stable code and releases are made from it.
+
+## The browser assets are built from pinned packages
+
+The libraries were stock builds downloaded from CDNs, which left their configuration to
+whoever published them: highlight.js's common build has no PowerShell, and adding a language
+meant another file and another script tag. They are now npm packages pinned by
+`web/package-lock.json` and built by esbuild, so what goes into the page is chosen here.
+
+The page script imports marked, DOMPurify and highlight.js and is bundled with them into one
+file, so the page loads one script and the libraries are never missing. highlight.js is built
+from its core with the languages `web/src/highlight.js` registers. Mermaid stays a file of its
+own, loaded on first use for the reasons given above.
+
+The built files are not kept in the repository, so they cannot fall out of step with the
+sources and the lockfile; every build makes them first. That costs `go install`, which builds
+from the module alone and runs no build of its own: the server is installed from a release or
+built from a clone, with Node.js beside Go.
+
+The CDN option, `--online`, is gone: it could only load the stock builds, not the ones built
+here, and the server needs no network for its page.
+
+`build.mjs` replaces the shell and PowerShell scripts as the one build script for every
+platform. Node.js is needed for the assets anyway, and one script cannot drift from another.
 
 ## A folder leading nowhere is listed as the folder above
 

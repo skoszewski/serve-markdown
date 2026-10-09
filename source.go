@@ -64,8 +64,6 @@ type server struct {
 	rootDir       string
 	defaultFile   string
 	watchInterval float64
-	assets        assetURLs
-	online        bool
 	outline       outlineSettings
 	list          listSettings
 	ado           adoSettings

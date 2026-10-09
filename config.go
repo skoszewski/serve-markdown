@@ -108,7 +108,6 @@ type configuration struct {
 	path          string
 	listenAddress string
 	port          int
-	online        bool
 	mermaid       bool
 	indexOnly     bool
 	contentWidth  string
@@ -158,7 +157,6 @@ func readConfiguration() (configuration, error) {
 	watchInterval := flag.Float64("watch-interval", 0, fmt.Sprintf(
 		"Seconds between the page's checks for changes to the document (default %g)",
 		defaultWatchInterval))
-	online := flag.Bool("online", false, "Load the browser-side libraries from their CDNs")
 	outline := flag.String("outline", "", fmt.Sprintf(
 		"Show an outline of the document's headings: style:%s, justify:%s, display:%s",
 		outlineStyleList(), strings.Join(outlineJustifications, "|"), strings.Join(outlineDisplays, "|")))
@@ -204,7 +202,6 @@ func readConfiguration() (configuration, error) {
 	settings.listenAddress = choose(written, "listen-address", *listenAddress, fromFile.ListenAddress)
 	settings.port = choose(written, "port", *port, fromFile.Port)
 	settings.watch = choose(written, "watch-interval", *watchInterval, fromFile.WatchInterval)
-	settings.online = choose(written, "online", *online, fromFile.Online)
 	settings.mermaid = choose(written, "mermaid", *mermaid, fromFile.Mermaid)
 	settings.indexOnly = choose(written, "index-only", *indexOnly, fromFile.IndexOnly)
 
@@ -315,7 +312,6 @@ type fileConfig struct {
 	List          *settingsValue `yaml:"list"`
 	ADO           *settingsValue `yaml:"ado"`
 	Mermaid       *bool          `yaml:"mermaid"`
-	Online        *bool          `yaml:"online"`
 	IndexOnly     *bool          `yaml:"index-only"`
 	ContentWidth  *string        `yaml:"content-width"`
 	Separators    *string        `yaml:"separators"`

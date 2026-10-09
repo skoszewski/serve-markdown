@@ -2,5 +2,7 @@
 /serve-markdown.exe
 /serve-markdown-*
 /dist/
+/web/node_modules/
+/assets/build/
 /tmp/
 .env

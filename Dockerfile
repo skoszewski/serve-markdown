@@ -1,5 +1,17 @@
 # syntax=docker/dockerfile:1
 
+# The browser assets the executable embeds, built once on the machine doing the building.
+FROM --platform=$BUILDPLATFORM node:lts-slim AS assets
+
+WORKDIR /src/web
+
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+COPY web/build.mjs ./
+COPY web/src ./src
+RUN npm run build
+
 # The toolchain runs on the machine doing the building and cross-compiles from there.
 FROM --platform=$BUILDPLATFORM golang:latest AS build
 
@@ -10,7 +22,8 @@ RUN go mod download
 
 # The sources and the assets embedded in the executable.
 COPY *.go ./
-COPY assets ./assets
+COPY assets/page ./assets/page
+COPY --from=assets /src/assets/build ./assets/build
 
 # The platform the image is built for, named by the builder.
 ARG TARGETOS
