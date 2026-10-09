@@ -249,7 +249,11 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 		}
 	}
 	if given := query.Get("list"); given != "" {
-		if asked, err := parseList(given, beside.List); err == nil {
+		base := beside.List
+		if base.Scope == "" {
+			base.Scope = defaultList.Scope
+		}
+		if asked, err := parseList(given, base); err == nil {
 			beside.List = asked
 		}
 	}

@@ -274,17 +274,20 @@ nav.sidebar a.current {
   background-color: #eaeef2;
 }
 
-/* The outline button draws the window with the outline's panel on the side it stands on,
-   filled while the outline is shown. */
-body.outline-left #_outline-toggle svg {
+/* The outline and list buttons draw the window with the sidebar's panel on the side it stands
+   on, filled while the sidebar is shown. */
+body.outline-left #_outline-toggle svg,
+#_list-toggle svg {
   transform: scaleX(-1);
 }
 
-html.outline-hidden #_outline-toggle .panel {
+html.outline-hidden #_outline-toggle .panel,
+html.list-hidden #_list-toggle .panel {
   display: none;
 }
 
-html.outline-hidden #_outline {
+html.outline-hidden #_outline,
+html.list-hidden #_list {
   display: none;
 }
 

@@ -60,7 +60,7 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--port` | `8000` | Port for the local web server |
 | `--watch-interval` | `1` | Seconds between a local page's checks for changes; an `ado://` page makes none |
 | `--outline` | off | Show an outline of the document's headings beside it; takes `style`, `justify` and `display` as a comma separated list, e.g. `style:plain,justify:right` |
-| `--list` | off | List the documents around the page's own on its left; takes `scope`, e.g. `scope:tree` |
+| `--list` | off | List the documents around the page's own on its left; takes `scope` and `display` as a comma separated list, e.g. `scope:tree,display:hidden` |
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--search` | `README.md,index.md` | The documents a folder is read as, looked through in the order written |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
@@ -183,7 +183,9 @@ http://127.0.0.1:8000/docs/guide.md?outline=style:none
 The outline follows the document as it is re-read, and moves above it on a narrow window.
 
 Every page carries a top row above the sidebars and the document, holding the control buttons
-on its right. A page with an outline carries the outline button there, drawn as a window with
+on its right: the list button first, on a page with a directory list (see
+[Directory list](#directory-list)), then the outline button. A page with an outline carries
+the outline button there, drawn as a window with
 the outline's panel on the side the outline stands on: filled while the outline is shown, and
 empty once pressing it has hidden the outline and left the document the room it took. Pressing
 it again brings the outline back.
@@ -210,7 +212,7 @@ page is served as though the parameter had not been written at all.
 ## Directory list
 
 `--list` puts the documents around the one on the page on its left. It takes its settings the
-way `--outline` does, `scope` being the only one it knows:
+way `--outline` does, `scope` and `display` being the ones it knows:
 
 ```sh
 serve-markdown --list scope:subfolders docs/
@@ -222,9 +224,16 @@ serve-markdown --list scope:subfolders docs/
 | | `subfolders` | those, the folders below it, and `..` to the folder above |
 | | `tree` | every document under the source, nested by folder |
 | | `none` | no list |
+| `display` | `shown`, `hidden` | whether the list is shown or hidden until the reader chooses with its button |
 
 The entries are names to open and carry no numbering of their own; `style` belongs to
 `--outline` alone.
+
+A page with a list carries the list button in the top row, drawn as a window with the list's
+panel on the left: filled while the list is shown, and empty once pressing it has hidden the
+list. The browser remembers the choice for every page of the same server, apart from the
+outline's, until the button is pressed again; `display` says how the list starts before the
+reader has chosen.
 
 The document the page shows is marked, folders come before documents, and names beginning with
 a dot are left out.

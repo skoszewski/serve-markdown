@@ -60,7 +60,7 @@ var contentWidths = []string{"small", "medium", "large", widthFull}
 // else, and defaultList the same for a directory list.
 var (
 	defaultOutline = outlineSettings{Style: "plain", Justify: "left", Display: "shown"}
-	defaultList    = listSettings{Scope: "current"}
+	defaultList    = listSettings{Scope: "current", Display: "shown"}
 )
 
 // outlineStyles are the styles --outline takes, each with the shorthand that also names it:
@@ -76,15 +76,15 @@ var outlineStyles = []struct{ name, shorthand string }{
 const outlineNone = "none"
 
 // outlineJustifications are the sides of the document the outline stands on, outlineDisplays
-// whether it is shown or hidden before the reader chooses, and listScopes how much of the
-// source the directory list reaches.
+// whether the outline or the directory list is shown or hidden before the reader chooses, and
+// listScopes how much of the source the directory list reaches.
 var (
 	outlineJustifications = []string{"left", "right"}
 	outlineDisplays       = []string{"shown", outlineHidden}
 	listScopes            = []string{"current", "subfolders", "tree"}
 )
 
-// outlineHidden is the display that hides the outline until the reader shows it.
+// outlineHidden is the display that hides the outline or the list until the reader shows it.
 const outlineHidden = "hidden"
 
 // separatorsKinds are the lines --separators draws: none, the one under the top row, the ones
@@ -163,8 +163,8 @@ func readConfiguration() (configuration, error) {
 		"Show an outline of the document's headings: style:%s, justify:%s, display:%s",
 		outlineStyleList(), strings.Join(outlineJustifications, "|"), strings.Join(outlineDisplays, "|")))
 	list := flag.String("list", "", fmt.Sprintf(
-		"List the documents around the page's own: scope:%s",
-		strings.Join(append(slices.Clone(listScopes), outlineNone), "|")))
+		"List the documents around the page's own: scope:%s, display:%s",
+		strings.Join(append(slices.Clone(listScopes), outlineNone), "|"), strings.Join(outlineDisplays, "|")))
 	ado := flag.String("ado", "", fmt.Sprintf(
 		"Read Azure Repos at a version: %s",
 		strings.Join(adoVersionKinds, ":<name>|")+":<name>"))
@@ -236,14 +236,15 @@ func readConfiguration() (configuration, error) {
 	}
 
 	// Without an outline the style is empty and the side and display still stand, for a query
-	// to turn the outline on without naming them; a list is its scope alone, empty for no list.
+	// to turn the outline on without naming them; without a list the scope is empty and the
+	// display stands the same way.
 	if settings.outline, err = chooseSettings(*outline, written["outline"], fromFile.Outline,
 		outlineSettings{Justify: defaultOutline.Justify, Display: defaultOutline.Display},
 		defaultOutline, parseOutline); err != nil {
 		return configuration{}, err
 	}
 	if settings.list, err = chooseSettings(*list, written["list"], fromFile.List,
-		listSettings{}, defaultList, parseList); err != nil {
+		listSettings{Display: defaultList.Display}, defaultList, parseList); err != nil {
 		return configuration{}, err
 	}
 	if settings.ado, err = chooseSettings(*ado, written["ado"], fromFile.ADO,
@@ -524,8 +525,8 @@ func parseOutline(given string, settings outlineSettings) (outlineSettings, erro
 	return settings, err
 }
 
-// parseList reads the "scope" setting onto the one it is given, and returns the list the
-// setting asks for. A scope of outlineNone leaves no list at all.
+// parseList reads the "scope" and "display" settings onto the ones it is given, and returns the
+// list the settings ask for. A scope of outlineNone leaves no list at all.
 func parseList(given string, settings listSettings) (listSettings, error) {
 	scopes := append(slices.Clone(listScopes), outlineNone)
 	err := parseSettings(given, map[string]func(string) error{
@@ -538,6 +539,7 @@ func parseList(given string, settings listSettings) (listSettings, error) {
 			}
 			return nil
 		},
+		"display": settingFrom("a list display", outlineDisplays, &settings.Display),
 	})
 	return settings, err
 }

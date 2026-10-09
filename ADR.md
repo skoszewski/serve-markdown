@@ -316,7 +316,8 @@ hide and place the outline, so the icon and the outline cannot disagree.
 The outline's `display` setting says how it starts, and the reader's choice stands above it:
 the server writes `outlineHidden` into the page, and the head script reads it only when the
 browser holds no choice. A setting that overrode the reader would undo the button on every
-page they open.
+page they open. The directory list's `display` follows the same rule, its choice kept apart
+from the outline's, so hiding one leaves the other as the reader left it.
 
 ## The GitHub workflow builds on its own
 

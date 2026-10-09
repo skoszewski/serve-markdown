@@ -4,6 +4,7 @@
 const content = document.getElementById("_content");
 const outline = document.getElementById("_outline");
 const outlineToggle = document.getElementById("_outline-toggle");
+const listToggle = document.getElementById("_list-toggle");
 const title = document.getElementById("_title");
 const byline = document.getElementById("_byline");
 const pageTitle = document.title;
@@ -317,6 +318,18 @@ if (outlineToggle !== null) {
     outlineToggle.setAttribute("aria-expanded", String(!hidden));
     try {
       localStorage.setItem("serve-markdown.outline", hidden ? "hidden" : "shown");
+    } catch {}
+  });
+}
+// The list is shown or hidden on every page of this server alike, as it was last left.
+if (listToggle !== null) {
+  const root = document.documentElement;
+  listToggle.setAttribute("aria-expanded", String(!root.classList.contains("list-hidden")));
+  listToggle.addEventListener("click", () => {
+    const hidden = root.classList.toggle("list-hidden");
+    listToggle.setAttribute("aria-expanded", String(!hidden));
+    try {
+      localStorage.setItem("serve-markdown.list", hidden ? "hidden" : "shown");
     } catch {}
   });
 }

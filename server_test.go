@@ -352,11 +352,26 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 		`<a href="/docs/index.md">index.md</a>`,
 		// The list takes the outline to the right, whatever the outline was given.
 		`<body class="with-sidebar outline-right">`,
+		`<div id="_controls"><button id="_list-toggle"`,
+		`</button><button id="_outline-toggle"`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page does not hold %q: %q", want, page)
 		}
 	}
+
+	// The page is told whether to hide the list before the reader chooses.
+	if !strings.Contains(page, `"listHidden":false`) {
+		t.Errorf("the page hides a list that is shown: %q", page)
+	}
+	handler.list.Display = "hidden"
+	if _, page := get(t, handler, "/docs/guide.md"); !strings.Contains(page, `"listHidden":true`) {
+		t.Errorf("the page shows a list that is hidden: %q", page)
+	}
+	if _, page := get(t, handler, "/docs/guide.md?list=display:shown"); !strings.Contains(page, `"listHidden":false`) {
+		t.Errorf("the query does not show the list: %q", page)
+	}
+	handler.list.Display = ""
 
 	// An ado source the server cannot read holds no list, so its outline keeps its own side.
 	ado := &server{defaultSource: source{kind: kindADO, organization: "org", project: "proj",
@@ -391,6 +406,7 @@ func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
 		"/docs/guide.md?outline=justify:right": `<nav id="_outline" class="sidebar style-plain">`,
 		"/docs/guide.md?list=scope:current":    `<nav id="_list" class="sidebar">`,
 		"/docs/guide.md?list=scope:tree":       `<a href="/plain/README.md?list=scope:tree">README.md</a>`,
+		"/docs/guide.md?list=display:hidden":   `<nav id="_list" class="sidebar">`,
 	}
 	for target, want := range tests {
 		t.Run(target, func(t *testing.T) {
@@ -436,6 +452,37 @@ func TestParseOutline(t *testing.T) {
 		t.Run(list, func(t *testing.T) {
 			if _, err := parseOutline(list, given); err == nil {
 				t.Errorf("parseOutline(%q) raised no error", list)
+			}
+		})
+	}
+}
+
+func TestParseList(t *testing.T) {
+	tests := map[string]listSettings{
+		"scope:tree":                     {Scope: "tree", Display: "shown"},
+		"scope:none":                     {Scope: "", Display: "shown"},
+		"display:hidden":                 {Scope: "current", Display: "hidden"},
+		"scope:subfolders,display:shown": {Scope: "subfolders", Display: "shown"},
+		"":                               {Scope: "current", Display: "shown"},
+	}
+	given := listSettings{Scope: "current", Display: "shown"}
+
+	for list, want := range tests {
+		t.Run(list, func(t *testing.T) {
+			got, err := parseList(list, given)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Errorf("parseList(%q) = %+v, want %+v", list, got, want)
+			}
+		})
+	}
+
+	for _, list := range []string{"tree", "scope:sideways", "style:plain", "display:folded"} {
+		t.Run(list, func(t *testing.T) {
+			if _, err := parseList(list, given); err == nil {
+				t.Errorf("parseList(%q) raised no error", list)
 			}
 		})
 	}

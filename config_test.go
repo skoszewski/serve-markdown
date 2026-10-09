@@ -317,4 +317,15 @@ func TestChooseSettings(t *testing.T) {
 	if _, err := chooseSettings("", false, asked, off, defaultOutline, parseOutline); err == nil {
 		t.Error("a setting the flag does not know was read from a file")
 	}
+
+	// A list written in a file takes its display the way the outline does.
+	fromFile := &settingsValue{on: true, settings: map[string]string{"display": "hidden"}}
+	list, err := chooseSettings("", false, fromFile, listSettings{Display: defaultList.Display},
+		defaultList, parseList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (listSettings{Scope: "current", Display: "hidden"}); list != want {
+		t.Errorf("list = %+v, want %+v", list, want)
+	}
 }

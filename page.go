@@ -41,13 +41,14 @@ var embeddedAssets = assetURLs{
 }
 
 // pageConfig is what the page script reads its settings from. MermaidJS is empty unless
-// --mermaid is given, and a fenced mermaid block then stays a code block. OutlineHidden hides
-// the outline until the reader chooses otherwise.
+// --mermaid is given, and a fenced mermaid block then stays a code block. OutlineHidden and
+// ListHidden hide the outline and the directory list until the reader chooses otherwise.
 type pageConfig struct {
 	ContentQuery    string         `json:"contentQuery"`
 	WatchIntervalMS int            `json:"watchIntervalMS"`
 	MermaidJS       string         `json:"mermaidJS"`
 	OutlineHidden   bool           `json:"outlineHidden"`
+	ListHidden      bool           `json:"listHidden"`
 	Versions        *versionPicker `json:"versions"`
 }
 
@@ -75,9 +76,10 @@ type outlineSettings struct {
 }
 
 // listSettings is how a page's directory list is drawn: how much of the source it reaches,
-// empty for no list at all.
+// empty for no list at all, and whether it is shown or hidden before the reader chooses.
 type listSettings struct {
-	Scope string
+	Scope   string
+	Display string
 }
 
 // listEntry is one line of the directory list: a document or a folder to open, holding the
@@ -170,7 +172,8 @@ func renderPage(title, contentQuery string, watchIntervalMS int, assets assetURL
 		PageCSS:   pageAssetRoute + "page.css",
 		PageJS:    pageAssetRoute + "page.js",
 		Config: pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS,
-			OutlineHidden: settings.Sidebars.Outline.Display == outlineHidden, Versions: settings.Versions},
+			OutlineHidden: settings.Sidebars.Outline.Display == outlineHidden,
+			ListHidden:    settings.Sidebars.List.Display == outlineHidden, Versions: settings.Versions},
 	}
 	if settings.Mermaid {
 		data.Config.MermaidJS = assets.MermaidJS
