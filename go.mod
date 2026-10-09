@@ -1,4 +1,4 @@
-module github.com/skoszewski/serve-markdown
+module github.com/skoszewski/serve-markdown/v2
 
 go 1.27.0
 

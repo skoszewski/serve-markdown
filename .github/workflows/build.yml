@@ -131,4 +131,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" dist/* --verify-tag --generate-notes
+        run: gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-from-tag

@@ -343,8 +343,9 @@ and neither changes for the other.
 Each platform's executable is uploaded unarchived, so a run's artifact downloads as the
 executable itself rather than as a zip holding it. The release is made with the `gh` CLI the
 runner already carries, rather than with a third-party action, and only for a tag that is
-already pushed. The history is checked out whole for the builds, so that Go reads the version
-from the tag the commit carries.
+already pushed. Its notes are the message of the annotated tag, since the repository takes no
+pull requests for GitHub to build notes from. The history is checked out whole for the
+builds, so that Go reads the version from the tag the commit carries.
 
 A release is made for a semver tag with a leading `v` alone, the form Go reads a module
 version in. The workflow's tag filters are globs, which hold a tag to `vMAJOR.MINOR.PATCH` with
