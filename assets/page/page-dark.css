@@ -1,0 +1,60 @@
+/* The page's own colours in the dark theme, drawn over page.css whenever the theme is dark. */
+
+body {
+  background-color: #0d1117;
+}
+
+#_top {
+  border-bottom-color: #30363d;
+  background-color: #0d1117;
+  color: #c9d1d9;
+}
+
+nav.sidebar {
+  border-right-color: #30363d;
+  color: #c9d1d9;
+}
+
+nav.sidebar a.up,
+#_controls button {
+  border-color: #30363d;
+  background-color: #161b22;
+  color: #c9d1d9;
+}
+
+nav.sidebar a.up:hover,
+#_controls button:hover {
+  background-color: #21262d;
+}
+
+body.outline-right #_outline {
+  border-left-color: #30363d;
+}
+
+#_versions {
+  color: #c9d1d9;
+}
+
+#_versions .default-branch,
+#_versions button {
+  border-color: #30363d;
+  background-color: #161b22;
+}
+
+#_versions button.chosen {
+  background-color: #1f6feb;
+  border-color: #1f6feb;
+  color: #ffffff;
+}
+
+#_versions select {
+  border-color: #30363d;
+  background-color: #0d1117;
+  color: #c9d1d9;
+}
+
+@media (max-width: 900px) {
+  nav.sidebar {
+    border-bottom-color: #30363d;
+  }
+}

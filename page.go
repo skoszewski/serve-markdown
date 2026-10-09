@@ -9,17 +9,19 @@ import (
 // assetURLs names the built assets the page shell loads. The fields are read by the page
 // template.
 type assetURLs struct {
-	MarkdownCSS      string
+	MarkdownCSSLite  string
+	MarkdownCSSDark  string
 	HighlightCSSLite string
 	HighlightCSSDark string
 	PageJS           string
 	MermaidJS        string
 }
 
-// pageAssets loads the assets built into the binary: the stylesheets, the page script bundled
-// with the libraries it uses, and mermaid.
+// pageAssets loads the assets built into the binary: the light and dark stylesheets, the page
+// script bundled with the libraries it uses, and mermaid.
 var pageAssets = assetURLs{
-	MarkdownCSS:      assetRoute + "github-markdown.css",
+	MarkdownCSSLite:  assetRoute + "github-markdown-light.css",
+	MarkdownCSSDark:  assetRoute + "github-markdown-dark.css",
 	HighlightCSSLite: assetRoute + "highlight-light.css",
 	HighlightCSSDark: assetRoute + "highlight-dark.css",
 	PageJS:           assetRoute + "page.js",
@@ -133,12 +135,13 @@ func (p pageSettings) bodyClass() string {
 
 // pageData is what the page template renders.
 type pageData struct {
-	Title     string
-	Assets    assetURLs
-	Sidebars  sidebars
-	BodyClass string
-	PageCSS   string
-	Config    pageConfig
+	Title       string
+	Assets      assetURLs
+	Sidebars    sidebars
+	BodyClass   string
+	PageCSS     string
+	PageCSSDark string
+	Config      pageConfig
 }
 
 var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html"))
@@ -150,11 +153,12 @@ var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html
 // none. A sidebar with an empty style, or a list without entries, is left out of the page.
 func renderPage(title, contentQuery string, watchIntervalMS int, settings pageSettings) []byte {
 	data := pageData{
-		Title:     title,
-		Assets:    pageAssets,
-		Sidebars:  settings.Sidebars,
-		BodyClass: settings.bodyClass(),
-		PageCSS:   pageAssetRoute + "page.css",
+		Title:       title,
+		Assets:      pageAssets,
+		Sidebars:    settings.Sidebars,
+		BodyClass:   settings.bodyClass(),
+		PageCSS:     pageAssetRoute + "page.css",
+		PageCSSDark: pageAssetRoute + "page-dark.css",
 		Config: pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS,
 			OutlineHidden: settings.Sidebars.Outline.Display == outlineHidden,
 			ListHidden:    settings.Sidebars.List.Display == outlineHidden, Versions: settings.Versions},

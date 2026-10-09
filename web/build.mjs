@@ -26,7 +26,8 @@ await build({
 
 await build({
   entryPoints: [
-    { in: join(modules, "github-markdown-css/github-markdown.css"), out: "github-markdown" },
+    { in: join(modules, "github-markdown-css/github-markdown-light.css"), out: "github-markdown-light" },
+    { in: join(modules, "github-markdown-css/github-markdown-dark.css"), out: "github-markdown-dark" },
     { in: join(modules, "highlight.js/styles/github.css"), out: "highlight-light" },
     { in: join(modules, "highlight.js/styles/github-dark.css"), out: "highlight-dark" },
   ],

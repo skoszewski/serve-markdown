@@ -160,7 +160,7 @@ func TestServeEmbeddedAssetsByDefault(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"page.js", "mermaid.min.js", "github-markdown.css",
+	for _, name := range []string{"page.js", "mermaid.min.js", "github-markdown-light.css", "github-markdown-dark.css",
 		"highlight-light.css", "highlight-dark.css"} {
 		response, body := get(t, handler, assetRoute+name)
 		if response.StatusCode != http.StatusOK {
@@ -253,8 +253,8 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 	if _, page := get(t, handler, "/"); strings.Contains(page, `id="_outline`) ||
 		!strings.Contains(page, `<header id="_top"><div id="_heading"><div id="_title"></div>`+
-			`<div id="_byline"></div></div><div id="_controls"></div></header>`) {
-		t.Errorf("the page holds an outline or its button without the flag, or no top row: %q", page)
+			`<div id="_byline"></div></div><div id="_controls"><button id="_theme-toggle"`) {
+		t.Errorf("the page holds an outline or its button without the flag, or no top row with the theme button alone: %q", page)
 	}
 
 	for _, style := range outlineStyles {
@@ -510,7 +510,7 @@ func TestServePageAssets(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
-	for _, name := range []string{"page.css"} {
+	for _, name := range []string{"page.css", "page-dark.css"} {
 		response, body := get(t, handler, pageAssetRoute+name)
 		if response.StatusCode != http.StatusOK {
 			t.Errorf("%s: status = %d, want 200", name, response.StatusCode)

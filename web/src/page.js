@@ -134,7 +134,8 @@ async function renderDiagrams() {
 
   try {
     await loadMermaid();
-    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const theme = document.documentElement.dataset.theme;
+    const dark = theme === "dark" || (theme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
     await mermaid.run({ nodes });
   } catch (error) {
@@ -327,6 +328,21 @@ if (listToggle !== null) {
     } catch {}
   });
 }
+// The theme goes from the browser's to light, to dark and back, on every page of this server
+// alike; the document is drawn again, so its diagrams take the new theme.
+const themeToggle = document.getElementById("_theme-toggle");
+const themes = ["auto", "light", "dark"];
+themeToggle.title = "Theme: " + document.documentElement.dataset.theme;
+themeToggle.addEventListener("click", () => {
+  const theme = themes[(themes.indexOf(document.documentElement.dataset.theme) + 1) % themes.length];
+  setTheme(theme);
+  themeToggle.title = "Theme: " + theme;
+  try {
+    localStorage.setItem("serve-markdown.theme", theme);
+  } catch {}
+  lastMtime = null;
+  poll();
+});
 if (pageConfig.watchIntervalMS > 0) {
   setInterval(poll, pageConfig.watchIntervalMS);
 }

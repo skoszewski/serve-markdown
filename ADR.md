@@ -319,6 +319,21 @@ browser holds no choice. A setting that overrode the reader would undo the butto
 page they open. The directory list's `display` follows the same rule, its choice kept apart
 from the outline's, so hiding one leaves the other as the reader left it.
 
+## The theme is chosen by switching stylesheets
+
+The page could only follow the browser's light or dark preference, read by `media` queries in
+its stylesheets. A reader can now choose light or dark over it. Every stylesheet that differs
+between the two comes as a light and a dark file - github-markdown-css's own pair,
+highlight.js's GitHub pair, and `page-dark.css` over `page.css` - each link marked with the
+theme it draws. The head script sets their `media`: the preference query for the browser's
+theme, `all` for the theme chosen and `not all` for the other, so one rule decides the whole
+page and nothing is drawn twice over.
+
+The choice is kept in `localStorage` and applied by the head script before the page is first
+drawn, as the sidebars' are, so a dark page does not flash light. Mermaid draws its theme into
+the diagram itself, so choosing a theme draws the document again. The server holds no setting
+for it: the theme is the reader's alone.
+
 ## The GitHub workflow builds on its own
 
 The workflow runs `gofmt`, `go vet`, the tests and the builds with its own steps rather than

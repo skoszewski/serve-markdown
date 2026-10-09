@@ -184,7 +184,8 @@ The outline follows the document as it is re-read, and moves above it on a narro
 
 Every page carries a top row above the sidebars and the document, holding the control buttons
 on its right: the list button first, on a page with a directory list (see
-[Directory list](#directory-list)), then the outline button. A page with an outline carries
+[Directory list](#directory-list)), then the outline button, then the theme button (see
+[Rendering](#rendering)). A page with an outline carries
 the outline button there, drawn as a window with
 the outline's panel on the side the outline stands on: filled while the outline is shown, and
 empty once pressing it has hidden the outline and left the document the room it took. Pressing
@@ -438,6 +439,11 @@ sanitises it with [DOMPurify](https://github.com/cure53/DOMPurify), highlights c
 [github-markdown-css](https://github.com/sindresorhus/github-markdown-css), following the
 browser's light or dark preference.
 
+The theme button on every page goes from the browser's preference, drawn as a half-filled
+circle, to light, drawn as a sun, to dark, drawn as a moon, and back. The page, the code and
+the diagrams all take the theme chosen, and the browser remembers it for every page of the
+same server until the button is pressed again.
+
 `--content-width` says how wide the document is drawn. Each sidebar takes 320px and the
 document's own padding 45px a side, so the text is the width below less 90px, and less again
 what the sidebars take:
@@ -481,7 +487,7 @@ into `assets/build/`:
 | File | Built from |
 |---|---|
 | `page.js` | `web/src/page.js` bundled with marked, DOMPurify and highlight.js |
-| `github-markdown.css` | github-markdown-css |
+| `github-markdown-light.css`, `github-markdown-dark.css` | github-markdown-css's light and dark themes |
 | `highlight-light.css`, `highlight-dark.css` | highlight.js's GitHub themes |
 | `mermaid.min.js` | mermaid's single-file bundle, copied as it is |
 | `LICENSES.md` | the name, version and licence of every package above |
