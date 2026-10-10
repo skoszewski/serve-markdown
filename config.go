@@ -154,6 +154,7 @@ type configuration struct {
 	port          int
 	mermaid       bool
 	indexOnly     bool
+	css           string
 	contentWidth  string
 	separators    string
 	frontMatter   string
@@ -220,6 +221,7 @@ func readConfiguration() (configuration, error) {
 		"Comma separated list of the documents a folder is read as")
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	indexOnly := flag.Bool("index-only", false, "Read a folder as its index document alone")
+	css := flag.String("css", "", "CSS styling every document whose front matter declares none")
 	pdf := flag.String("pdf", "", "Print the Markdown document the path names to this PDF file with "+
 		"headless Chrome, and exit")
 	pdfPage := flag.String("pdf-page", "", fmt.Sprintf(
@@ -261,6 +263,7 @@ func readConfiguration() (configuration, error) {
 	settings.watch = choose(written, "watch-interval", *watchInterval, fromFile.WatchInterval)
 	settings.mermaid = choose(written, "mermaid", *mermaid, fromFile.Mermaid)
 	settings.indexOnly = choose(written, "index-only", *indexOnly, fromFile.IndexOnly)
+	settings.css = choose(written, "css", *css, fromFile.CSS)
 
 	settings.contentWidth = choose(written, "content-width", *contentWidth, fromFile.ContentWidth)
 	if !slices.Contains(contentWidths, settings.contentWidth) {
@@ -377,6 +380,7 @@ type fileConfig struct {
 	ADO           *settingsValue `yaml:"ado"`
 	Mermaid       *bool          `yaml:"mermaid"`
 	IndexOnly     *bool          `yaml:"index-only"`
+	CSS           *string        `yaml:"css"`
 	ContentWidth  *string        `yaml:"content-width"`
 	Separators    *string        `yaml:"separators"`
 	FrontMatter   *string        `yaml:"front-matter"`

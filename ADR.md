@@ -158,6 +158,11 @@ and nothing to keep in step but the names. A flag taking a settings list is a ma
 settings, or `true` for its own, and each setting is handed to the flag's own reader - a file
 is refused for the same reasons a command line is, with the same words.
 
+`--css` is a flag for that reason too, though CSS is mostly written in a file: a document's
+default styling is a setting like any other, and a key no flag is named after would be one
+more thing to learn. A document's own front matter `css` replaces it rather than adding to
+it, so a document styled for itself keeps exactly the styling it was written with.
+
 The command line stands above the file: a file belongs to a directory and is read by everyone
 who serves it, while a flag belongs to one run. Which flags were written is read from the flag
 package itself rather than by comparing against defaults, so writing a flag's own default

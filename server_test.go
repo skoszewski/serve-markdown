@@ -110,6 +110,32 @@ func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 	}
 }
 
+func TestServeContentCarriesTheServersCSSUnlessTheDocumentHasItsOwn(t *testing.T) {
+	root := documentRoot(t)
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
+		css: "table { width: 100%; }"}
+	writeFile(t, filepath.Join(root, "styled.md"), "---\ncss: 'p { margin: 0; }'\n---\n# Styled\n")
+	writeFile(t, filepath.Join(root, "titled.md"), "---\ntitle: Titled\n---\n# Titled\n")
+
+	tests := map[string]string{
+		"/content?path=/README.md": "table { width: 100%; }",
+		"/content?path=/titled.md": "table { width: 100%; }",
+		"/content?path=/styled.md": "p { margin: 0; }",
+	}
+	for target, want := range tests {
+		t.Run(target, func(t *testing.T) {
+			_, body := get(t, handler, target)
+			var payload contentPayload
+			if err := json.Unmarshal([]byte(body), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.CSS == nil || *payload.CSS != want {
+				t.Errorf("css = %v, want %q", payload.CSS, want)
+			}
+		})
+	}
+}
+
 func TestServeContentCarriesWhatTheFrontMatterSays(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}

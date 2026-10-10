@@ -73,6 +73,8 @@ type server struct {
 	search        indexSearch
 	mermaid       bool
 	indexOnly     bool
+	// css styles every document whose front matter declares no CSS of its own.
+	css string
 	// print draws pages to be printed to a PDF rather than read in a browser, their text in
 	// printFontSize when it is not empty.
 	print         bool

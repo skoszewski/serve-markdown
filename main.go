@@ -64,7 +64,7 @@ func run() error {
 	handler := &server{outline: settings.outline, list: settings.list, ado: settings.ado,
 		contentWidth: settings.contentWidth, separators: settings.separators,
 		frontMatter: settings.frontMatter, search: settings.search, mermaid: settings.mermaid,
-		indexOnly: settings.indexOnly}
+		indexOnly: settings.indexOnly, css: settings.css}
 
 	sourceDescription, err := handler.resolveStartupSource(settings.path)
 	if err != nil {
@@ -304,7 +304,8 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 // error that reading it raised.
 //
 // The poll carries the route in its "path" parameter and, when the page was asked for one,
-// the version to read Azure Repos at in its "ado" parameter.
+// the version to read Azure Repos at in its "ado" parameter. A document whose front matter
+// declares no CSS is styled with what --css says.
 func (s *server) sendContent(writer http.ResponseWriter, request *http.Request) {
 	payload := contentPayload{}
 	route := request.URL.Query().Get("path")
@@ -321,6 +322,9 @@ func (s *server) sendContent(writer http.ResponseWriter, request *http.Request) 
 		base := documentBase(route, read.name)
 		if s.frontMatter == frontMatterTitleOnly {
 			read.info.Author, read.info.Date = "", ""
+		}
+		if read.css == "" {
+			read.css = s.css
 		}
 		payload.MTime, payload.Text, payload.CSS, payload.Base = &read.marker, &read.text, &read.css, &base
 		payload.Info = &read.info

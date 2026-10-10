@@ -65,6 +65,7 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--mermaid` | off | Render fenced `mermaid` blocks as diagrams |
 | `--search` | `README.md,index.md` | The documents a folder is read as, looked through in the order written |
 | `--index-only` | off | Read a folder as its index document alone, looking no further |
+| `--css` | none | CSS styling every document whose front matter declares none, see [Documents](#documents) |
 | `--content-width` | `full` | How wide the document is drawn: `small`, `medium`, `large` or `full` |
 | `--front-matter` | `all` | What the top row shows of the document's front matter: `all` or `title-only` |
 | `--separators` | `side` | The lines separating the top row, the sidebars and the document: `hidden`, `top`, `side` or `all` |
@@ -309,6 +310,22 @@ joined by ` - ` when both are given; without a title neither is shown. `--front-
 title-only` shows the title alone. A date written without a time is shown as the date alone,
 one with a time as `2024-05-01 10:30`, and one YAML does not read as a date as it is written. A
 key holding a list or a mapping is not shown.
+
+`--css`, written in the configuration file as `css`, styles every document whose front matter
+declares no `css` of its own, a document without front matter among them. A document's own
+`css` replaces it rather than adding to it, so a document keeps the styling it was written
+with:
+
+```yaml
+css: |
+  .markdown-body table {
+    display: table;
+    width: 100%;
+  }
+```
+
+A selector written for a document is to start with `.markdown-body`, as the stylesheet's own
+do; a bare `table` rule loses to the stylesheet's `.markdown-body table`.
 
 A picture or a diagram linked from a document - `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`,
 `.webp`, `.avif`, `.bmp`, `.ico` or `.pdf` - is served as the bytes it holds, so
