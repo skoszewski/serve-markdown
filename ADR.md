@@ -436,3 +436,11 @@ A page break is a class, `page-break`, as in md-to-pdf, written as an HTML eleme
 Markdown, since Markdown has no syntax of its own for one and a rule or a heading already
 means something else. The print styles also keep a heading with the text below it and a block
 whole on one page, which md-to-pdf leaves to the stylesheet.
+
+The size of the printed text is a setting of its own, `font-size`, rather than CSS a document
+writes for itself, since fitting more on a page is the commonest change made to a printed
+document and the selector it takes is easy to get wrong: github-markdown-css sets the size on
+`.markdown-body`, and a bare `body` rule loses to it. The size is written on that same rule in
+the printed page, and everything the stylesheet sizes in `em` follows it. It takes `pt` and
+`px` alone, the units a printed page and the stylesheet are measured in, and is left out of
+the page when it is not named, so the stylesheet's own size stands.

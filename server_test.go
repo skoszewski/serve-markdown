@@ -487,6 +487,8 @@ func TestParsePDFPage(t *testing.T) {
 		"margin:2.54cm 0in":              changed(func(p *pdfPageSettings) { p.Margin = [4]float64{1, 0, 1, 0} }),
 		"header:title,footer:none":       changed(func(p *pdfPageSettings) { p.Header, p.Footer = "title", "none" }),
 		"footer:page":                    changed(func(p *pdfPageSettings) { p.Footer = "page" }),
+		"font-size:11pt":                 changed(func(p *pdfPageSettings) { p.FontSize = "11pt" }),
+		"font-size:13.50px":              changed(func(p *pdfPageSettings) { p.FontSize = "13.5px" }),
 	}
 	for given, want := range tests {
 		t.Run(given, func(t *testing.T) {
@@ -507,7 +509,8 @@ func TestParsePDFPage(t *testing.T) {
 
 	for _, given := range []string{"a4", "paper:b5", "orientation:sideways", "scope:tree",
 		"margin:5", "margin:5em", "margin:-1mm", "margin:1mm 1mm 1mm 1mm 1mm", "margin:",
-		"header:date", "footer:total"} {
+		"header:date", "footer:total", "font-size:11", "font-size:1em", "font-size:0pt",
+		"font-size:-2px", "font-size:pt"} {
 		t.Run(given, func(t *testing.T) {
 			if _, err := parsePDFPage(given, defaultPDFPage); err == nil {
 				t.Errorf("parsePDFPage(%q) raised no error", given)
@@ -531,8 +534,15 @@ func TestServePageShellIsDrawnForPrinting(t *testing.T) {
 		t.Errorf("a page to read is drawn for printing: %q", page)
 	}
 	handler.print = true
-	if _, page := get(t, handler, "/"); !strings.Contains(page, `"print":true`) {
-		t.Errorf("a page to print is not drawn for printing: %q", page)
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `"print":true`) ||
+		strings.Contains(page, ".markdown-body { font-size") {
+		t.Errorf("a page to print is not drawn for printing, or sizes its text unasked: %q", page)
+	}
+
+	// The printed text takes the size the page asks for.
+	handler.printFontSize = "11pt"
+	if _, page := get(t, handler, "/"); !strings.Contains(page, "<style>.markdown-body { font-size: 11pt; }</style>") {
+		t.Errorf("the page does not size its printed text: %q", page)
 	}
 }
 

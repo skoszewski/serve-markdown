@@ -71,7 +71,7 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
 | `--pdf` | | Print the Markdown document the path names to this PDF file and exit, see [PDF export](#pdf-export) |
-| `--pdf-page` | `paper:a4,orientation:portrait,margin:20mm,header:none,footer:pages` | The page `--pdf` prints on; takes `paper`, `orientation`, `margin`, `header` and `footer` as a comma separated list |
+| `--pdf-page` | see [PDF export](#pdf-export) | The page `--pdf` prints on, as a comma separated list of settings, e.g. `paper:letter,font-size:11pt` |
 | `--version` | | Print the version and exit |
 
 The path names what to serve:
@@ -532,6 +532,11 @@ in the configuration file, or as `pdf` in the document's own front matter:
 | `margin` | 1 to 4 lengths in `mm`, `cm`, `in` or `pt`, as CSS writes a margin | `20mm` |
 | `header` | `none`, `title` - the document's title | `none` |
 | `footer` | `none`, `page` - the page number, `pages` - the page number of the number of pages | `pages` |
+| `font-size` | the size of the document's text in `pt` or `px`, e.g. `11pt` | `16px`, the stylesheet's own |
+
+The headings, the code, the tables and the rest of the document are sized from the text, so
+`font-size` makes all of them smaller or larger together and fits more or less on a page; the
+title row above the document keeps its own size.
 
 A margin is one length for every side, two for the top and bottom then the sides, three for
 the top, the sides and the bottom, or four from the top clockwise: `margin:20mm`,

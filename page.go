@@ -105,14 +105,16 @@ func (s sidebars) HoldsList() bool {
 
 // pageSettings is what a page is drawn with, beyond the document it shows: what stands beside
 // it, how wide it is drawn, whether the lines between its boxes are, whether its diagrams are,
-// and whether it is drawn to be printed to a PDF.
+// whether it is drawn to be printed to a PDF, and the size of the printed text, empty for the
+// stylesheet's own.
 type pageSettings struct {
-	Sidebars     sidebars
-	ContentWidth string
-	Separators   string
-	Mermaid      bool
-	Versions     *versionPicker
-	Print        bool
+	Sidebars      sidebars
+	ContentWidth  string
+	Separators    string
+	Mermaid       bool
+	Versions      *versionPicker
+	Print         bool
+	PrintFontSize string
 }
 
 // bodyClass returns the classes the page's body carries: how wide the document is drawn, the
@@ -139,13 +141,14 @@ func (p pageSettings) bodyClass() string {
 
 // pageData is what the page template renders.
 type pageData struct {
-	Title       string
-	Assets      assetURLs
-	Sidebars    sidebars
-	BodyClass   string
-	PageCSS     string
-	PageCSSDark string
-	Config      pageConfig
+	Title         string
+	Assets        assetURLs
+	Sidebars      sidebars
+	BodyClass     string
+	PageCSS       string
+	PageCSSDark   string
+	PrintFontSize string
+	Config        pageConfig
 }
 
 var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html"))
@@ -157,12 +160,13 @@ var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html
 // none. A sidebar with an empty style, or a list without entries, is left out of the page.
 func renderPage(title, contentQuery string, watchIntervalMS int, settings pageSettings) []byte {
 	data := pageData{
-		Title:       title,
-		Assets:      pageAssets,
-		Sidebars:    settings.Sidebars,
-		BodyClass:   settings.bodyClass(),
-		PageCSS:     pageAssetRoute + "page.css",
-		PageCSSDark: pageAssetRoute + "page-dark.css",
+		Title:         title,
+		Assets:        pageAssets,
+		Sidebars:      settings.Sidebars,
+		BodyClass:     settings.bodyClass(),
+		PageCSS:       pageAssetRoute + "page.css",
+		PageCSSDark:   pageAssetRoute + "page-dark.css",
+		PrintFontSize: settings.PrintFontSize,
 		Config: pageConfig{ContentQuery: contentQuery, WatchIntervalMS: watchIntervalMS,
 			OutlineHidden: settings.Sidebars.Outline.Display == outlineHidden,
 			ListHidden:    settings.Sidebars.List.Display == outlineHidden, Print: settings.Print,

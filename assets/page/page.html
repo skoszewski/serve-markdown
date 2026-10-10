@@ -9,6 +9,8 @@
 <link rel="stylesheet" href="{{.Assets.HighlightCSSDark}}" data-theme="dark" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="{{.PageCSS}}">
 <link rel="stylesheet" href="{{.PageCSSDark}}" data-theme="dark" media="(prefers-color-scheme: dark)">
+{{if .PrintFontSize}}<style>.markdown-body { font-size: {{.PrintFontSize}}; }</style>
+{{end}}
 <script>
   const pageConfig = {{.Config}};
 

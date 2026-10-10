@@ -115,17 +115,23 @@ var (
 // pdfLandscape turns the paper on its side.
 const pdfLandscape = "landscape"
 
-// pdfLengthUnits are the units a margin is written in, as the inches each measures.
-var pdfLengthUnits = map[string]float64{"mm": 1 / 25.4, "cm": 1 / 2.54, "in": 1, "pt": 1.0 / 72}
+// pdfLengthUnits are the units a margin is written in, as the inches each measures, and
+// pdfFontSizeUnits the units the document's text size is written in.
+var (
+	pdfLengthUnits   = map[string]float64{"mm": 1 / 25.4, "cm": 1 / 2.54, "in": 1, "pt": 1.0 / 72}
+	pdfFontSizeUnits = []string{"pt", "px"}
+)
 
 // pdfPageSettings is the page a PDF is printed on: its paper size, the way it is turned, its
-// margins in inches - top, right, bottom and left - and what its header and footer hold.
+// margins in inches - top, right, bottom and left - what its header and footer hold, and the
+// size of the document's text, as CSS writes it, empty for the stylesheet's own.
 type pdfPageSettings struct {
 	Paper       string
 	Orientation string
 	Margin      [4]float64
 	Header      string
 	Footer      string
+	FontSize    string
 }
 
 const pathUsage = "Markdown file, directory or " +
@@ -218,10 +224,11 @@ func readConfiguration() (configuration, error) {
 		"headless Chrome, and exit")
 	pdfPage := flag.String("pdf-page", "", fmt.Sprintf(
 		"The page --pdf prints on: paper:%s, orientation:%s, margin:<1 to 4 lengths in %s>, "+
-			"header:%s, footer:%s (default paper:%s,orientation:%s,margin:20mm,header:%s,footer:%s)",
+			"header:%s, footer:%s, font-size:<size in %s> "+
+			"(default paper:%s,orientation:%s,margin:20mm,header:%s,footer:%s)",
 		strings.Join(pdfPapers, "|"), strings.Join(pdfOrientations, "|"),
 		strings.Join(slices.Sorted(maps.Keys(pdfLengthUnits)), "|"),
-		strings.Join(pdfHeaders, "|"), strings.Join(pdfFooters, "|"),
+		strings.Join(pdfHeaders, "|"), strings.Join(pdfFooters, "|"), strings.Join(pdfFontSizeUnits, "|"),
 		defaultPDFPage.Paper, defaultPDFPage.Orientation, defaultPDFPage.Header, defaultPDFPage.Footer))
 	named := flag.String("config", "", "Read the server configuration from the file")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
@@ -598,8 +605,8 @@ func parseList(given string, settings listSettings) (listSettings, error) {
 	return settings, err
 }
 
-// parsePDFPage reads the "paper", "orientation", "margin", "header" and "footer" settings onto
-// the ones it is given, and returns the page the settings ask for.
+// parsePDFPage reads the "paper", "orientation", "margin", "header", "footer" and "font-size"
+// settings onto the ones it is given, and returns the page the settings ask for.
 //
 // A margin is written as CSS writes one: one length for every side, two for the top and bottom
 // then the sides, three for the top, the sides and the bottom, or four from the top clockwise.
@@ -616,11 +623,9 @@ func parsePDFPage(given string, settings pdfPageSettings) (pdfPageSettings, erro
 			}
 			inches := make([]float64, len(lengths))
 			for i, length := range lengths {
-				number, unit := strings.TrimRightFunc(length, unicode.IsLetter), strings.TrimLeftFunc(length,
-					func(r rune) bool { return !unicode.IsLetter(r) })
-				size, err := strconv.ParseFloat(number, 64)
+				size, unit, read := splitLength(length)
 				perInch, known := pdfLengthUnits[unit]
-				if err != nil || !known || size < 0 {
+				if !read || !known {
 					return fmt.Errorf("'%s' is not a length; expected a number and one of %s, as '20mm'",
 						length, strings.Join(slices.Sorted(maps.Keys(pdfLengthUnits)), ", "))
 				}
@@ -638,8 +643,26 @@ func parsePDFPage(given string, settings pdfPageSettings) (pdfPageSettings, erro
 			}
 			return nil
 		},
+		"font-size": func(value string) error {
+			size, unit, read := splitLength(value)
+			if !read || size == 0 || !slices.Contains(pdfFontSizeUnits, unit) {
+				return fmt.Errorf("'%s' is not a font size; expected a number and one of %s, as '11pt'",
+					value, strings.Join(pdfFontSizeUnits, ", "))
+			}
+			settings.FontSize = strconv.FormatFloat(size, 'f', -1, 64) + unit
+			return nil
+		},
 	})
 	return settings, err
+}
+
+// splitLength reads a length written as a number and a unit, as '20mm', and returns the
+// number and the unit. The third result is false when the number does not read or is
+// negative; the unit is the caller's to check.
+func splitLength(length string) (float64, string, bool) {
+	number := strings.TrimRightFunc(length, unicode.IsLetter)
+	size, err := strconv.ParseFloat(number, 64)
+	return size, length[len(number):], err == nil && size >= 0
 }
 
 // pdfPageFor returns the page a PDF is printed on: the default one, with what the
