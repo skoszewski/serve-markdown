@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -126,7 +128,7 @@ func TestServeContentCarriesWhatTheFrontMatterSays(t *testing.T) {
 			if err := json.Unmarshal([]byte(body), &payload); err != nil {
 				t.Fatal(err)
 			}
-			if payload.Info == nil || *payload.Info != want {
+			if payload.Info == nil || !reflect.DeepEqual(*payload.Info, want) {
 				t.Errorf("info = %+v, want %+v", payload.Info, want)
 			}
 		})
@@ -466,11 +468,25 @@ func TestParseList(t *testing.T) {
 }
 
 func TestParsePDFPage(t *testing.T) {
+	// Each case is the default page with what the settings change.
+	changed := func(change func(*pdfPageSettings)) pdfPageSettings {
+		page := defaultPDFPage
+		change(&page)
+		return page
+	}
 	tests := map[string]pdfPageSettings{
-		"paper:letter":                   {Paper: "letter", Orientation: "portrait"},
-		"orientation:landscape":          {Paper: "a4", Orientation: "landscape"},
-		"paper:a3,orientation:landscape": {Paper: "a3", Orientation: "landscape"},
-		"":                               {Paper: "a4", Orientation: "portrait"},
+		"paper:letter":                   changed(func(p *pdfPageSettings) { p.Paper = "letter" }),
+		"orientation:landscape":          changed(func(p *pdfPageSettings) { p.Orientation = "landscape" }),
+		"paper:a3,orientation:landscape": changed(func(p *pdfPageSettings) { p.Paper, p.Orientation = "a3", "landscape" }),
+		"":                               defaultPDFPage,
+		"margin:1in":                     changed(func(p *pdfPageSettings) { p.Margin = [4]float64{1, 1, 1, 1} }),
+		"margin:1in 72pt":                changed(func(p *pdfPageSettings) { p.Margin = [4]float64{1, 1, 1, 1} }),
+		"margin:1in 2in":                 changed(func(p *pdfPageSettings) { p.Margin = [4]float64{1, 2, 1, 2} }),
+		"margin:1in 2in 3in":             changed(func(p *pdfPageSettings) { p.Margin = [4]float64{1, 2, 3, 2} }),
+		"margin:1in 2in 3in 4in":         changed(func(p *pdfPageSettings) { p.Margin = [4]float64{1, 2, 3, 4} }),
+		"margin:2.54cm 0in":              changed(func(p *pdfPageSettings) { p.Margin = [4]float64{1, 0, 1, 0} }),
+		"header:title,footer:none":       changed(func(p *pdfPageSettings) { p.Header, p.Footer = "title", "none" }),
+		"footer:page":                    changed(func(p *pdfPageSettings) { p.Footer = "page" }),
 	}
 	for given, want := range tests {
 		t.Run(given, func(t *testing.T) {
@@ -478,13 +494,20 @@ func TestParsePDFPage(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			for side := range got.Margin {
+				if math.Abs(got.Margin[side]-want.Margin[side]) < 1e-9 {
+					got.Margin[side] = want.Margin[side]
+				}
+			}
 			if got != want {
 				t.Errorf("parsePDFPage(%q) = %+v, want %+v", given, got, want)
 			}
 		})
 	}
 
-	for _, given := range []string{"a4", "paper:b5", "orientation:sideways", "scope:tree"} {
+	for _, given := range []string{"a4", "paper:b5", "orientation:sideways", "scope:tree",
+		"margin:5", "margin:5em", "margin:-1mm", "margin:1mm 1mm 1mm 1mm 1mm", "margin:",
+		"header:date", "footer:total"} {
 		t.Run(given, func(t *testing.T) {
 			if _, err := parsePDFPage(given, defaultPDFPage); err == nil {
 				t.Errorf("parsePDFPage(%q) raised no error", given)

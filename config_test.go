@@ -328,21 +328,49 @@ func TestChooseSettings(t *testing.T) {
 	if want := (listSettings{Scope: "current", Display: "hidden"}); list != want {
 		t.Errorf("list = %+v, want %+v", list, want)
 	}
+}
 
-	// The PDF page is the default one unless a file or the command line names another.
-	pdfPage, err := chooseSettings("", false, nil, defaultPDFPage, defaultPDFPage, parsePDFPage)
+func TestPDFPageFor(t *testing.T) {
+	// Nothing said leaves the default page.
+	page, err := pdfPageFor(nil, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pdfPage != defaultPDFPage {
-		t.Errorf("pdf page = %+v, want %+v", pdfPage, defaultPDFPage)
+	if page != defaultPDFPage {
+		t.Errorf("page = %+v, want %+v", page, defaultPDFPage)
 	}
-	fromFile = &settingsValue{on: true, settings: map[string]string{"paper": "letter"}}
-	if pdfPage, err = chooseSettings("", false, fromFile, defaultPDFPage, defaultPDFPage,
-		parsePDFPage); err != nil {
+
+	// Each setting is taken from the last of the file, the document and the command line that
+	// names it.
+	fromFile := &settingsValue{on: true, settings: map[string]string{"paper": "letter",
+		"footer": "page", "header": "title"}}
+	fromDocument := map[string]string{"paper": "a5", "footer": "none"}
+	if page, err = pdfPageFor(fromFile, fromDocument, "paper:a3"); err != nil {
 		t.Fatal(err)
 	}
-	if want := (pdfPageSettings{Paper: "letter", Orientation: "portrait"}); pdfPage != want {
-		t.Errorf("pdf page = %+v, want %+v", pdfPage, want)
+	want := defaultPDFPage
+	want.Paper, want.Footer, want.Header = "a3", "none", "title"
+	if page != want {
+		t.Errorf("page = %+v, want %+v", page, want)
+	}
+
+	// A file turning the setting off says nothing.
+	if page, err = pdfPageFor(&settingsValue{}, nil, ""); err != nil || page != defaultPDFPage {
+		t.Errorf("page = %+v (%v), want %+v", page, err, defaultPDFPage)
+	}
+
+	// A setting no layer may say is refused, wherever it is written.
+	for _, test := range []struct {
+		fromFile     *settingsValue
+		fromDocument map[string]string
+		flag         string
+	}{
+		{&settingsValue{on: true, settings: map[string]string{"paper": "b5"}}, nil, ""},
+		{nil, map[string]string{"margin": "5em"}, ""},
+		{nil, nil, "footer:total"},
+	} {
+		if _, err := pdfPageFor(test.fromFile, test.fromDocument, test.flag); err == nil {
+			t.Errorf("pdfPageFor(%+v, %v, %q) raised no error", test.fromFile, test.fromDocument, test.flag)
+		}
 	}
 }

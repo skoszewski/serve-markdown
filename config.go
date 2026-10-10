@@ -12,7 +12,9 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -72,7 +74,8 @@ var outlineStyles = []struct{ name, shorthand string }{
 	{"numbered-hierarchical", "nh"},
 }
 
-// outlineNone is the style that asks for no outline, and the scope that asks for no list.
+// outlineNone is the style that asks for no outline, the scope that asks for no list, and the
+// header or footer that asks for none on a printed page.
 const outlineNone = "none"
 
 // outlineJustifications are the sides of the document the outline stands on, outlineDisplays
@@ -96,21 +99,33 @@ const separatorsAll = "all"
 
 var debugLevel int
 
-// pdfPapers are the paper sizes --pdf-page prints on, and pdfOrientations the ways the paper is
-// turned; defaultPDFPage is what a PDF is printed on unless --pdf-page says otherwise.
+// pdfPapers are the paper sizes --pdf-page prints on, pdfOrientations the ways the paper is
+// turned, pdfHeaders what the top of every page holds and pdfFooters what its bottom holds:
+// the document's title, its page number, or its page number of the number of pages.
+// defaultPDFPage is what a PDF is printed on unless --pdf-page says otherwise.
 var (
 	pdfPapers       = []string{"a3", "a4", "a5", "letter", "legal", "tabloid"}
 	pdfOrientations = []string{"portrait", pdfLandscape}
-	defaultPDFPage  = pdfPageSettings{Paper: "a4", Orientation: "portrait"}
+	pdfHeaders      = []string{outlineNone, "title"}
+	pdfFooters      = []string{outlineNone, "page", "pages"}
+	defaultPDFPage  = pdfPageSettings{Paper: "a4", Orientation: "portrait",
+		Margin: [4]float64{20 / 25.4, 20 / 25.4, 20 / 25.4, 20 / 25.4}, Header: outlineNone, Footer: "pages"}
 )
 
 // pdfLandscape turns the paper on its side.
 const pdfLandscape = "landscape"
 
-// pdfPageSettings is the page a PDF is printed on: its paper size and the way it is turned.
+// pdfLengthUnits are the units a margin is written in, as the inches each measures.
+var pdfLengthUnits = map[string]float64{"mm": 1 / 25.4, "cm": 1 / 2.54, "in": 1, "pt": 1.0 / 72}
+
+// pdfPageSettings is the page a PDF is printed on: its paper size, the way it is turned, its
+// margins in inches - top, right, bottom and left - and what its header and footer hold.
 type pdfPageSettings struct {
 	Paper       string
 	Orientation string
+	Margin      [4]float64
+	Header      string
+	Footer      string
 }
 
 const pathUsage = "Markdown file, directory or " +
@@ -121,10 +136,13 @@ const pathUsage = "Markdown file, directory or " +
 //
 // watch is the seconds asked for between the page's checks for changes, zero leaving the
 // source to say; file is the configuration file that was read, empty when there was none;
-// pdf is the file the document is printed to instead of being served, empty to serve it.
+// pdf is the file the document is printed to instead of being served, empty to serve it, and
+// pdfPageFile and pdfPageFlag the page the file and the command line ask it to be printed on,
+// laid over the document's own by pdfPageFor.
 type configuration struct {
 	pdf           string
-	pdfPage       pdfPageSettings
+	pdfPageFile   *settingsValue
+	pdfPageFlag   string
 	path          string
 	listenAddress string
 	port          int
@@ -199,9 +217,12 @@ func readConfiguration() (configuration, error) {
 	pdf := flag.String("pdf", "", "Print the Markdown document the path names to this PDF file with "+
 		"headless Chrome, and exit")
 	pdfPage := flag.String("pdf-page", "", fmt.Sprintf(
-		"The page --pdf prints on: paper:%s, orientation:%s (default paper:%s,orientation:%s)",
+		"The page --pdf prints on: paper:%s, orientation:%s, margin:<1 to 4 lengths in %s>, "+
+			"header:%s, footer:%s (default paper:%s,orientation:%s,margin:20mm,header:%s,footer:%s)",
 		strings.Join(pdfPapers, "|"), strings.Join(pdfOrientations, "|"),
-		defaultPDFPage.Paper, defaultPDFPage.Orientation))
+		strings.Join(slices.Sorted(maps.Keys(pdfLengthUnits)), "|"),
+		strings.Join(pdfHeaders, "|"), strings.Join(pdfFooters, "|"),
+		defaultPDFPage.Paper, defaultPDFPage.Orientation, defaultPDFPage.Header, defaultPDFPage.Footer))
 	named := flag.String("config", "", "Read the server configuration from the file")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 	flag.IntVar(&debugLevel, "debug", 0, "Debugging level: 0 for none, >0 for debugging turned on")
@@ -277,8 +298,11 @@ func readConfiguration() (configuration, error) {
 		adoSettings{}, adoSettings{}, parseADO); err != nil {
 		return configuration{}, err
 	}
-	if settings.pdfPage, err = chooseSettings(*pdfPage, written["pdf-page"], fromFile.PDFPage,
-		defaultPDFPage, defaultPDFPage, parsePDFPage); err != nil {
+	// The page a PDF is printed on is laid together once the document is read, since its front
+	// matter stands between the file and the command line; both are read here, so that a
+	// setting neither can say stops the server before then.
+	settings.pdfPageFile, settings.pdfPageFlag = fromFile.PDFPage, *pdfPage
+	if _, err = pdfPageFor(settings.pdfPageFile, nil, settings.pdfPageFlag); err != nil {
 		return configuration{}, err
 	}
 	return settings, nil
@@ -574,12 +598,68 @@ func parseList(given string, settings listSettings) (listSettings, error) {
 	return settings, err
 }
 
-// parsePDFPage reads the "paper" and "orientation" settings onto the ones it is given, and
-// returns the page the settings ask for.
+// parsePDFPage reads the "paper", "orientation", "margin", "header" and "footer" settings onto
+// the ones it is given, and returns the page the settings ask for.
+//
+// A margin is written as CSS writes one: one length for every side, two for the top and bottom
+// then the sides, three for the top, the sides and the bottom, or four from the top clockwise.
 func parsePDFPage(given string, settings pdfPageSettings) (pdfPageSettings, error) {
 	err := parseSettings(given, map[string]func(string) error{
 		"paper":       settingFrom("a paper size", pdfPapers, &settings.Paper),
 		"orientation": settingFrom("a page orientation", pdfOrientations, &settings.Orientation),
+		"header":      settingFrom("a page header", pdfHeaders, &settings.Header),
+		"footer":      settingFrom("a page footer", pdfFooters, &settings.Footer),
+		"margin": func(value string) error {
+			lengths := strings.Fields(value)
+			if len(lengths) == 0 || len(lengths) > 4 {
+				return fmt.Errorf("'%s' is not a margin; expected 1 to 4 lengths, as '20mm' or '1in 2cm'", value)
+			}
+			inches := make([]float64, len(lengths))
+			for i, length := range lengths {
+				number, unit := strings.TrimRightFunc(length, unicode.IsLetter), strings.TrimLeftFunc(length,
+					func(r rune) bool { return !unicode.IsLetter(r) })
+				size, err := strconv.ParseFloat(number, 64)
+				perInch, known := pdfLengthUnits[unit]
+				if err != nil || !known || size < 0 {
+					return fmt.Errorf("'%s' is not a length; expected a number and one of %s, as '20mm'",
+						length, strings.Join(slices.Sorted(maps.Keys(pdfLengthUnits)), ", "))
+				}
+				inches[i] = size * perInch
+			}
+			switch len(inches) {
+			case 1:
+				settings.Margin = [4]float64{inches[0], inches[0], inches[0], inches[0]}
+			case 2:
+				settings.Margin = [4]float64{inches[0], inches[1], inches[0], inches[1]}
+			case 3:
+				settings.Margin = [4]float64{inches[0], inches[1], inches[2], inches[1]}
+			case 4:
+				settings.Margin = [4]float64(inches)
+			}
+			return nil
+		},
 	})
 	return settings, err
+}
+
+// pdfPageFor returns the page a PDF is printed on: the default one, with what the
+// configuration file, the document's front matter and the command line say laid over it, each
+// setting taken from the last of them that names it.
+func pdfPageFor(fromFile *settingsValue, fromDocument map[string]string, fromCommandLine string) (pdfPageSettings, error) {
+	settings := defaultPDFPage
+	var layers []map[string]string
+	if fromFile != nil && fromFile.on {
+		layers = append(layers, fromFile.settings)
+	}
+	layers = append(layers, fromDocument)
+
+	var err error
+	for _, layer := range layers {
+		for _, key := range slices.Sorted(maps.Keys(layer)) {
+			if settings, err = parsePDFPage(key+":"+layer[key], settings); err != nil {
+				return defaultPDFPage, err
+			}
+		}
+	}
+	return parsePDFPage(fromCommandLine, settings)
 }

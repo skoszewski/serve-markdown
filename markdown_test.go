@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -97,13 +99,26 @@ func TestReadFrontMatterDescribesTheDocument(t *testing.T) {
 		"---\ntitle: 1984\nauthor: [Ann, Bob]\n---\n":          {Title: "1984"},
 		"---\n- title\n---\n":                                  {},
 		"# Notes\n":                                            {},
+		"---\npdf:\n  margin: 25mm\n  header: title\n---\n": {
+			PDF: map[string]string{"margin": "25mm", "header": "title"}},
+		"---\npdf: a4\n---\n": {},
 	}
 	for text, want := range tests {
 		t.Run(text, func(t *testing.T) {
-			if _, got, _ := readFrontMatter("described.md", text); got != want {
+			if _, got, _ := readFrontMatter("described.md", text); !reflect.DeepEqual(got, want) {
 				t.Errorf("info = %+v, want %+v", got, want)
 			}
 		})
+	}
+}
+
+func TestDocumentInfoKeepsThePDFPageOnTheServer(t *testing.T) {
+	sent, err := json.Marshal(documentInfo{Title: "Notes", PDF: map[string]string{"margin": "25mm"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(sent), "margin") {
+		t.Errorf("the page is sent the PDF page: %s", sent)
 	}
 }
 

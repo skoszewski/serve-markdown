@@ -36,20 +36,23 @@ var reportedFrontMatter = struct {
 	css map[string]string
 }{css: map[string]string{}}
 
-// documentInfo is what a document's front matter says of it, shown in the page's top row.
+// documentInfo is what a document's front matter says of it: its title, author and date, shown
+// in the page's top row, and the page it is printed on with --pdf, which stays on the server.
 type documentInfo struct {
-	Title  string `json:"title"`
-	Author string `json:"author"`
-	Date   string `json:"date"`
+	Title  string            `json:"title"`
+	Author string            `json:"author"`
+	Date   string            `json:"date"`
+	PDF    map[string]string `json:"-"`
 }
 
 // readFrontMatter splits a Markdown file's front matter off and returns the CSS it declares
 // and what it says of the document, with the body.
 //
 // The front matter is dropped from the document, since Markdown renderers show it as a rule
-// followed by its raw keys. Its "css" key styles the page, and its "title", "author" and
-// "date" keys describe the document; a key that is not a single value is not read, and a
-// block that is not a mapping leaves the document with the server's own styling alone.
+// followed by its raw keys. Its "css" key styles the page, its "title", "author" and "date"
+// keys describe the document, and its "pdf" mapping names the page --pdf prints it on; a key
+// that is not a single value is not read, and a block that is not a mapping leaves the
+// document with the server's own styling alone.
 //
 // What was found is logged, and logged again only once it differs, since the document is
 // re-read on every poll of /content.
@@ -73,6 +76,12 @@ func readFrontMatter(fileName, text string) (css string, info documentInfo, body
 		}
 		info = documentInfo{Title: frontMatterValue(mapping["title"]),
 			Author: frontMatterValue(mapping["author"]), Date: frontMatterValue(mapping["date"])}
+		if page, isMapping := mapping["pdf"].(map[string]any); isMapping {
+			info.PDF = map[string]string{}
+			for key, value := range page {
+				info.PDF[key] = frontMatterValue(value)
+			}
+		}
 	}
 
 	reportedFrontMatter.Lock()

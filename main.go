@@ -81,7 +81,22 @@ func run() error {
 			return fmt.Errorf("%s is not a Markdown document; --pdf prints one", sourceDescription)
 		}
 		handler.outline, handler.list, handler.print = outlineSettings{}, listSettings{}, true
-		if err := exportPDF(handler, settings.pdf, settings.pdfPage); err != nil {
+
+		// The document's front matter names the page it is printed on, between what the file
+		// and the command line say.
+		src := handler.defaultSource
+		if local {
+			src.route = "/"
+		}
+		read, err := handler.loadDocument(src)
+		if err != nil {
+			return fmt.Errorf("cannot read '%s' (%v)", settings.path, err)
+		}
+		page, err := pdfPageFor(settings.pdfPageFile, read.info.PDF, settings.pdfPageFlag)
+		if err != nil {
+			return fmt.Errorf("in the front matter of '%s': %v", settings.path, err)
+		}
+		if err := exportPDF(handler, settings.pdf, page); err != nil {
 			return err
 		}
 		logInfo("Printed '%s' to '%s'", settings.path, settings.pdf)

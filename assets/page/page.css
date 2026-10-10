@@ -396,4 +396,18 @@ body.separators-top nav#_outline {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+
+  /* A page-break marker starts a new page after it, a heading stays with the text below it,
+     and a block is kept whole on one page unless it is longer than a page. */
+  .markdown-body .page-break {
+    break-after: page;
+  }
+
+  .markdown-body :is(h1, h2, h3, h4, h5, h6) {
+    break-after: avoid;
+  }
+
+  .markdown-body :is(pre, table, tr, img, .mermaid, blockquote) {
+    break-inside: avoid;
+  }
 }

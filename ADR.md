@@ -411,3 +411,28 @@ once the PDF is written. What it leaves out - the buttons, the sidebars, the ver
 is left out by print styles, so the same rules hold when a reader prints a page from the
 browser. No browser is bundled: chromedp finds the one installed, and the container image,
 built for serving, carries none.
+
+## The printed page follows md-to-pdf, written as settings
+
+The page a PDF is printed on - its margins, header, footer and page breaks - follows what
+md-to-pdf offers, the tool most often used for the same work, so that a document moved from
+one to the other prints alike. Its settings are written the way the rest of the server's are,
+rather than as md-to-pdf's Puppeteer options passed through.
+
+The header and the footer are named, not written: `header:title`, `footer:pages`. md-to-pdf
+takes Chrome's header and footer templates as raw HTML, which asks a document's author to know
+Chrome's template classes and to size the text themselves, since Chrome draws it with no size
+at all. The server holds the templates, writing an empty one for the side left out, since
+Chrome prints its own date and address in a header it is not given.
+
+A margin is written as CSS writes one, as md-to-pdf takes it, in the units a page is measured
+in. A document's front matter may name its own page under `pdf`, standing above the
+configuration file and below the command line, the order md-to-pdf merges its own front matter
+in; each setting is taken separately, so the command line can change one without restating the
+rest. The page is laid together only once the document is read, and the file and the command
+line are read at start, so a setting neither may say stops the server before a browser starts.
+
+A page break is a class, `page-break`, as in md-to-pdf, written as an HTML element in the
+Markdown, since Markdown has no syntax of its own for one and a rule or a heading already
+means something else. The print styles also keep a heading with the text below it and a block
+whole on one page, which md-to-pdf leaves to the stylesheet.

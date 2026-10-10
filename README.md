@@ -71,7 +71,7 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
 | `--pdf` | | Print the Markdown document the path names to this PDF file and exit, see [PDF export](#pdf-export) |
-| `--pdf-page` | `paper:a4,orientation:portrait` | The page `--pdf` prints on; takes `paper` and `orientation` as a comma separated list |
+| `--pdf-page` | `paper:a4,orientation:portrait,margin:20mm,header:none,footer:pages` | The page `--pdf` prints on; takes `paper`, `orientation`, `margin`, `header` and `footer` as a comma separated list |
 | `--version` | | Print the version and exit |
 
 The path names what to serve:
@@ -522,13 +522,48 @@ the headings become the PDF's bookmarks, and `--mermaid` draws the diagrams. Lin
 hosts and to headings within the document are kept; a link to another document of the
 server is printed as its text, since the server is gone once the PDF is written.
 
-`--pdf-page` takes the page the PDF is printed on, written on the command line or as
-`pdf-page` in the configuration file:
+`--pdf-page` takes the page the PDF is printed on, written on the command line, as `pdf-page`
+in the configuration file, or as `pdf` in the document's own front matter:
 
 | Setting | Values | Default |
 |---|---|---|
 | `paper` | `a3`, `a4`, `a5`, `letter`, `legal`, `tabloid` | `a4` |
 | `orientation` | `portrait`, `landscape` | `portrait` |
+| `margin` | 1 to 4 lengths in `mm`, `cm`, `in` or `pt`, as CSS writes a margin | `20mm` |
+| `header` | `none`, `title` - the document's title | `none` |
+| `footer` | `none`, `page` - the page number, `pages` - the page number of the number of pages | `pages` |
+
+A margin is one length for every side, two for the top and bottom then the sides, three for
+the top, the sides and the bottom, or four from the top clockwise: `margin:20mm`,
+`margin:25mm 20mm`. The header and the footer are printed inside the top and bottom margins,
+so a margin too small to hold them hides them.
+
+Each setting is taken from the last of these that names it: the default, the configuration
+file, the document's front matter, the command line. A document can so carry its own page,
+and the command line still stands above it:
+
+```markdown
+---
+title: Installation guide
+pdf:
+  margin: 25mm 20mm
+  header: title
+---
+```
+
+```sh
+serve-markdown --pdf-page footer:none --pdf guide.pdf docs/guide.md
+```
+
+A page break is written into the document as an element of the class `page-break`, which
+starts a new page after it:
+
+```markdown
+<div class="page-break"></div>
+```
+
+Printed, a heading stays on the page of the text below it, and a code block, a table, a
+picture, a diagram or a quotation is kept whole on one page unless it is longer than a page.
 
 Chrome or Chromium must be installed where the server runs, and is found where
 [chromedp](https://github.com/chromedp/chromedp) looks for it. The container image carries
