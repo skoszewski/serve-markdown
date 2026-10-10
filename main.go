@@ -113,7 +113,7 @@ func run() error {
 		return fmt.Errorf("could not start server on %s (%v); try a different --listen-address/--port", address, err)
 	}
 
-	printBanner("Serving Markdown")
+	printBanner("Serve Markdown " + version())
 	logInfo("  Source:   %s", sourceDescription)
 	if settings.file != "" {
 		logInfo("  Config:   '%s'", settings.file)
