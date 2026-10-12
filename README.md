@@ -186,7 +186,7 @@ http://127.0.0.1:8000/docs/guide.md?outline=style:none
 The outline follows the document as it is re-read, and moves above it on a narrow window.
 
 Every page carries a top row above the sidebars and the document, holding the control buttons
-on its right: the list button first, on a page with a directory list (see
+on its right, after the server's name and version, `Serve Markdown v2.3.0`: the list button first, on a page with a directory list (see
 [Directory list](#directory-list)), then the outline button, then the theme button (see
 [Rendering](#rendering)). A page with an outline carries
 the outline button there, drawn as a window with

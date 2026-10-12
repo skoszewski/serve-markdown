@@ -139,9 +139,11 @@ func (p pageSettings) bodyClass() string {
 	return strings.Join(classes, " ")
 }
 
-// pageData is what the page template renders.
+// pageData is what the page template renders. Banner names the server and its version beside
+// the control buttons.
 type pageData struct {
 	Title         string
+	Banner        string
 	Assets        assetURLs
 	Sidebars      sidebars
 	BodyClass     string
@@ -161,6 +163,7 @@ var pageTemplate = template.Must(template.ParseFS(pageFS, "assets/page/page.html
 func renderPage(title, contentQuery string, watchIntervalMS int, settings pageSettings) []byte {
 	data := pageData{
 		Title:         title,
+		Banner:        "Serve Markdown " + version(),
 		Assets:        pageAssets,
 		Sidebars:      settings.Sidebars,
 		BodyClass:     settings.bodyClass(),

@@ -27,6 +27,10 @@ nav.sidebar a.up:hover,
   background-color: #21262d;
 }
 
+#_banner {
+  color: #8b949e;
+}
+
 body.outline-right #_outline {
   border-left-color: #30363d;
 }

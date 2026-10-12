@@ -60,7 +60,16 @@ body {
   grid-column: 3;
   justify-self: end;
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+/* The server's name and version, standing quietly before the control buttons. */
+#_banner {
+  margin-right: 4px;
+  color: #59636e;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .markdown-body {

@@ -281,8 +281,9 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 	if _, page := get(t, handler, "/"); strings.Contains(page, `id="_outline`) ||
 		!strings.Contains(page, `<header id="_top"><div id="_heading"><div id="_title"></div>`+
-			`<div id="_byline"></div></div><div id="_controls"><button id="_theme-toggle"`) {
-		t.Errorf("the page holds an outline or its button without the flag, or no top row with the theme button alone: %q", page)
+			`<div id="_byline"></div></div><div id="_controls"><span id="_banner">Serve Markdown `+version()+
+			`</span><button id="_theme-toggle"`) {
+		t.Errorf("the page holds an outline or its button without the flag, or no top row with the banner and the theme button alone: %q", page)
 	}
 
 	for _, style := range outlineStyles {
@@ -291,7 +292,7 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 		if !strings.Contains(page, `<nav id="_outline" class="sidebar style-`+style.name+`">`) {
 			t.Errorf("the %s page does not hold its outline: %q", style.name, page)
 		}
-		if !strings.Contains(page, `<div id="_controls"><button id="_outline-toggle"`) {
+		if !strings.Contains(page, `</span><button id="_outline-toggle"`) {
 			t.Errorf("the %s page does not hold the button hiding its outline: %q", style.name, page)
 		}
 		if !strings.Contains(page, `<body class="with-sidebar outline-left">`) {
@@ -357,7 +358,7 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 		`<a href="/docs/index.md">index.md</a>`,
 		// The list takes the outline to the right, whatever the outline was given.
 		`<body class="with-sidebar outline-right">`,
-		`<div id="_controls"><button id="_list-toggle"`,
+		`</span><button id="_list-toggle"`,
 		`</button><button id="_outline-toggle"`,
 	} {
 		if !strings.Contains(page, want) {
