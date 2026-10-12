@@ -358,9 +358,20 @@ an optional pre-release but cannot refuse leading zeros or empty identifiers, so
 job holds the tag to the semver grammar before publishing. Build metadata is refused, since Go
 does not take it in a version.
 
-`dev` is checked on every push and not built, since nothing is published from it; the builds
-run for tags alone. A release is refused for a tag whose commit is not on `main`, since `main`
-holds the stable code and releases are made from it.
+A push to `dev` is built for `darwin/arm64` and `windows/amd64` alone, the platforms it is
+tried on, and published as one prerelease under the fixed tag `dev-latest`, so its download
+URL never changes. The tag is not `dev`, which would make the name ambiguous with the branch.
+The prerelease is deleted with its tag and made again rather than moved, so the tag always
+points at the commit built, and it is never marked Latest. A dev build is given its version
+at link time with `-X main.buildVersion`, as `vX.Y.Z-dev-YYYYMMDD` from the latest release tag
+and the UTC build date, since the pseudo-version Go stamps on an untagged commit names the
+next patch release and does not read as a dev build.
+
+A release is refused for a tag whose commit is not on `main`, since `main` holds the stable
+code and releases are made from it. `./build.mjs release` pushes `dev`, `main` and the tag in
+one atomic push, so the release job never sees a tag ahead of `main`, and moves `main` with
+`git fetch . dev:main`, so the working tree stays on `dev`. Its notes are edited with `;` as
+git's comment character, so the Markdown headings in them survive git's cleanup.
 
 ## The browser assets are built from pinned packages
 

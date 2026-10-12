@@ -275,6 +275,19 @@ func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 	}
 }
 
+func TestVersionGivenAtLinkTimeNamesTheBuild(t *testing.T) {
+	defer func(saved string) { buildVersion = saved }(buildVersion)
+	buildVersion = "v2.3.1-dev-20261012"
+
+	if got := version(); got != "v2.3.1-dev-20261012" {
+		t.Errorf("version() = %q, want the version given at link time", got)
+	}
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: documentRoot(t), watchInterval: 1}
+	if _, page := get(t, handler, "/"); !strings.Contains(page, `<span id="_banner">Serve Markdown v2.3.1-dev-20261012</span>`) {
+		t.Errorf("the page banner does not name the version given at link time: %q", page)
+	}
+}
+
 func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	root := documentRoot(t)
 

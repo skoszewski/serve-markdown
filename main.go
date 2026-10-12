@@ -34,8 +34,16 @@ type contentPayload struct {
 	Error *string       `json:"error"`
 }
 
-// version returns the version this binary was built from, or "dev" outside a module build.
+// buildVersion is the version a dev build is given at link time with
+// -ldflags "-X main.buildVersion=...", empty otherwise.
+var buildVersion string
+
+// version returns the version given at link time, else the version this binary was built
+// from, or "dev" outside a module build.
 func version() string {
+	if buildVersion != "" {
+		return buildVersion
+	}
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
 	}

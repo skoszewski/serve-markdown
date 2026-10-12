@@ -12,10 +12,14 @@ side show the same file. A page reading Azure Repos is read once and again on re
 Every release carries the executable for Linux, macOS and Windows on `amd64` and `arm64`, named
 `serve-markdown-<goos>-<goarch>` (`.exe` on Windows), to download from the repository's
 Releases page. The `build` workflow in `.github/workflows/build.yml` builds the browser assets,
-checks the formatting, vets and tests the sources on every push to `dev`. Pushing a semver tag
-with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on `main` checks the sources, builds
-all six and publishes them as the release of that tag; `main` is pushed before the tag or
-together with it.
+checks the formatting, vets and tests the sources on every push to `dev`, builds the
+executables for `darwin/arm64` and `windows/amd64`, and publishes them as the `dev-latest`
+prerelease, replacing the previous one, so they download from
+`https://github.com/skoszewski/serve-markdown/releases/download/dev-latest/serve-markdown-<goos>-<goarch>`.
+Such a build names itself `vX.Y.Z-dev-YYYYMMDD`: the latest release before it and its UTC
+build date. Pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on
+`main` checks the sources, builds all six and publishes them as the release of that tag;
+`main` is pushed before the tag or together with it, as `./build.mjs release` does.
 
 From a clone, with Go and Node.js installed, `./build.mjs` writes the executable beside the
 sources; on Windows it is run as `node build.mjs`. It takes the action as its argument:
@@ -28,7 +32,11 @@ sources; on Windows it is run as `node build.mjs`. It takes the action as its ar
 - `update` moves every package `web/package.json` names to its latest release, major versions
   included, rewriting `web/package-lock.json`, and builds the assets from them. A new esbuild
   release runs its install script only once `npm install-scripts approve esbuild` in `web/`
-  has approved it.
+  has approved it;
+- `release vX.Y.Z` runs `check` on a clean `dev`, opens `$EDITOR` for the release notes,
+  prefilled with the commit subjects since the previous tag under `## Changed`, makes the
+  annotated tag `vX.Y.Z` on `dev` with them, fast-forwards `main` to `dev`, and pushes `dev`,
+  `main` and the tag in one atomic push. Lines starting with `;` are dropped from the notes.
 
 Every action but `clean` first installs the packages pinned in `web/package-lock.json` and
 builds the browser assets into `assets/build/`, since the executable embeds them. A plain
