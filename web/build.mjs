@@ -1,5 +1,5 @@
-// Builds the browser-side assets the server embeds into ../assets/build: the page script
-// bundled with the libraries it imports, the stylesheets, mermaid, and the licences of all of
+// Builds the browser-side assets the server embeds into ../assets/build: the page script and the editor,
+// each bundled with the libraries it imports, the stylesheets, mermaid, and the licences of all of
 // them.
 
 import { build } from "esbuild";
@@ -10,7 +10,19 @@ const output = "../assets/build";
 const modules = "node_modules";
 
 // The packages whose code ends up in the output, by bundling or copying.
-const packages = ["marked", "dompurify", "highlight.js", "github-markdown-css", "mermaid"];
+const packages = [
+  "marked",
+  "dompurify",
+  "highlight.js",
+  "github-markdown-css",
+  "mermaid",
+  "react",
+  "react-dom",
+  "@mdxeditor/editor",
+  "@headlessui/react",
+  "@codemirror/language",
+  "@lezer/highlight",
+];
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
@@ -21,6 +33,18 @@ await build({
   bundle: true,
   minify: true,
   format: "iife",
+  legalComments: "eof",
+});
+
+// The editor application with React and the libraries it uses, its stylesheets bundled into editor.css.
+await build({
+  entryPoints: ["src/editor/main.tsx"],
+  outfile: join(output, "editor.js"),
+  bundle: true,
+  minify: true,
+  format: "iife",
+  jsx: "automatic",
+  define: { "process.env.NODE_ENV": '"production"' },
   legalComments: "eof",
 });
 

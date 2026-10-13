@@ -3,15 +3,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "build": "tsc -p tsconfig.json && node build.mjs"
   },
   "devDependencies": {
+    "@codemirror/language": "^6.13.1",
+    "@headlessui/react": "^2.2.10",
+    "@lezer/highlight": "^1.2.5",
+    "@mdxeditor/editor": "^4.3.3",
+    "@types/mdast": "^4.0.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "dompurify": "^3.4.16",
     "esbuild": "^0.28.2",
     "github-markdown-css": "^5.9.0",
     "highlight.js": "^11.12.0",
+    "lexical": "^0.48.0",
     "marked": "^18.1.0",
-    "mermaid": "^12.1.0"
+    "mermaid": "^12.1.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

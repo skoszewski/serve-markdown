@@ -78,6 +78,10 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--front-matter` | `all` | What the top row shows of the document's front matter: `all` or `title-only` |
 | `--separators` | `side` | The lines separating the top row, the sidebars and the document: `hidden`, `top`, `side` or `all` |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
+| `--editor` | off | Edit the documents of the served directory at `/_/editor/`, see [Editor](#editor) |
+| `--editor-templates` | none | The directory of the templates new documents are created from |
+| `--editor-exclude` | none | Comma separated list of the path patterns left out of editing |
+| `--editor-spell-check` | off | Show the spell check switch and language in the editor's top bar |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
 | `--pdf` | | Print the Markdown document the path names to this PDF file and exit, see [PDF export](#pdf-export) |
 | `--pdf-page` | see [PDF export](#pdf-export) | The page `--pdf` prints on, as a comma separated list of settings, e.g. `paper:letter,font-size:11pt` |
@@ -274,6 +278,7 @@ Whatever the server was started with, these routes reach both kinds of source wh
 /_/ado/<organization>                                the projects of an Azure DevOps organization
 /_/ado/<organization>/<project>                      the Git repositories of a project
 /_/ado/<organization>/<project>/<repository><path>   a file in an Azure Repos repository
+/_/editor/                                           the editor, with --editor, see Editor
 ```
 
 An organization and a project hold no document of their own, so each is served as a list of
@@ -517,6 +522,7 @@ into `assets/build/`:
 | `github-markdown-light.css`, `github-markdown-dark.css` | github-markdown-css's light and dark themes |
 | `highlight-light.css`, `highlight-dark.css` | highlight.js's GitHub themes |
 | `mermaid.min.js` | mermaid's single-file bundle, copied as it is |
+| `editor.js`, `editor.css` | `web/src/editor/` bundled with React, MDXEditor and Headless UI, type checked first with `web/tsconfig.json` |
 | `LICENSES.md` | the name, version and licence of every package above |
 
 `web/src/highlight.js` chooses the languages code is highlighted in: highlight.js's common set
@@ -526,6 +532,89 @@ and PowerShell (`powershell`, `pwsh`, `ps`, `ps1`). Another language is one impo
 `assets/build/` is not kept in the repository: `./build.mjs` builds it before the executable,
 the `build` workflow before every check and build, and the `Dockerfile` in a Node.js stage of
 its own.
+
+## Editor
+
+`--editor` serves a visual Markdown editor of the served directory at `/_/editor/`, printed at
+startup beside the URL. It edits a local directory, so an `ado://` source with `--editor` stops
+the server.
+
+```sh
+serve-markdown --editor --editor-templates ../templates --editor-exclude reference,*.draft.md docs/
+```
+
+The editor lists the documents (`.md`, `.markdown`) below the directory, names beginning with a
+dot left out, and opens the one chosen in [MDXEditor](https://mdxeditor.dev), with a toolbar for
+the headings, the formatting, the lists, links, pictures, tables and code blocks, and a switch to
+the Markdown source and to the differences from the saved file.
+
+`Ctrl+S` or `Cmd+S` saves the file in place. The **File** menu creates a document, a document
+from a template, or a folder with an `index.md`, and saves or reverts the open file;
+leaving a file with unsaved changes asks to save or revert them. The top bar holds the document
+properties, the preview, which opens the page the server renders of the saved file, the
+settings, and the theme button, which goes from the browser's preference, drawn as a
+half-filled circle, to light, drawn as a sun, to dark, drawn as a moon, and back, the way the
+pages' own does and sharing its choice with them. The panel on the right is the outline of the document's headings; both side panels
+are resized by dragging their edges and hidden with the buttons at the ends of the top bar.
+
+The properties are kept in the front matter: `title`, `author` and `tags` are edited, `created`
+is set when the editor creates the document and `updated` whenever it saves it. The other keys
+and the comments of the front matter are kept as written. A new document is titled after its
+name, or after its folder for an `index.md` or `README.md`, dashes and underscores read as
+spaces.
+
+A template is a Markdown file of the `--editor-templates` directory; its `title`, `author` and
+`description` describe it in the list, and a document created from it takes its body, with the
+author from `git config user.name` and `user.email`.
+
+An `editor.json` in the served directory, read at startup and printed in the banner, names the
+folders below it whose documents are edited and the paths left out, the way a repository keeps
+the settings of its own documents:
+
+```json
+{
+  "directories": ["docs", "guides"],
+  "exclude": ["tmp", "node_modules", "docs/reference"]
+}
+```
+
+Both keys may be left out: without `directories` the whole served directory is edited, and a
+new document must be created within one of them. Its `exclude` patterns are added to those of
+`--editor-exclude`. A key the file does not know, a folder outside the served directory, or a
+pattern that does not read stops the server with a message naming it.
+
+Exclusion patterns are matched as `path.Match` globs: one without a slash against the name of the
+file and of every folder it lies in, one with a slash against its path below the served
+directory and the path of every folder it lies in. `reference` leaves out every folder named so,
+`docs/reference` that one folder. `**` and the `!` of `.gitignore` are not read.
+
+The settings, kept in the browser, choose:
+
+| Setting | Values |
+|---|---|
+| Colour theme | GitHub, the default, Visual Studio Code (Light+ and Dark+) - white and blue, Solarized, Catppuccin (Latte and Mocha), Gruvbox, Monochrome (Radix Gray) - greys alone |
+| Appearance | the browser's preference, light or dark, shared with the theme button of the pages |
+| Document format | Markdown, the default, or MDX (Markdown with JSX), see below |
+| Text button labels | text rather than icons on the top bar buttons |
+| Save and Revert buttons | the two buttons in the top bar as well as in the **File** menu |
+| Git controls | the branch, **Fetch**, **Pull**, **Commit** and **Push** above the file list |
+
+The document format says how a document is read. **Markdown** reads it as CommonMark with
+GitHub's extensions, as the pages render it: HTML - a block of its own, or a tag within a
+paragraph or a table cell - is kept as written, shown as its source, and edited in source mode,
+while the Markdown around it stays editable. An autolink such as `<https://example.com>` is
+written back as `[https://example.com](https://example.com)`, which renders the same. **MDX**
+reads every tag as JSX, which takes `<br/>` but not `<br>`, nor an autolink; a document holding
+them is refused with a parse error, and opens in source mode alone.
+
+The Git controls run `git` in the served directory: **Commit** adds and commits the changed
+editable files with the message given, **Push** sets the upstream branch on the first remote of
+a branch that has none, **Pull** fast-forwards only, and switching the branch reloads the file
+list and the open file.
+
+The editor writes files, so it is off unless asked for, and it answers a request changing a file
+only from its own page: a request from another origin, or with a body that is not JSON, is
+refused.
 
 ## PDF export
 

@@ -8,7 +8,7 @@ WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
-COPY web/build.mjs ./
+COPY web/build.mjs web/tsconfig.json ./
 COPY web/src ./src
 RUN npm run build
 

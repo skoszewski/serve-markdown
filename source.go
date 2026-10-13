@@ -82,6 +82,8 @@ type server struct {
 	// versions reads the branches and tags a page offers, and is Azure Repos' own answer
 	// unless a test gives another.
 	versions func(source) *versionPicker
+	// editor serves the Markdown editor under editorRoute, nil without --editor.
+	editor *editor
 }
 
 // searched returns the documents a folder is read as: the ones --search names, and the ones

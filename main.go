@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -112,6 +113,23 @@ func run() error {
 		return nil
 	}
 
+	// The editor writes the files of the served directory, so it needs a local one.
+	editorConfigFile := ""
+	if settings.editor {
+		if handler.defaultSource.kind != kindLocal {
+			return fmt.Errorf("--editor edits a local directory, not %s", sourceDescription)
+		}
+		// editor.json in the served directory adds its folders and exclusions to the flags'.
+		config, file, err := readEditorConfig(handler.rootDir)
+		if err != nil {
+			return err
+		}
+		handler.editor = &editor{rootDir: handler.rootDir, templatesDir: settings.editorTemplates,
+			directories: config.Directories, exclude: append(slices.Clone(settings.editorExclude), config.Exclude...),
+			spellCheck: settings.editorSpellCheck}
+		editorConfigFile = file
+	}
+
 	// The seconds a local page checks at; a page reading Azure Repos checks for nothing.
 	handler.watchInterval = settings.watchInterval(kindLocal)
 
@@ -132,6 +150,12 @@ func run() error {
 		logInfo("  Watching: on the browser's refresh")
 	}
 	logInfo("  URL:      %shttp://%s%s%s", colorCyan, address, handler.sourceRoute(), colorReset)
+	if handler.editor != nil {
+		logInfo("  Editor:   %shttp://%s%s%s", colorCyan, address, editorRoute, colorReset)
+		if editorConfigFile != "" {
+			logInfo("            configured by '%s'", editorConfigFile)
+		}
+	}
 	logInfo("")
 
 	return handler.serve(listener)
@@ -208,7 +232,8 @@ func (s *server) serve(listener net.Listener) error {
 }
 
 // ServeHTTP serves a page shell for every route, and the document that route addresses at
-// /content. A route naming a picture or another binary file is answered with its bytes.
+// /content. A route naming a picture or another binary file is answered with its bytes, and
+// one under editorRoute by the editor when --editor runs it.
 //
 // A page route takes "outline", "list" and "ado" query parameters of the settings --outline,
 // --list and --ado themselves take, which it applies onto them for that page; a parameter
@@ -222,6 +247,18 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 	if strings.HasPrefix(request.URL.Path, assetRoute) {
 		buildFiles.ServeHTTP(writer, request)
+		return
+	}
+
+	if request.URL.Path+"/" == editorRoute || strings.HasPrefix(request.URL.Path, editorRoute) {
+		switch {
+		case s.editor == nil:
+			http.NotFound(writer, request)
+		case request.URL.Path+"/" == editorRoute:
+			http.Redirect(writer, request, editorRoute, http.StatusMovedPermanently)
+		default:
+			s.editor.ServeHTTP(writer, request)
+		}
 		return
 	}
 

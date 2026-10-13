@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -165,6 +166,13 @@ type configuration struct {
 	showVersion   bool
 	watch         float64
 	file          string
+	// editor runs the Markdown editor of the served directory, with the templates in
+	// editorTemplates, the paths editorExclude matches left out, and the spell check controls
+	// shown with editorSpellCheck.
+	editor           bool
+	editorTemplates  string
+	editorExclude    []string
+	editorSpellCheck bool
 }
 
 // watchInterval returns the seconds between a page's checks for changes to its document, for
@@ -232,6 +240,10 @@ func readConfiguration() (configuration, error) {
 		strings.Join(slices.Sorted(maps.Keys(pdfLengthUnits)), "|"),
 		strings.Join(pdfHeaders, "|"), strings.Join(pdfFooters, "|"), strings.Join(pdfFontSizeUnits, "|"),
 		defaultPDFPage.Paper, defaultPDFPage.Orientation, defaultPDFPage.Header, defaultPDFPage.Footer))
+	editor := flag.Bool("editor", false, "Edit the documents of the served directory at "+editorRoute)
+	editorTemplates := flag.String("editor-templates", "", "Directory of the templates new documents are created from")
+	editorExclude := flag.String("editor-exclude", "", "Comma separated list of the path patterns left out of editing")
+	editorSpellCheck := flag.Bool("editor-spell-check", false, "Show the spell check controls in the editor")
 	named := flag.String("config", "", "Read the server configuration from the file")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 	flag.IntVar(&debugLevel, "debug", 0, "Debugging level: 0 for none, >0 for debugging turned on")
@@ -264,6 +276,18 @@ func readConfiguration() (configuration, error) {
 	settings.mermaid = choose(written, "mermaid", *mermaid, fromFile.Mermaid)
 	settings.indexOnly = choose(written, "index-only", *indexOnly, fromFile.IndexOnly)
 	settings.css = choose(written, "css", *css, fromFile.CSS)
+	settings.editor = choose(written, "editor", *editor, fromFile.Editor)
+	settings.editorTemplates = choose(written, "editor-templates", *editorTemplates, fromFile.EditorTemplates)
+	settings.editorSpellCheck = choose(written, "editor-spell-check", *editorSpellCheck, fromFile.EditorSpellCheck)
+	settings.editorExclude = splitNames(*editorExclude)
+	if !written["editor-exclude"] && fromFile.EditorExclude != nil {
+		settings.editorExclude = fromFile.EditorExclude.names
+	}
+	for _, pattern := range settings.editorExclude {
+		if _, err := path.Match(pattern, ""); err != nil {
+			return configuration{}, fmt.Errorf("'%s' is not a path pattern of 'editor-exclude' (%v)", pattern, err)
+		}
+	}
 
 	settings.contentWidth = choose(written, "content-width", *contentWidth, fromFile.ContentWidth)
 	if !slices.Contains(contentWidths, settings.contentWidth) {
@@ -386,6 +410,11 @@ type fileConfig struct {
 	FrontMatter   *string        `yaml:"front-matter"`
 	Search        *namesValue    `yaml:"search"`
 	PDFPage       *settingsValue `yaml:"pdf-page"`
+
+	Editor           *bool       `yaml:"editor"`
+	EditorTemplates  *string     `yaml:"editor-templates"`
+	EditorExclude    *namesValue `yaml:"editor-exclude"`
+	EditorSpellCheck *bool       `yaml:"editor-spell-check"`
 }
 
 // namesValue is how a list of names is written in a file: a sequence of them, or the comma

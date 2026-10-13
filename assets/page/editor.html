@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serve Markdown Editor</title>
+<link rel="stylesheet" href="/_/assets/editor.css">
+<script>
+  // Draws the editor in the chosen colour theme before the application starts.
+  try {
+    const chosen = localStorage.getItem("serve-markdown.theme");
+    const dark = chosen === "dark" || (chosen !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.palette = localStorage.getItem("serve-markdown.editor.palette") || "github";
+    document.documentElement.dataset.mode = dark ? "dark" : "light";
+  } catch {}
+</script>
+</head>
+<body>
+<div id="root"></div>
+<script src="/_/assets/editor.js"></script>
+</body>
+</html>

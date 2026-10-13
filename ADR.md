@@ -460,3 +460,79 @@ document and the selector it takes is easy to get wrong: github-markdown-css set
 the printed page, and everything the stylesheet sizes in `em` follows it. It takes `pt` and
 `px` alone, the units a printed page and the stylesheet are measured in, and is left out of
 the page when it is not named, so the stylesheet's own size stands.
+
+## The editor is a React application served by the server itself
+
+The editor is a single page application built on MDXEditor, a React component with no
+counterpart outside React. Its sources are TypeScript
+in `web/src/editor/`, bundled by the same esbuild step as the page script, type checked by `tsc`
+before it, and embedded in the binary with the other built assets. Its backend is the Go server:
+the API under `/_/editor/api/`, the shell in `assets/page/editor.html`.
+
+Serving it from the same server as the pages lets the preview open the page the server renders
+of the file, with no address of another server to configure, and the pictures of a document are
+read from the routes that already serve them.
+
+## The editor is off unless asked for, and edits the served directory
+
+The server reads files; the editor writes them, commits and pushes, so it takes `--editor`. It
+edits below the directory served, since the server is already pointed at one and a path outside
+it is refused everywhere else.
+
+Which folders below it are edited and what is left out belong to the documents rather than to
+the server's run, so they are kept beside them in `editor.json`, as the editor this one follows
+kept them: `directories`, relative to the served directory and the whole of it when left out,
+and `exclude`. `--editor-exclude` adds patterns for one run. The patterns are `path.Match` globs
+read the way `.gitignore` reads a pattern with and without a slash, without a gitignore library,
+so `**` and `!` are not read.
+
+A request changing a file is answered only without an `Origin` of another host and with a JSON
+body. A page of another site can send a form to the loopback address, but neither JSON nor its
+own origin past those checks, and the listen address stays `127.0.0.1` by default.
+
+## The front matter is edited as a YAML node tree
+
+A document's front matter carries keys the editor does not know - `css`, `pdf`, a site's own -
+and comments. The editor reads it into a `yaml.Node` mapping and changes only the keys it owns,
+so the rest is written back in its order, with its comments and its styles. `created` and
+`updated` are written as YAML timestamps in UTC seconds.
+
+## The editor's colour themes are CSS variables over published palettes
+
+The themes are GitHub's Primer, Visual Studio Code's classic Light+ and Dark+, Solarized,
+Catppuccin (Latte for light, Mocha for dark), Gruvbox and the Gray scale of Radix Colors, each an
+MIT-licensed palette with a light and a dark variant. GitHub is the default, since its page and
+code colours are those of github-markdown-css, which draws the pages the server renders, and its
+top bar is GitHub's own header. Light+ and Dark+ keep the white page under the blue status bar
+VS Code is known by. Radix Gray is a neutral scale with no tint, drawing the monochrome theme,
+whose accent, errors and code are greys of the same scale. Each sets one list of variables on the
+root element, chosen by its `data-palette` and `data-mode`; the rules and MDXEditor's own
+variables read them, so a theme is added by one block per variant.
+
+The code blocks of MDXEditor carry a light CodeMirror theme it always adds. The editor adds a
+highlighter emitting fixed `cm-t-*` classes and colours them, and the editor's chrome, with
+selectors that outweigh that theme's single class rules, rather than replacing MDXEditor's
+CodeMirror setup.
+
+The appearance - the browser's preference, light or dark - is the one the pages' theme button
+stores, so the editor and the pages agree.
+
+## The editor edits plain Markdown
+
+The toolbar offers what plain Markdown writes and the page renders: headings, formatting,
+lists, links, pictures, tables, rules and code blocks. MDXEditor's directive and admonition
+syntax (`:::note`) is left out, since the page's renderer does not draw it and a document would
+show it as text.
+
+## The editor reads plain Markdown unless told to read MDX
+
+MDXEditor reads a document as MDX: it turns CommonMark's HTML and autolinks off and parses
+every tag as JSX, which refuses `<br>`, unquoted attributes and `<https://...>` - Markdown the
+pages render without complaint. The editor reads plain Markdown by default, with MDXEditor's
+`suppressHtmlProcessing`, and MDX only when the setting asks for it.
+
+MDXEditor then has no reader for the HTML it no longer parses, and refuses the document. The
+editor adds one, `rawHtmlPlugin`, below MDXEditor's own readers of `<img>` and the formatting
+tags: the HTML is kept in a node of its own, a block at the top level and inline elsewhere, shown
+as its source and written back as it was read. Editing it belongs to source mode, since a form
+of every HTML element is beyond the editor and the text is the document's own.
