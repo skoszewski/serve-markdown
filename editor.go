@@ -61,38 +61,34 @@ type editorConfig struct {
 	Exclude     []string `json:"exclude"`
 }
 
-// readEditorConfig reads editorConfigName from the served directory, returning nothing without
-// the file. A folder must be relative and stay below the served directory, and a pattern must
-// read as a path.Match pattern.
-func readEditorConfig(rootDir string) (editorConfig, string, error) {
+// readEditorConfig reads the editor configuration file, failing with an error that wraps
+// fs.ErrNotExist when there is no such file. A folder must be relative and stay below the
+// served directory, and a pattern must read as a path.Match pattern.
+func readEditorConfig(file string) (editorConfig, error) {
 	var config editorConfig
-	file := filepath.Join(rootDir, editorConfigName)
 	content, err := os.ReadFile(file)
-	if errors.Is(err, fs.ErrNotExist) {
-		return config, "", nil
-	}
 	if err != nil {
-		return config, "", err
+		return config, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&config); err != nil {
-		return config, "", fmt.Errorf("cannot read %s: %v", file, err)
+		return config, fmt.Errorf("cannot read %s: %v", file, err)
 	}
 	for index, directory := range config.Directories {
 		directory = strings.Trim(path.Clean(filepath.ToSlash(directory)), "/")
 		if filepath.IsAbs(config.Directories[index]) || strings.HasPrefix(config.Directories[index], "/") ||
 			directory == ".." || strings.HasPrefix(directory, "../") {
-			return config, "", fmt.Errorf("%s: '%s' is not a folder below the served directory", file, config.Directories[index])
+			return config, fmt.Errorf("%s: '%s' is not a folder below the served directory", file, config.Directories[index])
 		}
 		config.Directories[index] = directory
 	}
 	for _, pattern := range config.Exclude {
 		if _, err := path.Match(strings.Trim(pattern, "/"), ""); err != nil {
-			return config, "", fmt.Errorf("%s: '%s' is not a path pattern (%v)", file, pattern, err)
+			return config, fmt.Errorf("%s: '%s' is not a path pattern (%v)", file, pattern, err)
 		}
 	}
-	return config, file, nil
+	return config, nil
 }
 
 // inDirectories reports whether a path relative to the served directory lies in one of the

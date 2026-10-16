@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -372,5 +373,33 @@ func TestPDFPageFor(t *testing.T) {
 		if _, err := pdfPageFor(test.fromFile, test.fromDocument, test.flag); err == nil {
 			t.Errorf("pdfPageFor(%+v, %v, %q) raised no error", test.fromFile, test.fromDocument, test.flag)
 		}
+	}
+}
+
+func TestEditorConfigFlagNeedsTheEditor(t *testing.T) {
+	root := documentRoot(t)
+	userConfigDir(t)
+	t.Chdir(root)
+	writeConfig(t, root, configName, "editor-config: custom.json\n")
+
+	command := flag.CommandLine
+	defer func() { flag.CommandLine = command }()
+	flag.CommandLine = flag.NewFlagSet("serve-markdown", flag.ContinueOnError)
+	arguments := os.Args
+	defer func() { os.Args = arguments }()
+
+	os.Args = []string{"serve-markdown"}
+	if _, err := readConfiguration(); err == nil || !strings.Contains(err.Error(), "--editor-config needs --editor") {
+		t.Errorf("error = %v, want one saying --editor-config needs --editor", err)
+	}
+
+	flag.CommandLine = flag.NewFlagSet("serve-markdown", flag.ContinueOnError)
+	os.Args = []string{"serve-markdown", "--editor"}
+	settings, err := readConfiguration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.editorConfig != "custom.json" {
+		t.Errorf("editorConfig = %q, want the file's", settings.editorConfig)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"net"
 	"net/http"
@@ -114,20 +115,30 @@ func run() error {
 	}
 
 	// The editor writes the files of the served directory, so it needs a local one.
-	editorConfigFile := ""
+	editorConfigFile, editorWarning := "", ""
 	if settings.editor {
 		if handler.defaultSource.kind != kindLocal {
 			return fmt.Errorf("--editor edits a local directory, not %s", sourceDescription)
 		}
-		// editor.json in the served directory adds its folders and exclusions to the flags'.
-		config, file, err := readEditorConfig(handler.rootDir)
-		if err != nil {
-			return err
+		// The file --editor-config names must read; editor.json in the served directory may not.
+		file := settings.editorConfig
+		if file == "" {
+			file = filepath.Join(handler.rootDir, editorConfigName)
+		}
+		config, err := readEditorConfig(file)
+		switch {
+		case err != nil && settings.editorConfig != "":
+			return fmt.Errorf("--editor-config: %v", err)
+		case errors.Is(err, fs.ErrNotExist):
+			editorWarning = fmt.Sprintf("there is no %s in '%s', the whole directory is edited", editorConfigName, handler.rootDir)
+		case err != nil:
+			editorWarning = fmt.Sprintf("%v; the file is ignored and the whole directory is edited", err)
+		default:
+			editorConfigFile = file
 		}
 		handler.editor = &editor{rootDir: handler.rootDir, templatesDir: settings.editorTemplates,
 			directories: config.Directories, exclude: append(slices.Clone(settings.editorExclude), config.Exclude...),
 			spellCheck: settings.editorSpellCheck}
-		editorConfigFile = file
 	}
 
 	// The seconds a local page checks at; a page reading Azure Repos checks for nothing.
@@ -154,6 +165,9 @@ func run() error {
 		logInfo("  Editor:   %shttp://%s%s%s", colorCyan, address, editorRoute, colorReset)
 		if editorConfigFile != "" {
 			logInfo("            configured by '%s'", editorConfigFile)
+		}
+		if editorWarning != "" {
+			logInfo("            %sWarning: %s%s", colorYellow, editorWarning, colorReset)
 		}
 	}
 	logInfo("")

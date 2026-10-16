@@ -486,6 +486,15 @@ and `exclude`. `--editor-exclude` adds patterns for one run. The patterns are `p
 read the way `.gitignore` reads a pattern with and without a slash, without a gitignore library,
 so `**` and `!` are not read.
 
+A missing `editor.json`, or one that does not read, is a warning in the banner rather than a
+failure: the server is already serving, and a file that only narrows what is edited is not worth
+refusing to start for. The file is then set aside whole rather than read in part, so the editor
+never edits under exclusions the author did not fully write.
+
+`--editor-config` is the opposite: a path written on purpose is not guessed at. The file it names
+must exist and read, or the server stops, since a warning would leave the editor open on
+documents the reader meant to hold back.
+
 A request changing a file is answered only without an `Origin` of another host and with a JSON
 body. A page of another site can send a form to the loopback address, but neither JSON nor its
 own origin past those checks, and the listen address stays `127.0.0.1` by default.

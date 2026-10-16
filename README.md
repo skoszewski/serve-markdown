@@ -80,6 +80,7 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--editor` | off | Edit the documents of the served directory at `/_/editor/`, see [Editor](#editor) |
 | `--editor-templates` | none | The directory of the templates new documents are created from |
+| `--editor-config` | `editor.json` in the served directory | The editor configuration file to read, which must exist and read, see [Editor](#editor) |
 | `--editor-exclude` | none | Comma separated list of the path patterns left out of editing |
 | `--editor-spell-check` | off | Show the spell check switch and language in the editor's top bar |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
@@ -580,8 +581,17 @@ the settings of its own documents:
 
 Both keys may be left out: without `directories` the whole served directory is edited, and a
 new document must be created within one of them. Its `exclude` patterns are added to those of
-`--editor-exclude`. A key the file does not know, a folder outside the served directory, or a
-pattern that does not read stops the server with a message naming it.
+`--editor-exclude`. A missing file, or one that does not read - an unknown key, a folder outside
+the served directory, or a pattern that does not read - is warned of in the banner and set aside,
+the editor then editing the whole served directory but for what `--editor-exclude` names.
+
+`--editor-config` names the file to read in place of `editor.json`, wherever it stands; its
+folders are still relative to the served directory. The file named must exist and read, or the
+server stops with a message naming it, and the flag needs `--editor`:
+
+```sh
+serve-markdown --editor --editor-config ~/docs-editor.json docs/
+```
 
 Exclusion patterns are matched as `path.Match` globs: one without a slash against the name of the
 file and of every folder it lies in, one with a slash against its path below the served

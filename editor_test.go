@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -295,12 +297,9 @@ func TestEditorReadsItsConfigurationFile(t *testing.T) {
 	root, handler := editorRoot(t)
 	writeFile(t, filepath.Join(root, editorConfigName), `{"directories": ["docs/"], "exclude": ["drafts"]}`)
 
-	config, file, err := readEditorConfig(root)
+	config, err := readEditorConfig(filepath.Join(root, editorConfigName))
 	if err != nil {
 		t.Fatal(err)
-	}
-	if file != filepath.Join(root, editorConfigName) {
-		t.Errorf("file = %q", file)
 	}
 	handler.editor.directories, handler.editor.exclude = config.Directories, config.Exclude
 
@@ -328,11 +327,11 @@ func TestEditorRefusesABadConfigurationFile(t *testing.T) {
 	} {
 		root := t.TempDir()
 		writeFile(t, filepath.Join(root, editorConfigName), content)
-		if _, _, err := readEditorConfig(root); err == nil {
+		if _, err := readEditorConfig(filepath.Join(root, editorConfigName)); err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
-	if _, file, err := readEditorConfig(t.TempDir()); err != nil || file != "" {
-		t.Errorf("no file: file = %q, error = %v", file, err)
+	if _, err := readEditorConfig(filepath.Join(t.TempDir(), editorConfigName)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("no file: error = %v, want one wrapping fs.ErrNotExist", err)
 	}
 }

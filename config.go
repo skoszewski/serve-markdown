@@ -167,10 +167,11 @@ type configuration struct {
 	watch         float64
 	file          string
 	// editor runs the Markdown editor of the served directory, with the templates in
-	// editorTemplates, the paths editorExclude matches left out, and the spell check controls
-	// shown with editorSpellCheck.
+	// editorTemplates, the configuration file editorConfig names, the paths editorExclude
+	// matches left out, and the spell check controls shown with editorSpellCheck.
 	editor           bool
 	editorTemplates  string
+	editorConfig     string
 	editorExclude    []string
 	editorSpellCheck bool
 }
@@ -242,6 +243,8 @@ func readConfiguration() (configuration, error) {
 		defaultPDFPage.Paper, defaultPDFPage.Orientation, defaultPDFPage.Header, defaultPDFPage.Footer))
 	editor := flag.Bool("editor", false, "Edit the documents of the served directory at "+editorRoute)
 	editorTemplates := flag.String("editor-templates", "", "Directory of the templates new documents are created from")
+	editorConfig := flag.String("editor-config", "", "Existing editor configuration file to read instead of editor.json "+
+		"in the served directory")
 	editorExclude := flag.String("editor-exclude", "", "Comma separated list of the path patterns left out of editing")
 	editorSpellCheck := flag.Bool("editor-spell-check", false, "Show the spell check controls in the editor")
 	named := flag.String("config", "", "Read the server configuration from the file")
@@ -279,6 +282,10 @@ func readConfiguration() (configuration, error) {
 	settings.editor = choose(written, "editor", *editor, fromFile.Editor)
 	settings.editorTemplates = choose(written, "editor-templates", *editorTemplates, fromFile.EditorTemplates)
 	settings.editorSpellCheck = choose(written, "editor-spell-check", *editorSpellCheck, fromFile.EditorSpellCheck)
+	settings.editorConfig = choose(written, "editor-config", *editorConfig, fromFile.EditorConfig)
+	if settings.editorConfig != "" && !settings.editor {
+		return configuration{}, errors.New("--editor-config needs --editor")
+	}
 	settings.editorExclude = splitNames(*editorExclude)
 	if !written["editor-exclude"] && fromFile.EditorExclude != nil {
 		settings.editorExclude = fromFile.EditorExclude.names
@@ -413,6 +420,7 @@ type fileConfig struct {
 
 	Editor           *bool       `yaml:"editor"`
 	EditorTemplates  *string     `yaml:"editor-templates"`
+	EditorConfig     *string     `yaml:"editor-config"`
 	EditorExclude    *namesValue `yaml:"editor-exclude"`
 	EditorSpellCheck *bool       `yaml:"editor-spell-check"`
 }
