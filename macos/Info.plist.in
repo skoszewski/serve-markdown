@@ -18,6 +18,8 @@
 	<string>@SHORT_VERSION@</string>
 	<key>CFBundleVersion</key>
 	<string>@SHORT_VERSION@</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright (c) 2026 Slawomir Koszewski. MIT License.</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>

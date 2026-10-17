@@ -53,6 +53,19 @@ struct MenuContent: View {
                 }
             }
         }
+        if !manager.recent.isEmpty {
+            Menu("Serve Recent") {
+                ForEach(manager.recent, id: \.path) { url in
+                    Button((url.path as NSString).abbreviatingWithTildeInPath) {
+                        manager.start(url, editor: editor)
+                    }
+                }
+                Divider()
+                Button("Clear Menu") {
+                    manager.recent.removeAll()
+                }
+            }
+        }
         Toggle("Enable Editor", isOn: $editor)
 
         if !manager.instances.isEmpty {
@@ -102,6 +115,13 @@ struct MenuContent: View {
             }
         ))
         Divider()
+        Button("About Serve Markdown") {
+            // The panel opens once the menu has closed.
+            DispatchQueue.main.async {
+                activateApp()
+                NSApp.orderFrontStandardAboutPanel(nil)
+            }
+        }
         Button("Quit Serve Markdown") {
             NSApp.terminate(nil)
         }

@@ -39,6 +39,13 @@ final class Instance: Identifiable {
 @MainActor
 final class InstanceManager: ObservableObject {
     @Published private(set) var instances: [Instance] = []
+    /// The folders and files served last, the latest first, kept across launches.
+    @Published var recent: [URL] = (UserDefaults.standard.stringArray(forKey: "recent") ?? [])
+        .map { URL(fileURLWithPath: $0) } {
+        didSet {
+            UserDefaults.standard.set(recent.map(\.path), forKey: "recent")
+        }
+    }
     private var allStopped: (() -> Void)?
 
     /// Serves the folder or file at url on a free port of 127.0.0.1, with or without the
@@ -110,6 +117,7 @@ final class InstanceManager: ObservableObject {
             return
         }
         instances.append(instance)
+        recent = Array(([url] + recent.filter { $0.path != url.path }).prefix(5))
     }
 
     /// Interrupts the instance, and terminates it if it still runs 6 seconds later.

@@ -720,6 +720,9 @@ The menu holds:
 
 - **Serve Folder or File...** opens the system open dialog for a folder or a `.md` /
   `.markdown` file and serves it;
+- **Serve Recent** lists the last five folders and files served, the latest first, and serves
+  the one chosen again, with or without the editor as **Enable Editor** says; **Clear Menu**
+  empties the list;
 - **Enable Editor** starts the next instance with `--editor` when ticked, and without it
   otherwise;
 - one submenu for each running instance, named `<name> - :<port>`, with **Open in Browser**,
@@ -727,6 +730,7 @@ The menu holds:
 - **Stop All**, while any instance runs;
 - **Launch at Login** registers the app as a login item, which macOS may ask to approve in
   System Settings > General > Login Items;
+- **About Serve Markdown** shows the app's version;
 - **Quit Serve Markdown**.
 
 An instance runs `serve-markdown --listen-address 127.0.0.1 --port <port> --editor=<true|false>
