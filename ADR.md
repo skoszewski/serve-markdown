@@ -545,3 +545,32 @@ editor adds one, `rawHtmlPlugin`, below MDXEditor's own readers of `<img>` and t
 tags: the HTML is kept in a node of its own, a block at the top level and inline elsewhere, shown
 as its source and written back as it was read. Editing it belongs to source mode, since a form
 of every HTML element is beyond the editor and the text is the document's own.
+
+## The menu bar app is a Swift package assembled by build.mjs
+
+The menu bar app is SwiftUI's `MenuBarExtra` in the `.menu` style, with `LSUIElement` keeping it
+out of the Dock, and `SMAppService.mainApp` registering it as a login item. It is a Swift
+package built by SwiftPM with the Command Line Tools, without an Xcode project, so the `.app`
+bundle is assembled by `./build.mjs macos` rather than by Xcode: the executables, an
+`Info.plist` written from `macos/Info.plist.in` with the version of the latest tag, and
+`PkgInfo`. `build.mjs` stays the project's one build script.
+
+The assembly and the signing follow `packaging/macos` of storytold/pdfcraft, which builds an
+app bundle without Xcode the same way. The bundle is signed inside-out with the hardened
+runtime and an empty set of entitlements - the bundled serve-markdown first, then the app,
+without `--deep` - and verified with `codesign --verify --strict --deep`. The identity is
+`MACOS_SIGN_IDENTITY`, ad-hoc by default since the app is built for local use; a Developer ID
+identity and notarization would make it distributable.
+
+The SDK of the Command Line Tools declares SwiftUI's `@State` as a macro whose plugin they do
+not ship, so the menu holds no `@State`: its state lives in an `ObservableObject` and in
+`@AppStorage`, and the login item's status is read from `SMAppService` each time the menu is
+drawn.
+
+The app carries its own serve-markdown, so it works without one installed and runs the version
+it was built with. It chooses the port itself, since serve-markdown prints the address it was
+asked for rather than the one it bound, and `--port 0` would leave the port unknown. Each
+instance runs in the served folder, as a run from a terminal there would, and is given the
+address, the port and the editor on the command line, which stand above a configuration file,
+so the menu decides them. Its output goes to a log file rather than a pipe, so nothing has to
+drain it, Console opens it, and it outlives the instance for the report of an unasked exit.

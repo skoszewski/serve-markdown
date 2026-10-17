@@ -27,7 +27,9 @@ sources; on Windows it is run as `node build.mjs`. It takes the action as its ar
 - `build`, the default, writes the executable;
 - `test` runs the tests;
 - `check` runs the formatting check, `go vet` and the tests;
-- `clean` removes the executables;
+- `clean` removes the executables, the menu bar app and its Swift build;
+- `macos`, on macOS alone, builds the menu bar app `dist/ServeMarkdown.app` (see
+  [macOS menu bar app](#macos-menu-bar-app));
 - `assets` builds the browser assets alone (see [Browser assets](#browser-assets));
 - `update` moves every package `web/package.json` names to its latest release, major versions
   included, rewriting `web/package-lock.json`, and builds the assets from them. A new esbuild
@@ -697,6 +699,54 @@ picture, a diagram or a quotation is kept whole on one page unless it is longer 
 Chrome or Chromium must be installed where the server runs, and is found where
 [chromedp](https://github.com/chromedp/chromedp) looks for it. The container image carries
 no browser, so it does not print.
+
+## macOS menu bar app
+
+`./build.mjs macos` builds `dist/ServeMarkdown.app`, a menu bar app for macOS 13 or later that
+starts serve-markdown on a folder or a Markdown file and keeps it running without a terminal.
+It shows an icon in the menu bar, and no Dock icon or window. It needs the Command Line Tools'
+Swift (`xcode-select --install`), not Xcode, and is built locally only.
+
+The app holds its own serve-markdown, built from the same sources, and is signed with the
+hardened runtime by the identity in `MACOS_SIGN_IDENTITY`, ad-hoc when it is not set.
+
+```sh
+./build.mjs macos
+cp -R dist/ServeMarkdown.app ~/Applications/
+open ~/Applications/ServeMarkdown.app
+```
+
+The menu holds:
+
+- **Serve Folder or File...** opens the system open dialog for a folder or a `.md` /
+  `.markdown` file and serves it;
+- **Enable Editor** starts the next instance with `--editor` when ticked, and without it
+  otherwise;
+- one submenu for each running instance, named `<name> - :<port>`, with **Open in Browser**,
+  **Open Editor** for an instance with the editor, **Show Log** and **Stop**;
+- **Stop All**, while any instance runs;
+- **Launch at Login** registers the app as a login item, which macOS may ask to approve in
+  System Settings > General > Login Items;
+- **Quit Serve Markdown**.
+
+An instance runs `serve-markdown --listen-address 127.0.0.1 --port <port> --editor=<true|false>
+<path>` in the served folder, or in the folder of the served file, so it reads the
+`serve-markdown.yaml` there as a run from a terminal in that folder would, else
+`~/.config/serve-markdown/config.yaml`. The app picks a free port itself, and the address, the
+port and the editor are always written on the command line, so they stand above any
+configuration file.
+
+The output of each instance goes to `~/Library/Logs/ServeMarkdown/<name>-<port>.log`, written
+anew at each start; **Show Log** opens it in Console. An instance that exits unasked, such as
+on a configuration error, is reported with the last lines of its log.
+
+**Stop** interrupts the instance, as Ctrl-C does, and terminates it if it still runs 6 seconds
+later. Quitting the app, logging out and shutting down stop every instance the same way. An
+instance outlives the app only when the app itself crashes.
+
+A login item registered by one build may need **Launch at Login** turned off and on again after
+the app is rebuilt or moved. The app is registered from where it runs, so it is copied to
+`~/Applications` before the option is turned on.
 
 ## Licence
 

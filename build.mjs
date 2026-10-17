@@ -1,23 +1,25 @@
 #!/usr/bin/env node
 
 // Builds, tests, checks and releases serve-markdown, and builds the assets it embeds.
-// Usage: ./build.mjs [build|test|check|clean|assets|update] [<goos>/<goarch>]
+// Usage: ./build.mjs [build|test|check|clean|assets|update|macos] [<goos>/<goarch>]
 //        ./build.mjs release vX.Y.Z
 //
 // The platform defaults to the host's. Naming one builds for it instead, writing
 // serve-markdown-<goos>-<goarch>; it applies to the build action alone, since the tests run on
 // the host. The update action moves every package web/package.json names to its latest
-// release, rewriting web/package-lock.json, and builds the assets from them. The release
+// release, rewriting web/package-lock.json, and builds the assets from them. The macos action,
+// on macOS alone, writes the menu bar app dist/ServeMarkdown.app with serve-markdown inside it,
+// signed by $MACOS_SIGN_IDENTITY, ad-hoc when it is not set. The release
 // action checks dev, tags it with notes edited in $EDITOR, prefilled with the commit subjects
 // since the previous tag, fast-forwards main to it, and pushes dev, main and the tag together.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const usage = "usage: ./build.mjs [build|test|check|clean|assets|update] [<goos>/<goarch>]\n" +
+const usage = "usage: ./build.mjs [build|test|check|clean|assets|update|macos] [<goos>/<goarch>]\n" +
   "       ./build.mjs release vX.Y.Z";
 const root = dirname(fileURLToPath(import.meta.url));
 const [action = "build", argument = ""] = process.argv.slice(2);
@@ -60,8 +62,13 @@ if (platform !== "") {
   binary = `serve-markdown-${goos}-${goarch}${goos === "windows" ? ".exe" : ""}`;
 }
 
-if (!["build", "test", "check", "clean", "assets", "update", "release"].includes(action)) {
+if (!["build", "test", "check", "clean", "assets", "update", "macos", "release"].includes(action)) {
   console.error(usage);
+  process.exit(2);
+}
+
+if (action === "macos" && (process.platform !== "darwin" || platform !== "")) {
+  console.error("the macos action builds on macOS, for the host");
   process.exit(2);
 }
 
@@ -132,11 +139,48 @@ switch (action) {
     }
     break;
   }
+  case "macos": {
+    // The bundle is assembled by hand and signed inside-out with the hardened runtime: the
+    // bundled serve-markdown first, then the app.
+    const app = `${root}/dist/ServeMarkdown.app`;
+    const contents = `${app}/Contents`;
+    rmSync(app, { recursive: true, force: true });
+    mkdirSync(`${contents}/MacOS`, { recursive: true });
+
+    const latest = run("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], { capture: true }).trim();
+    const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    run("go", ["build", "-trimpath", "-ldflags", `-X main.buildVersion=${latest}-dev-${date}`,
+      "-o", `${contents}/MacOS/serve-markdown`, "."], { env });
+
+    const swiftEnv = { ...process.env, MACOSX_DEPLOYMENT_TARGET: "13.0" };
+    const swiftArgs = ["build", "-c", "release", "--package-path", `${root}/macos`];
+    run("swift", swiftArgs, { env: swiftEnv });
+    const binPath = run("swift", [...swiftArgs, "--show-bin-path"], { env: swiftEnv, capture: true }).trim();
+    copyFileSync(`${binPath}/ServeMarkdown`, `${contents}/MacOS/ServeMarkdown`);
+
+    const shortVersion = latest.replace(/^v/, "").replace(/-.*$/, "");
+    const infoPlist = readFileSync(`${root}/macos/Info.plist.in`, "utf8").replaceAll("@SHORT_VERSION@", shortVersion);
+    writeFileSync(`${contents}/Info.plist`, infoPlist);
+    run("plutil", ["-lint", `${contents}/Info.plist`]);
+    writeFileSync(`${contents}/PkgInfo`, "APPL????");
+
+    // An ad-hoc signature cannot be timestamped.
+    const identity = process.env.MACOS_SIGN_IDENTITY || "-";
+    const timestamp = identity === "-" ? "--timestamp=none" : "--timestamp";
+    for (const target of [`${contents}/MacOS/serve-markdown`, app]) {
+      run("codesign", ["--force", "--sign", identity, timestamp, "--options", "runtime",
+        "--entitlements", `${root}/macos/entitlements.plist`, target]);
+    }
+    run("codesign", ["--verify", "--strict", "--deep", "--verbose=2", app]);
+    break;
+  }
   case "clean":
     for (const name of readdirSync(root)) {
       if (name === "serve-markdown" || name === "serve-markdown.exe" || name.startsWith("serve-markdown-")) {
         rmSync(`${root}/${name}`, { force: true });
       }
     }
+    rmSync(`${root}/dist/ServeMarkdown.app`, { recursive: true, force: true });
+    rmSync(`${root}/macos/.build`, { recursive: true, force: true });
     break;
 }
