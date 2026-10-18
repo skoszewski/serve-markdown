@@ -1,6 +1,6 @@
 import AppKit
 
-/// Brings the app to the front, so the panel or alert it opens next takes the focus.
+/// Brings the app to the front.
 @MainActor
 func activateApp() {
     if #available(macOS 14, *) {

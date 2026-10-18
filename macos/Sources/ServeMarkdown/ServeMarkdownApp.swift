@@ -39,7 +39,6 @@ struct MenuContent: View {
 
     var body: some View {
         Button("Serve Folder or File...") {
-            // The panel opens once the menu has closed.
             DispatchQueue.main.async { [manager, editor] in
                 activateApp()
                 let panel = NSOpenPanel()
@@ -110,13 +109,11 @@ struct MenuContent: View {
                 if SMAppService.mainApp.status == .requiresApproval {
                     SMAppService.openSystemSettingsLoginItems()
                 }
-                // The menu reads the status again when it is drawn anew.
                 manager.objectWillChange.send()
             }
         ))
         Divider()
         Button("About Serve Markdown") {
-            // The panel opens once the menu has closed.
             DispatchQueue.main.async {
                 activateApp()
                 NSApp.orderFrontStandardAboutPanel(nil)
