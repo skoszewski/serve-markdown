@@ -373,6 +373,9 @@ one atomic push, so the release job never sees a tag ahead of `main`, and moves 
 `git fetch . dev:main`, so the working tree stays on `dev`. Its notes are edited with `;` as
 git's comment character, so the Markdown headings in them survive git's cleanup.
 
+A run also builds the desktop apps, each on its own platform; see "The apps are built on their
+own platforms by the workflow".
+
 ## The browser assets are built from pinned packages
 
 The libraries were stock builds downloaded from CDNs, which left their configuration to
@@ -574,3 +577,29 @@ instance runs in the served folder, as a run from a terminal there would, and is
 address, the port and the editor on the command line, which stand above a configuration file,
 so the menu decides them. Its output goes to a log file rather than a pipe, so nothing has to
 drain it, Console opens it, and it outlives the instance for the report of an unasked exit.
+
+## The apps are built on their own platforms by the workflow
+
+The Windows app is built by the `windows-app` job on a Windows runner, not cross-built on
+Linux. .NET builds a Windows Forms app on another platform only with `EnableWindowsTargeting`,
+and Microsoft notes that such a build "is not marked as a Windows application (which means that
+it will always launch a console window) and won't have an icon embedded", and that a release
+should be built on Windows. The job builds `serve-markdown.exe` beside the app and publishes
+the app self-contained, as a compressed single file carrying its own .NET runtime, so a user
+unzips `ServeMarkdown-windows-amd64.zip` and runs it with nothing installed. Like the
+executables, it is versioned from the tag, or as a dev build of the latest release on `dev`.
+
+The `macos-app` job is written and switched off with `if: false`. An app downloaded from a
+release is quarantined, and Gatekeeper blocks one that is only ad-hoc signed, so publishing the
+menu bar app needs a Developer ID signature and notarization, which need an Apple Developer
+Program membership. The job imports the certificate into a temporary keychain, assembles and
+signs the bundle as `./build.mjs macos` does - inside-out, with the hardened runtime - then
+notarizes and staples it, and uploads `ServeMarkdown-darwin-arm64.zip`. To turn it on, the
+secrets `APPLE_CERTIFICATE` (the "Developer ID Application" certificate as a base64 .p12),
+`APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD` (an app-specific
+password) and `APPLE_TEAM_ID` are set, and `if: false` is removed.
+
+A job that `needs` a skipped job is skipped too, so the `release` and `dev-release` jobs run on
+`!cancelled() && !failure()`: a switched-off app job does not hold back a release, and a failed
+one still stops it. They download every artifact of the run, the executables and the app zips
+alike.

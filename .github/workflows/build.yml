@@ -2,7 +2,9 @@
 # vX.Y.Z-dev-YYYYMMDD, and publishes them as the dev-latest prerelease, replacing the previous
 # one. A semver tag with a leading v on a commit on main is checked, built for every platform
 # it is published for, and published as a release. The browser assets the executable embeds
-# are built from web/ before any Go step.
+# are built from web/ before any Go step. Both also carry the Windows notification-area app,
+# built on Windows with serve-markdown.exe beside it; the macOS menu bar app job is written and
+# switched off until Developer ID signing and notarization are set up.
 
 name: build
 
@@ -92,9 +94,168 @@ jobs:
           archive: false
           if-no-files-found: error
 
+  windows-app:
+    needs: check
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Assets
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            latest="$GITHUB_REF_NAME"
+          else
+            latest="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+          fi
+          short="${latest#v}"
+          short="${short%%-*}"
+          ldflags=""
+          if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
+            ldflags="-X main.buildVersion=$latest-dev-$(date -u +%Y%m%d)"
+          fi
+          out=dist/ServeMarkdown-windows
+          go build -trimpath -ldflags "$ldflags" -o "$out/serve-markdown.exe" .
+          dotnet publish windows/ServeMarkdown.csproj -c Release -o "$out" "-p:Version=$short" \
+            --self-contained true -p:EnableCompressionInSingleFile=true
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/ServeMarkdown-windows/* -DestinationPath ServeMarkdown-windows-amd64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ServeMarkdown-windows-amd64.zip
+          archive: false
+          if-no-files-found: error
+
+  macos-app:
+    # Off until the APPLE_* and KEYCHAIN_PASSWORD secrets hold a Developer ID certificate and a notarization login.
+    if: false
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Assets
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Signing identity
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          certificate="$RUNNER_TEMP/signing.p12"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign \
+            -t cert -f pkcs12 -k "$keychain"
+          rm -f "$certificate"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk '/Developer ID Application/ { print $2; exit }')"
+          if [ -z "$identity" ]; then
+            echo "no 'Developer ID Application' identity in APPLE_CERTIFICATE" >&2
+            exit 1
+          fi
+          echo "IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: darwin
+          GOARCH: arm64
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            latest="$GITHUB_REF_NAME"
+          else
+            latest="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+          fi
+          short="${latest#v}"
+          short="${short%%-*}"
+          ldflags=""
+          if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
+            ldflags="-X main.buildVersion=$latest-dev-$(date -u +%Y%m%d)"
+          fi
+          contents=dist/ServeMarkdown.app/Contents
+          mkdir -p "$contents/MacOS"
+          go build -trimpath -ldflags "$ldflags" -o "$contents/MacOS/serve-markdown" .
+          swift build -c release --package-path macos
+          cp "$(swift build -c release --package-path macos --show-bin-path)/ServeMarkdown" "$contents/MacOS/ServeMarkdown"
+          sed "s/@SHORT_VERSION@/$short/g" macos/Info.plist.in > "$contents/Info.plist"
+          plutil -lint "$contents/Info.plist"
+          printf 'APPL????' > "$contents/PkgInfo"
+      - name: Sign
+        run: |
+          for target in dist/ServeMarkdown.app/Contents/MacOS/serve-markdown dist/ServeMarkdown.app; do
+            codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" --timestamp --options runtime \
+              --entitlements macos/entitlements.plist "$target"
+          done
+          codesign --verify --strict --deep --verbose=2 dist/ServeMarkdown.app
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -c -k --keepParent dist/ServeMarkdown.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple dist/ServeMarkdown.app
+          spctl --assess --type execute -vvv dist/ServeMarkdown.app
+          ditto -c -k --keepParent dist/ServeMarkdown.app ServeMarkdown-darwin-arm64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ServeMarkdown-darwin-arm64.zip
+          archive: false
+          if-no-files-found: error
+      - name: Remove keychain
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN:-}" ]; then
+            security delete-keychain "$KEYCHAIN"
+          fi
+
   release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    if: ${{ !cancelled() && !failure() && startsWith(github.ref, 'refs/tags/') }}
+    needs: [build, windows-app, macos-app]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -123,7 +284,6 @@ jobs:
           fi
       - uses: actions/download-artifact@v8
         with:
-          pattern: serve-markdown-*
           path: dist
           merge-multiple: true
       - name: Release
@@ -134,8 +294,8 @@ jobs:
         run: gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-from-tag
 
   dev-release:
-    if: github.ref == 'refs/heads/dev'
-    needs: build
+    if: ${{ !cancelled() && !failure() && github.ref == 'refs/heads/dev' }}
+    needs: [build, windows-app, macos-app]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -148,7 +308,6 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: serve-markdown-*
           path: dist
           merge-multiple: true
       - name: Release

@@ -21,15 +21,27 @@ build date. Pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - 
 `main` checks the sources, builds all six and publishes them as the release of that tag;
 `main` is pushed before the tag or together with it, as `./build.mjs release` does.
 
+A release and `dev-latest` also carry `ServeMarkdown-windows-amd64.zip`: the Windows
+notification-area app `ServeMarkdown.exe` with `serve-markdown.exe` beside it, for Windows x64.
+The app is self-contained, carrying its own .NET runtime, so it is unzipped and run with nothing
+else installed. It is built on a Windows runner. The macOS menu bar app is built locally alone
+(see [macOS menu bar app](#macos-menu-bar-app)); its workflow job is written and switched off
+until the app can be signed with a Developer ID and notarized.
+
 From a clone, with Go and Node.js installed, `./build.mjs` writes the executable beside the
 sources; on Windows it is run as `node build.mjs`. It takes the action as its argument:
 
 - `build`, the default, writes the executable;
 - `test` runs the tests;
 - `check` runs the formatting check, `go vet` and the tests;
-- `clean` removes the executables, the menu bar app and its Swift build;
+- `clean` removes the executables, the menu bar app, the Windows app and their builds;
 - `macos`, on macOS alone, builds the menu bar app `dist/ServeMarkdown.app` (see
   [macOS menu bar app](#macos-menu-bar-app));
+- `windows` builds the Windows notification-area app and `serve-markdown.exe` into
+  `dist/ServeMarkdown-windows`, for Windows x64, with the .NET 10 SDK installed. The app runs on
+  the installed .NET Desktop Runtime, and `windows self-contained` makes it carry its own. Built
+  anywhere but Windows, the app opens a console window beside its icon and has no icon of its
+  own, as .NET builds a Windows app on another platform;
 - `assets` builds the browser assets alone (see [Browser assets](#browser-assets));
 - `update` moves every package `web/package.json` names to its latest release, major versions
   included, rewriting `web/package-lock.json`, and builds the assets from them. A new esbuild
