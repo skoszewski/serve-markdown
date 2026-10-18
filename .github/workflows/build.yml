@@ -4,8 +4,8 @@
 # it is published for, and published as a release. Each executable is published in a tar.gz,
 # or a zip for Windows, named after its platform. The browser assets the executable embeds
 # are built from web/ before any Go step. Both also carry the Windows notification-area app,
-# built on Windows with serve-markdown.exe beside it; the macOS menu bar app job is written and
-# switched off until Developer ID signing and notarization are set up.
+# built on Windows with serve-markdown.exe beside it, and the macOS menu bar app for arm64,
+# built on macOS with serve-markdown inside it and signed ad hoc.
 
 name: build
 
@@ -160,8 +160,6 @@ jobs:
           if-no-files-found: error
 
   macos-app:
-    # Off until the APPLE_* and KEYCHAIN_PASSWORD secrets hold a Developer ID certificate and a notarization login.
-    if: false
     needs: check
     runs-on: macos-latest
     steps:
@@ -181,30 +179,6 @@ jobs:
         run: |
           npm ci
           npm run build
-      - name: Signing identity
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          certificate="$RUNNER_TEMP/signing.p12"
-          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
-          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign \
-            -t cert -f pkcs12 -k "$keychain"
-          rm -f "$certificate"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain" >/dev/null
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
-          identity="$(security find-identity -v -p codesigning "$keychain" | awk '/Developer ID Application/ { print $2; exit }')"
-          if [ -z "$identity" ]; then
-            echo "no 'Developer ID Application' identity in APPLE_CERTIFICATE" >&2
-            exit 1
-          fi
-          echo "IDENTITY=$identity" >> "$GITHUB_ENV"
-          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
       - name: Build
         env:
           CGO_ENABLED: "0"
@@ -234,36 +208,19 @@ jobs:
       - name: Sign
         run: |
           for target in dist/ServeMarkdown.app/Contents/MacOS/serve-markdown dist/ServeMarkdown.app; do
-            codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" --timestamp --options runtime \
+            codesign --force --sign - --timestamp=none --options runtime \
               --entitlements macos/entitlements.plist "$target"
           done
           codesign --verify --strict --deep --verbose=2 dist/ServeMarkdown.app
-      - name: Notarize
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          ditto -c -k --keepParent dist/ServeMarkdown.app "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple dist/ServeMarkdown.app
-          spctl --assess --type execute -vvv dist/ServeMarkdown.app
           ditto -c -k --keepParent dist/ServeMarkdown.app ServeMarkdown-darwin-arm64.zip
       - uses: actions/upload-artifact@v7
         with:
           path: ServeMarkdown-darwin-arm64.zip
           archive: false
           if-no-files-found: error
-      - name: Remove keychain
-        if: always()
-        run: |
-          if [ -n "${KEYCHAIN:-}" ]; then
-            security delete-keychain "$KEYCHAIN"
-          fi
 
   release:
-    if: ${{ !cancelled() && !failure() && startsWith(github.ref, 'refs/tags/') }}
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [build, windows-app, macos-app]
     runs-on: ubuntu-latest
     permissions:
@@ -304,7 +261,7 @@ jobs:
         run: gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-from-tag
 
   dev-release:
-    if: ${{ !cancelled() && !failure() && github.ref == 'refs/heads/dev' }}
+    if: github.ref == 'refs/heads/dev'
     needs: [build, windows-app, macos-app]
     runs-on: ubuntu-latest
     permissions:

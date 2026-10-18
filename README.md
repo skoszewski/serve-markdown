@@ -32,9 +32,9 @@ build date. Pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - 
 A release and `dev-latest` also carry `ServeMarkdown-windows-amd64.zip`: the Windows
 notification-area app `ServeMarkdown.exe` with `serve-markdown.exe` beside it, for Windows x64.
 The app is self-contained, carrying its own .NET runtime, so it is unzipped and run with nothing
-else installed. It is built on a Windows runner. The macOS menu bar app is built locally alone
-(see [macOS menu bar app](#macos-menu-bar-app)); its workflow job is written and switched off
-until the app can be signed with a Developer ID and notarized.
+else installed. It is built on a Windows runner. They also carry `ServeMarkdown-darwin-arm64.zip`:
+the macOS menu bar app `ServeMarkdown.app` with `serve-markdown` inside it, for Apple silicon,
+built on a macOS runner (see [macOS menu bar app](#macos-menu-bar-app)).
 
 From a clone, with Go and Node.js installed, `./build.mjs` writes the executable beside the
 sources; on Windows it is run as `node build.mjs`. It takes the action as its argument:

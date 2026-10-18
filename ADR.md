@@ -567,8 +567,7 @@ The assembly and the signing follow `packaging/macos` of storytold/pdfcraft, whi
 app bundle without Xcode the same way. The bundle is signed inside-out with the hardened
 runtime and an empty set of entitlements - the bundled serve-markdown first, then the app,
 without `--deep` - and verified with `codesign --verify --strict --deep`. The identity is
-`MACOS_SIGN_IDENTITY`, ad-hoc by default since the app is built for local use; a Developer ID
-identity and notarization would make it distributable.
+`MACOS_SIGN_IDENTITY`, ad-hoc by default, which needs no Apple Developer Program membership.
 
 The SDK of the Command Line Tools declares SwiftUI's `@State` as a macro whose plugin they do
 not ship, so the menu holds no `@State`: its state lives in an `ObservableObject` and in
@@ -594,18 +593,14 @@ the app self-contained, as a compressed single file carrying its own .NET runtim
 unzips `ServeMarkdown-windows-amd64.zip` and runs it with nothing installed. Like the
 executables, it is versioned from the tag, or as a dev build of the latest release on `dev`.
 
-The `macos-app` job is written and switched off with `if: false`. An app downloaded from a
-release is quarantined, and Gatekeeper blocks one that is only ad-hoc signed, so publishing the
-menu bar app needs a Developer ID signature and notarization, which need an Apple Developer
-Program membership. The job imports the certificate into a temporary keychain, assembles and
-signs the bundle as `./build.mjs macos` does - inside-out, with the hardened runtime - then
-notarizes and staples it, and uploads `ServeMarkdown-darwin-arm64.zip`. To turn it on, the
-secrets `APPLE_CERTIFICATE` (the "Developer ID Application" certificate as a base64 .p12),
-`APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD` (an app-specific
-password) and `APPLE_TEAM_ID` are set, and `if: false` is removed.
+The macOS app is built by the `macos-app` job on an Apple silicon runner, which assembles and
+signs the bundle as `./build.mjs macos` does without `MACOS_SIGN_IDENTITY`: inside-out, ad hoc,
+with the hardened runtime, and uploads `ServeMarkdown-darwin-arm64.zip`. Neither app is signed
+with a publicly trusted identity, since a Developer ID and an Authenticode certificate both cost
+a yearly fee. Gatekeeper blocks an ad-hoc signed app that was downloaded through a browser,
+until the user allows it in System Settings or removes its quarantine attribute; SmartScreen
+warns about the unsigned Windows app in the same way.
 
-A job that `needs` a skipped job is skipped too, so the `release` and `dev-release` jobs run on
-`!cancelled() && !failure()`: a switched-off app job does not hold back a release, and a failed
-one still stops it. They download every artifact of the run, the executables and the app zips
-alike, with `skip-decompress`: `download-artifact` unpacks an artifact served as a zip, so
-without it a release would carry the files of the app zip rather than the zip.
+The `release` and `dev-release` jobs download every artifact of the run, the executables and
+the app zips alike, with `skip-decompress`: `download-artifact` unpacks an artifact served as a
+zip, so without it a release would carry the files of the app zip rather than the zip.
