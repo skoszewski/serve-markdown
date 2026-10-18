@@ -2,16 +2,19 @@
 
 // Builds, tests, checks and releases serve-markdown, and builds the assets it embeds.
 // Usage: ./build.mjs [build|test|check|clean|assets|update|macos] [<goos>/<goarch>]
+//        ./build.mjs windows [self-contained]
 //        ./build.mjs release vX.Y.Z
 //
 // The platform defaults to the host's. Naming one builds for it instead, writing
-// serve-markdown-<goos>-<goarch>; it applies to the build action alone, since the tests run on
-// the host. The update action moves every package web/package.json names to its latest
-// release, rewriting web/package-lock.json, and builds the assets from them. The macos action,
-// on macOS alone, writes the menu bar app dist/ServeMarkdown.app with serve-markdown inside it,
-// signed by $MACOS_SIGN_IDENTITY, ad-hoc when it is not set. The release
-// action checks dev, tags it with notes edited in $EDITOR, prefilled with the commit subjects
-// since the previous tag, fast-forwards main to it, and pushes dev, main and the tag together.
+// serve-markdown-<goos>-<goarch>; it applies to the build action alone. The update action moves
+// every package web/package.json names to its latest release, rewriting web/package-lock.json,
+// and builds the assets from them. The macos action, on macOS alone, writes the menu bar app
+// dist/ServeMarkdown.app with serve-markdown inside it, signed by $MACOS_SIGN_IDENTITY, ad-hoc
+// when it is not set. The windows action writes the notification-area app for Windows x64 and
+// serve-markdown.exe into dist/ServeMarkdown-windows; the app runs on the installed .NET
+// Desktop Runtime, or carries its own with self-contained. The release action checks dev, tags
+// it with notes edited in $EDITOR, prefilled with the commit subjects since the previous tag,
+// fast-forwards main to it, and pushes dev, main and the tag together.
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -20,10 +23,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const usage = "usage: ./build.mjs [build|test|check|clean|assets|update|macos] [<goos>/<goarch>]\n" +
+  "       ./build.mjs windows [self-contained]\n" +
   "       ./build.mjs release vX.Y.Z";
 const root = dirname(fileURLToPath(import.meta.url));
 const [action = "build", argument = ""] = process.argv.slice(2);
-const platform = action === "release" ? "" : argument;
+const platform = ["release", "windows"].includes(action) ? "" : argument;
+const selfContained = action === "windows" && argument === "self-contained";
 const tag = action === "release" ? argument : "";
 
 /**
@@ -62,7 +67,12 @@ if (platform !== "") {
   binary = `serve-markdown-${goos}-${goarch}${goos === "windows" ? ".exe" : ""}`;
 }
 
-if (!["build", "test", "check", "clean", "assets", "update", "macos", "release"].includes(action)) {
+if (!["build", "test", "check", "clean", "assets", "update", "macos", "windows", "release"].includes(action)) {
+  console.error(usage);
+  process.exit(2);
+}
+
+if (action === "windows" && !["", "self-contained"].includes(argument)) {
   console.error(usage);
   process.exit(2);
 }
@@ -72,8 +82,7 @@ if (action === "macos" && (process.platform !== "darwin" || platform !== "")) {
   process.exit(2);
 }
 
-// A release is made from a clean dev, for a semver tag with a leading v, as the workflow
-// requires.
+// A release is made from a clean dev, for a semver tag with a leading v.
 if (action === "release") {
   const number = "(0|[1-9][0-9]*)";
   const identifier = "(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)";
@@ -92,19 +101,26 @@ if (action === "release") {
   }
 }
 
-// The latest release of each package is installed even across a major version, which the
-// ranges in web/package.json would not allow.
+// The latest release of each package is installed, across major versions.
 if (action === "update") {
   const manifest = JSON.parse(readFileSync(`${root}/web/package.json`, "utf8"));
   const latest = Object.keys(manifest.devDependencies).map((name) => `${name}@latest`);
   run("npm", ["install", "--save-dev", ...latest], { cwd: `${root}/web` });
 }
 
-// The Go code embeds the built assets, so every action compiling it builds them first.
+// Every action but clean builds the assets first.
 if (action !== "clean") {
   run("npm", ["ci"], { cwd: `${root}/web` });
   run("npm", ["run", "build"], { cwd: `${root}/web` });
 }
+
+// The apps report the latest release without its prerelease suffix; their serve-markdown names
+// itself a dev build of that release.
+const latest = ["macos", "windows"].includes(action)
+  ? run("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], { capture: true }).trim()
+  : "";
+const devVersion = `${latest}-dev-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`;
+const shortVersion = latest.replace(/^v/, "").replace(/-.*$/, "");
 
 switch (action) {
   case "build":
@@ -123,7 +139,7 @@ switch (action) {
     run("go", ["vet", "./..."], { env });
     run("go", ["test", "./..."], { env });
     if (action === "release") {
-      // The notes are edited with ';' as git's comment character, so Markdown headings stay.
+      // The notes are edited with ';' as git's comment character.
       const previous = run("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "dev"], { capture: true }).trim();
       const subjects = run("git", ["log", `${previous}..dev`, "--format=- %s"], { capture: true });
       const notesDir = mkdtempSync(join(tmpdir(), "serve-markdown-"));
@@ -140,16 +156,12 @@ switch (action) {
     break;
   }
   case "macos": {
-    // The bundle is assembled by hand and signed inside-out with the hardened runtime: the
-    // bundled serve-markdown first, then the app.
     const app = `${root}/dist/ServeMarkdown.app`;
     const contents = `${app}/Contents`;
     rmSync(app, { recursive: true, force: true });
     mkdirSync(`${contents}/MacOS`, { recursive: true });
 
-    const latest = run("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], { capture: true }).trim();
-    const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-    run("go", ["build", "-trimpath", "-ldflags", `-X main.buildVersion=${latest}-dev-${date}`,
+    run("go", ["build", "-trimpath", "-ldflags", `-X main.buildVersion=${devVersion}`,
       "-o", `${contents}/MacOS/serve-markdown`, "."], { env });
 
     const swiftEnv = { ...process.env, MACOSX_DEPLOYMENT_TARGET: "13.0" };
@@ -158,13 +170,11 @@ switch (action) {
     const binPath = run("swift", [...swiftArgs, "--show-bin-path"], { env: swiftEnv, capture: true }).trim();
     copyFileSync(`${binPath}/ServeMarkdown`, `${contents}/MacOS/ServeMarkdown`);
 
-    const shortVersion = latest.replace(/^v/, "").replace(/-.*$/, "");
     const infoPlist = readFileSync(`${root}/macos/Info.plist.in`, "utf8").replaceAll("@SHORT_VERSION@", shortVersion);
     writeFileSync(`${contents}/Info.plist`, infoPlist);
     run("plutil", ["-lint", `${contents}/Info.plist`]);
     writeFileSync(`${contents}/PkgInfo`, "APPL????");
 
-    // An ad-hoc signature cannot be timestamped.
     const identity = process.env.MACOS_SIGN_IDENTITY || "-";
     const timestamp = identity === "-" ? "--timestamp=none" : "--timestamp";
     for (const target of [`${contents}/MacOS/serve-markdown`, app]) {
@@ -172,6 +182,16 @@ switch (action) {
         "--entitlements", `${root}/macos/entitlements.plist`, target]);
     }
     run("codesign", ["--verify", "--strict", "--deep", "--verbose=2", app]);
+    break;
+  }
+  case "windows": {
+    const out = `${root}/dist/ServeMarkdown-windows`;
+    rmSync(out, { recursive: true, force: true });
+    run("go", ["build", "-trimpath", "-ldflags", `-X main.buildVersion=${devVersion}`,
+      "-o", `${out}/serve-markdown.exe`, "."], { env: { ...env, GOOS: "windows", GOARCH: "amd64" } });
+    run("dotnet", ["publish", `${root}/windows/ServeMarkdown.csproj`, "-c", "Release", "-o", out,
+      `-p:Version=${shortVersion}`, "--self-contained", String(selfContained),
+      ...(selfContained ? ["-p:EnableCompressionInSingleFile=true"] : [])]);
     break;
   }
   case "clean":
@@ -182,5 +202,8 @@ switch (action) {
     }
     rmSync(`${root}/dist/ServeMarkdown.app`, { recursive: true, force: true });
     rmSync(`${root}/macos/.build`, { recursive: true, force: true });
+    rmSync(`${root}/dist/ServeMarkdown-windows`, { recursive: true, force: true });
+    rmSync(`${root}/windows/bin`, { recursive: true, force: true });
+    rmSync(`${root}/windows/obj`, { recursive: true, force: true });
     break;
 }

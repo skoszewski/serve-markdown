@@ -174,6 +174,8 @@ type configuration struct {
 	editorConfig     string
 	editorExclude    []string
 	editorSpellCheck bool
+	// stopOnStdinEOF stops the server when its standard input ends.
+	stopOnStdinEOF bool
 }
 
 // watchInterval returns the seconds between a page's checks for changes to its document, for
@@ -247,6 +249,7 @@ func readConfiguration() (configuration, error) {
 		"in the served directory")
 	editorExclude := flag.String("editor-exclude", "", "Comma separated list of the path patterns left out of editing")
 	editorSpellCheck := flag.Bool("editor-spell-check", false, "Show the spell check controls in the editor")
+	stopOnStdinEOF := flag.Bool("stop-on-stdin-eof", false, "Stop the server when its standard input ends")
 	named := flag.String("config", "", "Read the server configuration from the file")
 	showVersion := flag.Bool("version", false, "Print the version and exit")
 	flag.IntVar(&debugLevel, "debug", 0, "Debugging level: 0 for none, >0 for debugging turned on")
@@ -254,7 +257,7 @@ func readConfiguration() (configuration, error) {
 	flag.Usage = printUsage
 	flag.Parse()
 
-	settings := configuration{path: flag.Arg(0), showVersion: *showVersion, pdf: *pdf}
+	settings := configuration{path: flag.Arg(0), showVersion: *showVersion, pdf: *pdf, stopOnStdinEOF: *stopOnStdinEOF}
 	if settings.showVersion {
 		return settings, nil
 	}

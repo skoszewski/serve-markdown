@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"hash/fnv"
+	"io"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -84,6 +85,9 @@ type server struct {
 	versions func(source) *versionPicker
 	// editor serves the Markdown editor under editorRoute, nil without --editor.
 	editor *editor
+	// stopInput stops the server once it has been read to its end, nil without
+	// --stop-on-stdin-eof.
+	stopInput io.Reader
 }
 
 // searched returns the documents a folder is read as: the ones --search names, and the ones

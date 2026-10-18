@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math"
 	"net"
@@ -144,6 +145,10 @@ func run() error {
 	// The seconds a local page checks at; a page reading Azure Repos checks for nothing.
 	handler.watchInterval = settings.watchInterval(kindLocal)
 
+	if settings.stopOnStdinEOF {
+		handler.stopInput = os.Stdin
+	}
+
 	address := net.JoinHostPort(settings.listenAddress, strconv.Itoa(settings.port))
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -218,10 +223,16 @@ func (s *server) resolveStartupSource(path string) (string, error) {
 	return fmt.Sprintf("'%s'", s.rootDir), nil
 }
 
-// serve runs the HTTP server on listener until the process is interrupted.
+// serve runs the HTTP server on listener until the process is interrupted or stopInput ends.
 func (s *server) serve(listener net.Listener) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	if s.stopInput != nil {
+		go func() {
+			io.Copy(io.Discard, s.stopInput)
+			stop()
+		}()
+	}
 
 	httpServer := &http.Server{Handler: s}
 	failed := make(chan error, 1)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // get performs one request against handler and returns the response and its body.
@@ -950,5 +952,35 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 	entries, up := handler.documentList(source{kind: kindLocal, route: "/docs/guide.md"}, "current")
 	if len(entries) == 0 || up.Label != "" {
 		t.Errorf("a local list carries the link %q above it", up.Label)
+	}
+}
+
+func TestServeStopsWhenItsStopInputEnds(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: documentRoot(t), stopInput: reader}
+	served := make(chan error, 1)
+	go func() {
+		served <- handler.serve(listener)
+	}()
+
+	// The server answers while its input is open.
+	response, err := http.Get("http://" + listener.Addr().String() + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+
+	writer.Close()
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Errorf("serve returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the server did not stop once its input ended")
 	}
 }
