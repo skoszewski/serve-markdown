@@ -286,6 +286,7 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+          skip-decompress: true
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -310,6 +311,7 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+          skip-decompress: true
       - name: Release
         run: |
           if gh release view dev-latest >/dev/null 2>&1; then

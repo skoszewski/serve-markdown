@@ -602,4 +602,5 @@ password) and `APPLE_TEAM_ID` are set, and `if: false` is removed.
 A job that `needs` a skipped job is skipped too, so the `release` and `dev-release` jobs run on
 `!cancelled() && !failure()`: a switched-off app job does not hold back a release, and a failed
 one still stops it. They download every artifact of the run, the executables and the app zips
-alike.
+alike, with `skip-decompress`: `download-artifact` unpacks an artifact served as a zip, so
+without it a release would carry the files of the app zip rather than the zip.
