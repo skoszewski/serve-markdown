@@ -345,8 +345,13 @@ The workflow runs `gofmt`, `go vet`, the tests and the builds with its own steps
 through `build.mjs`, so the script serves a developer's machine and the workflow serves GitHub,
 and neither changes for the other.
 
-Each platform's executable is uploaded unarchived, so a run's artifact downloads as the
-executable itself rather than as a zip holding it. The release is made with the `gh` CLI the
+Each platform's executable is published packed, as `serve-markdown-<goos>-<goarch>.tar.gz`,
+or `.zip` for Windows, the form each platform unpacks without extra tools, holding the
+executable under its plain name, `serve-markdown` or `serve-markdown.exe`. A download keeps the
+executable bit of a tarball, so it runs once unpacked, where a bare executable downloaded from a
+release has to be marked executable first. The archive is uploaded as the artifact without a
+further zip around it (`archive: false`), so a run's artifact downloads as the archive itself.
+The release is made with the `gh` CLI the
 runner already carries, rather than with a third-party action, and only for a tag that is
 already pushed. Its notes are the message of the annotated tag, since the repository takes no
 pull requests for GitHub to build notes from. The history is checked out whole for the

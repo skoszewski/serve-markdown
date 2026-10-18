@@ -9,13 +9,21 @@ side show the same file. A page reading Azure Repos is read once and again on re
 
 ## Installation
 
-Every release carries the executable for Linux, macOS and Windows on `amd64` and `arm64`, named
-`serve-markdown-<goos>-<goarch>` (`.exe` on Windows), to download from the repository's
-Releases page. The `build` workflow in `.github/workflows/build.yml` builds the browser assets,
+Every release carries the executable for Linux, macOS and Windows on `amd64` and `arm64`, to
+download from the repository's Releases page as `serve-markdown-<goos>-<goarch>.tar.gz`, or
+`.zip` on Windows, holding `serve-markdown` (`serve-markdown.exe` on Windows):
+
+```sh
+tar -xzf serve-markdown-darwin-arm64.tar.gz
+./serve-markdown --version
+```
+
+The `build` workflow in `.github/workflows/build.yml` builds the browser assets,
 checks the formatting, vets and tests the sources on every push to `dev`, builds the
 executables for `darwin/arm64` and `windows/amd64`, and publishes them as the `dev-latest`
 prerelease, replacing the previous one, so they download from
-`https://github.com/skoszewski/serve-markdown/releases/download/dev-latest/serve-markdown-<goos>-<goarch>`.
+`https://github.com/skoszewski/serve-markdown/releases/download/dev-latest/serve-markdown-<goos>-<goarch>.tar.gz`
+(`.zip` for Windows).
 Such a build names itself `vX.Y.Z-dev-YYYYMMDD`: the latest release before it and its UTC
 build date. Pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on
 `main` checks the sources, builds all six and publishes them as the release of that tag;

@@ -1,7 +1,8 @@
 # Checks the sources on every push to dev, builds them for darwin/arm64 and windows/amd64 as
 # vX.Y.Z-dev-YYYYMMDD, and publishes them as the dev-latest prerelease, replacing the previous
 # one. A semver tag with a leading v on a commit on main is checked, built for every platform
-# it is published for, and published as a release. The browser assets the executable embeds
+# it is published for, and published as a release. Each executable is published in a tar.gz,
+# or a zip for Windows, named after its platform. The browser assets the executable embeds
 # are built from web/ before any Go step. Both also carry the Windows notification-area app,
 # built on Windows with serve-markdown.exe beside it; the macOS menu bar app job is written and
 # switched off until Developer ID signing and notarization are set up.
@@ -78,7 +79,7 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           export GOOS="${PLATFORM%%/*}" GOARCH="${PLATFORM##*/}"
-          binary="serve-markdown-$GOOS-$GOARCH"
+          binary="serve-markdown"
           if [ "$GOOS" = "windows" ]; then
             binary="$binary.exe"
           fi
@@ -86,11 +87,19 @@ jobs:
           if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
             ldflags="-X main.buildVersion=$(git describe --tags --abbrev=0 --match 'v[0-9]*')-dev-$(date -u +%Y%m%d)"
           fi
-          go build -trimpath -ldflags "$ldflags" -o "dist/$binary" .
-          echo "binary=$binary" >> "$GITHUB_OUTPUT"
+          go build -trimpath -ldflags "$ldflags" -o "build/$binary" .
+          mkdir -p dist
+          if [ "$GOOS" = "windows" ]; then
+            archive="serve-markdown-$GOOS-$GOARCH.zip"
+            (cd build && zip -9 "../dist/$archive" "$binary")
+          else
+            archive="serve-markdown-$GOOS-$GOARCH.tar.gz"
+            tar -czf "dist/$archive" -C build "$binary"
+          fi
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/${{ steps.build.outputs.binary }}
+          path: dist/${{ steps.build.outputs.archive }}
           archive: false
           if-no-files-found: error
 
