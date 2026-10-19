@@ -2,7 +2,8 @@
 # vX.Y.Z-dev-YYYYMMDD, and publishes them as the dev-latest prerelease, replacing the previous
 # one. A semver tag with a leading v on a commit on main is checked, built for every platform
 # it is published for, and published as a release. Each executable is published in a tar.gz,
-# or a zip for Windows, named after its platform. The browser assets the executable embeds
+# or a zip for Windows, named after its version, without the v, and its platform; the apps are
+# named the same way. The browser assets the executable embeds
 # are built from web/ before any Go step. Both also carry the Windows notification-area app,
 # built on Windows with serve-markdown.exe beside it, and the macOS menu bar app for arm64,
 # built on macOS with serve-markdown inside it and signed ad hoc.
@@ -83,17 +84,24 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             binary="$binary.exe"
           fi
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            latest="$GITHUB_REF_NAME"
+          else
+            latest="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+          fi
+          version="${latest#v}"
           ldflags=""
           if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
-            ldflags="-X main.buildVersion=$(git describe --tags --abbrev=0 --match 'v[0-9]*')-dev-$(date -u +%Y%m%d)"
+            version="$version-dev-$(date -u +%Y%m%d)"
+            ldflags="-X main.buildVersion=v$version"
           fi
           go build -trimpath -ldflags "$ldflags" -o "build/$binary" .
           mkdir -p dist
           if [ "$GOOS" = "windows" ]; then
-            archive="serve-markdown-$GOOS-$GOARCH.zip"
+            archive="serve-markdown-$version-$GOOS-$GOARCH.zip"
             (cd build && zip -9 "../dist/$archive" "$binary")
           else
-            archive="serve-markdown-$GOOS-$GOARCH.tar.gz"
+            archive="serve-markdown-$version-$GOOS-$GOARCH.tar.gz"
             tar -czf "dist/$archive" -C build "$binary"
           fi
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
@@ -140,22 +148,24 @@ jobs:
           else
             latest="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
           fi
-          short="${latest#v}"
-          short="${short%%-*}"
+          version="${latest#v}"
+          short="${version%%-*}"
           ldflags=""
           if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
-            ldflags="-X main.buildVersion=$latest-dev-$(date -u +%Y%m%d)"
+            version="$version-dev-$(date -u +%Y%m%d)"
+            ldflags="-X main.buildVersion=v$version"
           fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
           out=dist/ServeMarkdown-windows
           go build -trimpath -ldflags "$ldflags" -o "$out/serve-markdown.exe" .
           dotnet publish windows/ServeMarkdown.csproj -c Release -o "$out" "-p:Version=$short" \
             --self-contained true -p:EnableCompressionInSingleFile=true
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path dist/ServeMarkdown-windows/* -DestinationPath ServeMarkdown-windows-amd64.zip
+        run: Compress-Archive -Path dist/ServeMarkdown-windows/* -DestinationPath "ServeMarkdown-$env:VERSION-windows-amd64.zip"
       - uses: actions/upload-artifact@v7
         with:
-          path: ServeMarkdown-windows-amd64.zip
+          path: ServeMarkdown-${{ env.VERSION }}-windows-amd64.zip
           archive: false
           if-no-files-found: error
 
@@ -191,12 +201,14 @@ jobs:
           else
             latest="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
           fi
-          short="${latest#v}"
-          short="${short%%-*}"
+          version="${latest#v}"
+          short="${version%%-*}"
           ldflags=""
           if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
-            ldflags="-X main.buildVersion=$latest-dev-$(date -u +%Y%m%d)"
+            version="$version-dev-$(date -u +%Y%m%d)"
+            ldflags="-X main.buildVersion=v$version"
           fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
           contents=dist/ServeMarkdown.app/Contents
           mkdir -p "$contents/MacOS"
           go build -trimpath -ldflags "$ldflags" -o "$contents/MacOS/serve-markdown" .
@@ -212,10 +224,10 @@ jobs:
               --entitlements macos/entitlements.plist "$target"
           done
           codesign --verify --strict --deep --verbose=2 dist/ServeMarkdown.app
-          ditto -c -k --keepParent dist/ServeMarkdown.app ServeMarkdown-darwin-arm64.zip
+          ditto -c -k --keepParent dist/ServeMarkdown.app "ServeMarkdown-$VERSION-darwin-arm64.zip"
       - uses: actions/upload-artifact@v7
         with:
-          path: ServeMarkdown-darwin-arm64.zip
+          path: ServeMarkdown-${{ env.VERSION }}-darwin-arm64.zip
           archive: false
           if-no-files-found: error
 

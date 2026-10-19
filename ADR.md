@@ -345,12 +345,15 @@ The workflow runs `gofmt`, `go vet`, the tests and the builds with its own steps
 through `build.mjs`, so the script serves a developer's machine and the workflow serves GitHub,
 and neither changes for the other.
 
-Each platform's executable is published packed, as `serve-markdown-<goos>-<goarch>.tar.gz`,
-or `.zip` for Windows, the form each platform unpacks without extra tools, holding the
+Each platform's executable is published packed, as
+`serve-markdown-<version>-<goos>-<goarch>.tar.gz`, or `.zip` for Windows, the form each
+platform unpacks without extra tools, holding the
 executable under its plain name, `serve-markdown` or `serve-markdown.exe`. A download keeps the
 executable bit of a tarball, so it runs once unpacked, where a bare executable downloaded from a
 release has to be marked executable first. The archive is uploaded as the artifact without a
 further zip around it (`archive: false`), so a run's artifact downloads as the archive itself.
+Every archive and app zip carries its version without the `v` - the tag's on a release, the dev
+version on `dev` - before the platform, so a downloaded file tells which build it is.
 The release is made with the `gh` CLI the
 runner already carries, rather than with a third-party action, and only for a tag that is
 already pushed. Its notes are the message of the annotated tag, since the repository takes no
@@ -364,8 +367,8 @@ job holds the tag to the semver grammar before publishing. Build metadata is ref
 does not take it in a version.
 
 A push to `dev` is built for `darwin/arm64` and `windows/amd64` alone, the platforms it is
-tried on, and published as one prerelease under the fixed tag `dev-latest`, so its download
-URL never changes. The tag is not `dev`, which would make the name ambiguous with the branch.
+tried on, and published as one prerelease under the fixed tag `dev-latest`, so its release
+page never moves. The tag is not `dev`, which would make the name ambiguous with the branch.
 The prerelease is deleted with its tag and made again rather than moved, so the tag always
 points at the commit built, and it is never marked Latest. A dev build is given its version
 at link time with `-X main.buildVersion`, as `vX.Y.Z-dev-YYYYMMDD` from the latest release tag
@@ -590,12 +593,12 @@ and Microsoft notes that such a build "is not marked as a Windows application (w
 it will always launch a console window) and won't have an icon embedded", and that a release
 should be built on Windows. The job builds `serve-markdown.exe` beside the app and publishes
 the app self-contained, as a compressed single file carrying its own .NET runtime, so a user
-unzips `ServeMarkdown-windows-amd64.zip` and runs it with nothing installed. Like the
+unzips `ServeMarkdown-<version>-windows-amd64.zip` and runs it with nothing installed. Like the
 executables, it is versioned from the tag, or as a dev build of the latest release on `dev`.
 
 The macOS app is built by the `macos-app` job on an Apple silicon runner, which assembles and
 signs the bundle as `./build.mjs macos` does without `MACOS_SIGN_IDENTITY`: inside-out, ad hoc,
-with the hardened runtime, and uploads `ServeMarkdown-darwin-arm64.zip`. Neither app is signed
+with the hardened runtime, and uploads `ServeMarkdown-<version>-darwin-arm64.zip`. Neither app is signed
 with a publicly trusted identity, since a Developer ID and an Authenticode certificate both cost
 a yearly fee. Gatekeeper blocks an ad-hoc signed app that was downloaded through a browser,
 until the user allows it in System Settings or removes its quarantine attribute; SmartScreen

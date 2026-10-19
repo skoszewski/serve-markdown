@@ -10,11 +10,13 @@ side show the same file. A page reading Azure Repos is read once and again on re
 ## Installation
 
 Every release carries the executable for Linux, macOS and Windows on `amd64` and `arm64`, to
-download from the repository's Releases page as `serve-markdown-<goos>-<goarch>.tar.gz`, or
-`.zip` on Windows, holding `serve-markdown` (`serve-markdown.exe` on Windows):
+download from the repository's Releases page as
+`serve-markdown-<version>-<goos>-<goarch>.tar.gz`, or `.zip` on Windows, where `<version>` is
+the release's version without the `v`, holding `serve-markdown` (`serve-markdown.exe` on
+Windows):
 
 ```sh
-tar -xzf serve-markdown-darwin-arm64.tar.gz
+tar -xzf serve-markdown-3.1.3-darwin-arm64.tar.gz
 ./serve-markdown --version
 ```
 
@@ -22,17 +24,18 @@ The `build` workflow in `.github/workflows/build.yml` builds the browser assets,
 checks the formatting, vets and tests the sources on every push to `dev`, builds the
 executables for `darwin/arm64` and `windows/amd64`, and publishes them as the `dev-latest`
 prerelease, replacing the previous one, so they download from
-`https://github.com/skoszewski/serve-markdown/releases/download/dev-latest/serve-markdown-<goos>-<goarch>.tar.gz`
+`https://github.com/skoszewski/serve-markdown/releases/download/dev-latest/serve-markdown-X.Y.Z-dev-YYYYMMDD-<goos>-<goarch>.tar.gz`
 (`.zip` for Windows).
 Such a build names itself `vX.Y.Z-dev-YYYYMMDD`: the latest release before it and its UTC
-build date. Pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on
+build date; its files carry that version without the `v`. Pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on
 `main` checks the sources, builds all six and publishes them as the release of that tag;
 `main` is pushed before the tag or together with it, as `./build.mjs release` does.
 
-A release and `dev-latest` also carry `ServeMarkdown-windows-amd64.zip`: the Windows
+A release and `dev-latest` also carry `ServeMarkdown-<version>-windows-amd64.zip`: the Windows
 notification-area app `ServeMarkdown.exe` with `serve-markdown.exe` beside it, for Windows x64.
 The app is self-contained, carrying its own .NET runtime, so it is unzipped and run with nothing
-else installed. It is built on a Windows runner. They also carry `ServeMarkdown-darwin-arm64.zip`:
+else installed. It is built on a Windows runner. They also carry
+`ServeMarkdown-<version>-darwin-arm64.zip`:
 the macOS menu bar app `ServeMarkdown.app` with `serve-markdown` inside it, for Apple silicon,
 built on a macOS runner (see [macOS menu bar app](#macos-menu-bar-app)).
 
