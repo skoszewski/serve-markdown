@@ -67,7 +67,7 @@ func TestResolveRoute(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := resolveRoute(test.route, root, "")
+			got := resolveRoute(test.route, root, "", nil)
 			want := ""
 			if test.want != "" {
 				want = filepath.Join(root, filepath.FromSlash(test.want))
@@ -79,17 +79,35 @@ func TestResolveRoute(t *testing.T) {
 	}
 }
 
+func TestResolveRouteRefusesNamesBeginningWithADot(t *testing.T) {
+	root := documentRoot(t)
+	writeFile(t, filepath.Join(root, ".serveignore"), "drafts/\n")
+	writeFile(t, filepath.Join(root, ".hidden", "secret.md"), "# Secret\n")
+	if err := os.Symlink(filepath.Join(root, ".hidden"), filepath.Join(root, "visible")); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{"/.serveignore", "/.hidden", "/.hidden/secret.md", "/%2ehidden/secret.md",
+		"/docs/../.hidden/secret.md", "/visible/secret.md"} {
+		if got := resolveRoute(route, root, "", nil); got != "" {
+			t.Errorf("resolveRoute(%q) = %q, want nothing for a name beginning with a dot", route, got)
+		}
+	}
+	if got := resolveRoute("/./docs/guide.md", root, "", nil); got != filepath.Join(root, "docs", "guide.md") {
+		t.Errorf("resolveRoute(\"/./docs/guide.md\") = %q, want the document", got)
+	}
+}
+
 func TestResolveRouteServesTheDefaultFileAtTheRoot(t *testing.T) {
 	root := documentRoot(t)
 	defaultFile := filepath.Join(root, "notes.md")
-	if got := resolveRoute("/", root, defaultFile); got != defaultFile {
+	if got := resolveRoute("/", root, defaultFile, nil); got != defaultFile {
 		t.Errorf("resolveRoute(\"/\") = %q, want %q", got, defaultFile)
 	}
 }
 
 func TestRenderDirectoryListing(t *testing.T) {
 	root := documentRoot(t)
-	names, err := markdownFilesIn(root)
+	names, err := markdownFilesIn(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +129,7 @@ func TestRenderDirectoryListing(t *testing.T) {
 func TestRenderDirectoryListingWithoutDocuments(t *testing.T) {
 	root := documentRoot(t)
 	empty := filepath.Join(root, "empty")
-	names, err := markdownFilesIn(empty)
+	names, err := markdownFilesIn(empty, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +492,7 @@ func TestResolveRouteRefusesClimbingOutOfTheRoot(t *testing.T) {
 	}
 	for route, want := range inside {
 		t.Run("inside "+route, func(t *testing.T) {
-			got := resolveRoute(route, started, "")
+			got := resolveRoute(route, started, "", nil)
 			if got != filepath.Join(root, filepath.FromSlash(want)) {
 				t.Errorf("resolveRoute(%q) = %q, want the document itself", route, got)
 			}
@@ -492,7 +510,7 @@ func TestResolveRouteRefusesClimbingOutOfTheRoot(t *testing.T) {
 	}
 	for _, route := range outside {
 		t.Run("outside "+route, func(t *testing.T) {
-			if got := resolveRoute(route, started, ""); got != "" {
+			if got := resolveRoute(route, started, "", nil); got != "" {
 				t.Errorf("resolveRoute(%q) = %q, want nothing outside the root", route, got)
 			}
 		})

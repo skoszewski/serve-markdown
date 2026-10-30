@@ -15,7 +15,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -115,6 +114,29 @@ func run() error {
 		return nil
 	}
 
+	// The file --ignore-file names must read; the ignore file in the served directory may not.
+	ignoreFile, ignoreWarning := settings.ignoreFile, ""
+	if ignoreFile != "" && handler.defaultSource.kind != kindLocal {
+		return fmt.Errorf("--ignore-file holds paths of a local directory, not %s", sourceDescription)
+	}
+	if handler.defaultSource.kind == kindLocal {
+		if ignoreFile == "" {
+			ignoreFile = filepath.Join(handler.rootDir, ignoreFileName)
+		}
+		rules, err := readIgnoreRules(ignoreFile)
+		switch {
+		case err != nil && settings.ignoreFile != "":
+			return fmt.Errorf("--ignore-file: %v", err)
+		case errors.Is(err, fs.ErrNotExist):
+			ignoreFile = ""
+		case err != nil:
+			ignoreFile, ignoreWarning = "", fmt.Sprintf("%v; the file is ignored", err)
+		default:
+			rules.rootDir, _ = containedPath(handler.rootDir, "")
+			handler.ignore = rules
+		}
+	}
+
 	// The editor writes the files of the served directory, so it needs a local one.
 	editorConfigFile, editorWarning := "", ""
 	if settings.editor {
@@ -137,9 +159,13 @@ func run() error {
 		default:
 			editorConfigFile = file
 		}
+		// The editor leaves out what the viewer does, and the paths of its own patterns besides.
+		rules, err := readIgnoreRules(ignoreFile, settings.editorExclude, config.Exclude)
+		if err != nil {
+			return err
+		}
 		handler.editor = &editor{rootDir: handler.rootDir, templatesDir: settings.editorTemplates,
-			directories: config.Directories, exclude: append(slices.Clone(settings.editorExclude), config.Exclude...),
-			spellCheck: settings.editorSpellCheck}
+			directories: config.Directories, ignore: rules, spellCheck: settings.editorSpellCheck}
 	}
 
 	// The seconds a local page checks at; a page reading Azure Repos checks for nothing.
@@ -164,6 +190,12 @@ func run() error {
 		logInfo("  Watching: every %gs", handler.watchInterval)
 	} else {
 		logInfo("  Watching: on the browser's refresh")
+	}
+	if ignoreFile != "" {
+		logInfo("  Ignoring: the patterns of '%s'", ignoreFile)
+	}
+	if ignoreWarning != "" {
+		logInfo("  Ignoring: %sWarning: %s%s", colorYellow, ignoreWarning, colorReset)
 	}
 	logInfo("  URL:      %shttp://%s%s%s", colorCyan, address, handler.sourceRoute(), colorReset)
 	if handler.editor != nil {

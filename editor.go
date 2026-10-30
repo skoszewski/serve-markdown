@@ -44,18 +44,18 @@ const editorConfigName = "editor.json"
 // saved in place, and created empty or from the templates in templatesDir.
 //
 // directories are the folders below rootDir whose documents are edited, all of rootDir when
-// empty; exclude holds patterns of paths left out of editing; spellCheck shows the spell check
-// controls in the editor's top bar.
+// empty; ignore matches the paths left out of editing, none when nil; spellCheck shows the
+// spell check controls in the editor's top bar.
 type editor struct {
 	rootDir      string
 	templatesDir string
 	directories  []string
-	exclude      []string
+	ignore       *ignoreRules
 	spellCheck   bool
 }
 
 // editorConfig is what editorConfigName holds: the folders relative to the served directory
-// whose documents are edited, and the patterns of the paths left out of editing.
+// whose documents are edited, and the .gitignore patterns of the paths left out of editing.
 type editorConfig struct {
 	Directories []string `json:"directories"`
 	Exclude     []string `json:"exclude"`
@@ -63,7 +63,7 @@ type editorConfig struct {
 
 // readEditorConfig reads the editor configuration file, failing with an error that wraps
 // fs.ErrNotExist when there is no such file. A folder must be relative and stay below the
-// served directory, and a pattern must read as a path.Match pattern.
+// served directory, and a pattern must read as a .gitignore pattern.
 func readEditorConfig(file string) (editorConfig, error) {
 	var config editorConfig
 	content, err := os.ReadFile(file)
@@ -83,10 +83,8 @@ func readEditorConfig(file string) (editorConfig, error) {
 		}
 		config.Directories[index] = directory
 	}
-	for _, pattern := range config.Exclude {
-		if _, err := path.Match(strings.Trim(pattern, "/"), ""); err != nil {
-			return config, fmt.Errorf("%s: '%s' is not a path pattern (%v)", file, pattern, err)
-		}
+	if _, err := readIgnoreRules("", config.Exclude); err != nil {
+		return config, fmt.Errorf("%s: %v", file, err)
 	}
 	return config, nil
 }
@@ -380,29 +378,6 @@ func (e *editor) serveGit(writer http.ResponseWriter, request *http.Request, act
 	return nil
 }
 
-// excluded reports whether a path relative to the served directory is left out of editing:
-// a pattern without a slash matches the name of the file or of any folder it lies in, and one
-// with a slash the path itself or the path of any folder it lies in.
-func (e *editor) excluded(relative string) bool {
-	segments := strings.Split(relative, "/")
-	for _, pattern := range e.exclude {
-		if !strings.Contains(strings.Trim(pattern, "/"), "/") {
-			for _, segment := range segments {
-				if matched, _ := path.Match(strings.Trim(pattern, "/"), segment); matched {
-					return true
-				}
-			}
-			continue
-		}
-		for end := 1; end <= len(segments); end++ {
-			if matched, _ := path.Match(strings.Trim(pattern, "/"), strings.Join(segments[:end], "/")); matched {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // listFiles returns the documents below the served directory that are not excluded, as sorted paths relative to it with forward slashes. Names beginning with a dot
 // are left out, as the directory list leaves them.
 func (e *editor) listFiles() ([]string, error) {
@@ -419,7 +394,7 @@ func (e *editor) listFiles() ([]string, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if strings.HasPrefix(entry.Name(), ".") || e.excluded(relative) {
+		if strings.HasPrefix(entry.Name(), ".") || e.ignore.ignored(relative, entry.IsDir()) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -480,7 +455,7 @@ func (e *editor) createFile(writer http.ResponseWriter, relative, templateName s
 			"below the served directory, without names beginning with a dot: "+relative)
 		return nil
 	}
-	if e.excluded(relative) {
+	if e.ignore.ignored(relative, false) {
 		sendText(writer, http.StatusBadRequest, "The path is excluded from editing: "+relative)
 		return nil
 	}

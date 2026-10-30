@@ -27,9 +27,12 @@ prerelease, replacing the previous one, so they download from
 `https://github.com/skoszewski/serve-markdown/releases/download/dev-latest/serve-markdown-X.Y.Z-dev-YYYYMMDD-<goos>-<goarch>.tar.gz`
 (`.zip` for Windows).
 Such a build names itself `vX.Y.Z-dev-YYYYMMDD`: the latest release before it and its UTC
-build date; its files carry that version without the `v`. Pushing a semver tag with a leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on
-`main` checks the sources, builds all six and publishes them as the release of that tag;
-`main` is pushed before the tag or together with it, as `./build.mjs release` does.
+build date; its files carry that version without the `v`. Pushing a semver tag with a leading
+`v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on `main` checks the sources, builds all six and
+publishes them as the release of that tag, with the tag's message as its notes; `main` is
+pushed before the tag, as `./release.mjs` does (see [Releasing](#releasing)). The tag must be
+the version of the newest `CHANGELOG.md` entry, and a prerelease version such as `v1.3.0-rc.1`
+is published as a GitHub prerelease.
 
 A release and `dev-latest` also carry `ServeMarkdown-<version>-windows-amd64.zip`: the Windows
 notification-area app `ServeMarkdown.exe` with `serve-markdown.exe` beside it, for Windows x64.
@@ -57,11 +60,7 @@ sources; on Windows it is run as `node build.mjs`. It takes the action as its ar
 - `update` moves every package `web/package.json` names to its latest release, major versions
   included, rewriting `web/package-lock.json`, and builds the assets from them. A new esbuild
   release runs its install script only once `npm install-scripts approve esbuild` in `web/`
-  has approved it;
-- `release vX.Y.Z` runs `check` on a clean `dev`, opens `$EDITOR` for the release notes,
-  prefilled with the commit subjects since the previous tag under `## Changed`, makes the
-  annotated tag `vX.Y.Z` on `dev` with them, fast-forwards `main` to `dev`, and pushes `dev`,
-  `main` and the tag in one atomic push. Lines starting with `;` are dropped from the notes.
+  has approved it.
 
 Every action but `clean` first installs the packages pinned in `web/package-lock.json` and
 builds the browser assets into `assets/build/`, since the executable embeds them. A plain
@@ -102,11 +101,12 @@ serve-markdown docs/ --list scope:current     # the flag is ignored
 | `--content-width` | `full` | How wide the document is drawn: `small`, `medium`, `large` or `full` |
 | `--front-matter` | `all` | What the top row shows of the document's front matter: `all` or `title-only` |
 | `--separators` | `side` | The lines separating the top row, the sidebars and the document: `hidden`, `top`, `side` or `all` |
+| `--ignore-file` | `.serveignore` in the served directory | The file of `.gitignore` patterns of the paths neither listed, served nor edited, which must exist and read, see [Ignored files](#ignored-files) |
 | `--ado` | the default branch | Read Azure Repos at a version: `branch:release/2.1`, `tag:v1.0` or `commit:9a3f2b1` |
 | `--editor` | off | Edit the documents of the served directory at `/_/editor/`, see [Editor](#editor) |
 | `--editor-templates` | none | The directory of the templates new documents are created from |
 | `--editor-config` | `editor.json` in the served directory | The editor configuration file to read, which must exist and read, see [Editor](#editor) |
-| `--editor-exclude` | none | Comma separated list of the path patterns left out of editing |
+| `--editor-exclude` | none | Comma separated list of the `.gitignore` patterns of the paths left out of editing |
 | `--editor-spell-check` | off | Show the spell check switch and language in the editor's top bar |
 | `--config` | see [Configuration file](#configuration-file) | Read the server configuration from the file |
 | `--pdf` | | Print the Markdown document the path names to this PDF file and exit, see [PDF export](#pdf-export) |
@@ -141,7 +141,8 @@ folders and their index documents alone, since a document the page will never op
 somewhere to browse. A folder contributes one document at most - the one it is read as, the
 first of `--search` standing there - or none. A repository root left with nothing to browse
 then falls back to the project's repositories, the way it does for a repository holding its
-index document alone. A local directory's list still names every Markdown file it finds.
+index document alone. A local directory's list still names every Markdown file it finds that
+is not [ignored](#ignored-files).
 
 An `ado://` source is reached through its own route alone, since the repository is named by
 the route itself, and the server prints that route at startup.
@@ -189,6 +190,46 @@ serve-markdown --config ~/reading.yaml docs/   # another file, read instead of t
 A key no flag is named after, a setting a flag does not know, or a value of the wrong kind
 stops the server with a message naming it and the line it stands on. The file that was read is
 printed at startup.
+
+## Ignored files
+
+A `.serveignore` in the served directory holds `.gitignore` patterns of the paths the server
+leaves alone: an ignored file or folder is left out of the directory list, of a folder's list of
+Markdown files, and of the documents a folder is read as, and a URL reaching it, or a path below
+an ignored folder, answers `404 Not Found`. The editor leaves it out too.
+
+```gitignore
+# Work in progress
+drafts/
+*.secret.md
+!public.secret.md
+/notes.md
+**/generated/**
+```
+
+The patterns follow `.gitignore` itself, relative to the served directory: a pattern without a
+slash matches a name at any depth, one with a slash, or a leading one, the path from the served
+directory, a trailing slash matches folders alone, `*` stays within a name, `**` crosses folders,
+`!` takes a path back, and a later pattern stands above an earlier one. A path below an ignored
+folder stays ignored, whatever a later `!` says. Blank lines and lines beginning with `#` are
+skipped.
+
+`--ignore-file` names the file to read in place of `.serveignore`, wherever it stands; its
+patterns are still relative to the served directory:
+
+```sh
+serve-markdown --ignore-file ~/docs.ignore docs/
+```
+
+The file is read at startup and printed in the banner. The file `--ignore-file` names must exist
+and hold only `.gitignore` patterns, or the server stops with a message naming the line that
+does not read. A missing `.serveignore` ignores nothing, and one holding a pattern that does
+not read is warned of in the banner and set aside. A Markdown file named as the path is served
+whatever the patterns say, and an `ado://` source reads none of them.
+
+A name beginning with a dot is left alone the same way without a pattern: it is left out of
+every list, and a URL reaching a file or folder named so, `.serveignore` itself among them,
+answers `404 Not Found`.
 
 ## Outline
 
@@ -278,7 +319,7 @@ outline's, until the button is pressed again; `display` says how the list starts
 reader has chosen.
 
 The document the page shows is marked, folders come before documents, and names beginning with
-a dot are left out.
+a dot are left out, as are the paths of [Ignored files](#ignored-files).
 
 A folder below the served directory holding nothing but the document on the page - or nothing
 at all - is listed as the folder above it, with the folder itself marked and `..` leading
@@ -570,9 +611,10 @@ serve-markdown --editor --editor-templates ../templates --editor-exclude referen
 ```
 
 The editor lists the documents (`.md`, `.markdown`) below the directory, names beginning with a
-dot left out, and opens the one chosen in [MDXEditor](https://mdxeditor.dev), with a toolbar for
-the headings, the formatting, the lists, links, pictures, tables and code blocks, and a switch to
-the Markdown source and to the differences from the saved file.
+dot and the paths of [Ignored files](#ignored-files) left out, and opens the one chosen in
+[MDXEditor](https://mdxeditor.dev), with a toolbar for the headings, the formatting, the lists,
+links, pictures, tables and code blocks, and a switch to the Markdown source and to the
+differences from the saved file.
 
 `Ctrl+S` or `Cmd+S` saves the file in place. The **File** menu creates a document, a document
 from a template, or a folder with an `index.md`, and saves or reverts the open file;
@@ -605,10 +647,11 @@ the settings of its own documents:
 ```
 
 Both keys may be left out: without `directories` the whole served directory is edited, and a
-new document must be created within one of them. Its `exclude` patterns are added to those of
-`--editor-exclude`. A missing file, or one that does not read - an unknown key, a folder outside
-the served directory, or a pattern that does not read - is warned of in the banner and set aside,
-the editor then editing the whole served directory but for what `--editor-exclude` names.
+new document must be created within one of them. Its `exclude` patterns follow those of
+`--editor-exclude`, which follow those of the [ignore file](#ignored-files). A missing file, or
+one that does not read - an unknown key, a folder outside the served directory, or a pattern
+that does not read - is warned of in the banner and set aside, the editor then editing the whole
+served directory but for what the ignore file and `--editor-exclude` name.
 
 `--editor-config` names the file to read in place of `editor.json`, wherever it stands; its
 folders are still relative to the served directory. The file named must exist and read, or the
@@ -618,10 +661,10 @@ server stops with a message naming it, and the flag needs `--editor`:
 serve-markdown --editor --editor-config ~/docs-editor.json docs/
 ```
 
-Exclusion patterns are matched as `path.Match` globs: one without a slash against the name of the
-file and of every folder it lies in, one with a slash against its path below the served
-directory and the path of every folder it lies in. `reference` leaves out every folder named so,
-`docs/reference` that one folder. `**` and the `!` of `.gitignore` are not read.
+Exclusion patterns are `.gitignore` patterns, read as the ignore file's are and after them, so
+a `!` of `--editor-exclude` or `exclude` takes back a path the ignore file leaves out, for the
+editor alone. `reference` leaves out every folder named so, `docs/reference` that one folder,
+and `**/drafts/**` everything in a folder named `drafts`.
 
 The settings, kept in the browser, choose:
 
@@ -774,6 +817,34 @@ instance outlives the app only when the app itself crashes.
 A login item registered by one build may need **Launch at Login** turned off and on again after
 the app is rebuilt or moved. The app is registered from where it runs, so it is copied to
 `~/Applications` before the option is turned on.
+
+## Releasing
+
+`CHANGELOG.md` holds every release, newest first: a `## x.y.z` heading, a summary line between
+blank lines, and the changes as a list. The newest entry not yet tagged collects the changes
+made since the last release.
+
+`./release.mjs`, run on `dev`, releases that entry:
+
+1. runs `./build.mjs check`;
+2. commits everything with the entry's summary line as the message, when anything is left to
+   commit;
+3. makes the annotated tag `vx.y.z` with the entry as its message, which the workflow publishes
+   as the release notes;
+4. fast-forwards `main` to `dev` and pushes both;
+5. waits for the build of the `dev` push, and pushes the tag once it has passed, which builds and
+   publishes the release.
+
+```sh
+./release.mjs                  # release the newest CHANGELOG.md entry
+./release.mjs -m "message"     # commit with another message
+./release.mjs -n               # print the commands instead of running them
+./release.mjs --no-push        # commit, tag and move main, but push nothing
+```
+
+It refuses when the tag exists, locally or on GitHub, so a released entry is never released
+again; the next change needs a new entry. A failed build of `dev` stops it before the tag is
+pushed, the tag left on the local machine alone.
 
 ## Licence
 

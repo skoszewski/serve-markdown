@@ -403,3 +403,40 @@ func TestEditorConfigFlagNeedsTheEditor(t *testing.T) {
 		t.Errorf("editorConfig = %q, want the file's", settings.editorConfig)
 	}
 }
+
+func TestReadConfigIgnoreFileAndEditorExclude(t *testing.T) {
+	root := documentRoot(t)
+	userConfigDir(t)
+	t.Chdir(root)
+	writeConfig(t, root, configName, "ignore-file: from-file.txt\neditor-exclude: [\"**/drafts\", \"!keep.md\"]\n")
+
+	command := flag.CommandLine
+	defer func() { flag.CommandLine = command }()
+	arguments := os.Args
+	defer func() { os.Args = arguments }()
+
+	flag.CommandLine = flag.NewFlagSet("serve-markdown", flag.ContinueOnError)
+	os.Args = []string{"serve-markdown"}
+	settings, err := readConfiguration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.ignoreFile != "from-file.txt" || strings.Join(settings.editorExclude, ",") != "**/drafts,!keep.md" {
+		t.Errorf("ignoreFile = %q, editorExclude = %q, want the file's", settings.ignoreFile, settings.editorExclude)
+	}
+
+	flag.CommandLine = flag.NewFlagSet("serve-markdown", flag.ContinueOnError)
+	os.Args = []string{"serve-markdown", "--ignore-file", "from-flag.txt"}
+	if settings, err = readConfiguration(); err != nil {
+		t.Fatal(err)
+	}
+	if settings.ignoreFile != "from-flag.txt" {
+		t.Errorf("ignoreFile = %q, want the flag's", settings.ignoreFile)
+	}
+
+	flag.CommandLine = flag.NewFlagSet("serve-markdown", flag.ContinueOnError)
+	os.Args = []string{"serve-markdown", "--editor-exclude", "[a"}
+	if _, err := readConfiguration(); err == nil || !strings.Contains(err.Error(), "editor-exclude") {
+		t.Errorf("error = %v, want one naming editor-exclude", err)
+	}
+}

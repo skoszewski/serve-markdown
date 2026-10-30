@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
-// Builds, tests, checks and releases serve-markdown, and builds the assets it embeds.
+// Builds, tests and checks serve-markdown, and builds the assets it embeds.
 // Usage: ./build.mjs [build|test|check|clean|assets|update|macos] [<goos>/<goarch>]
 //        ./build.mjs windows [self-contained]
-//        ./build.mjs release vX.Y.Z
 //
 // The platform defaults to the host's. Naming one builds for it instead, writing
 // serve-markdown-<goos>-<goarch>; it applies to the build action alone. The update action moves
@@ -12,24 +11,19 @@
 // dist/ServeMarkdown.app with serve-markdown inside it, signed by $MACOS_SIGN_IDENTITY, ad-hoc
 // when it is not set. The windows action writes the notification-area app for Windows x64 and
 // serve-markdown.exe into dist/ServeMarkdown-windows; the app runs on the installed .NET
-// Desktop Runtime, or carries its own with self-contained. The release action checks dev, tags
-// it with notes edited in $EDITOR, prefilled with the commit subjects since the previous tag,
-// fast-forwards main to it, and pushes dev, main and the tag together.
+// Desktop Runtime, or carries its own with self-contained. Releases are made by release.mjs.
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const usage = "usage: ./build.mjs [build|test|check|clean|assets|update|macos] [<goos>/<goarch>]\n" +
-  "       ./build.mjs windows [self-contained]\n" +
-  "       ./build.mjs release vX.Y.Z";
+  "       ./build.mjs windows [self-contained]";
 const root = dirname(fileURLToPath(import.meta.url));
 const [action = "build", argument = ""] = process.argv.slice(2);
-const platform = ["release", "windows"].includes(action) ? "" : argument;
+const platform = action === "windows" ? "" : argument;
 const selfContained = action === "windows" && argument === "self-contained";
-const tag = action === "release" ? argument : "";
 
 /**
  * Runs a command in the given directory and returns what it wrote to stdout; the command's
@@ -67,7 +61,7 @@ if (platform !== "") {
   binary = `serve-markdown-${goos}-${goarch}${goos === "windows" ? ".exe" : ""}`;
 }
 
-if (!["build", "test", "check", "clean", "assets", "update", "macos", "windows", "release"].includes(action)) {
+if (!["build", "test", "check", "clean", "assets", "update", "macos", "windows"].includes(action)) {
   console.error(usage);
   process.exit(2);
 }
@@ -80,25 +74,6 @@ if (action === "windows" && !["", "self-contained"].includes(argument)) {
 if (action === "macos" && (process.platform !== "darwin" || platform !== "")) {
   console.error("the macos action builds on macOS, for the host");
   process.exit(2);
-}
-
-// A release is made from a clean dev, for a semver tag with a leading v.
-if (action === "release") {
-  const number = "(0|[1-9][0-9]*)";
-  const identifier = "(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)";
-  const semver = new RegExp(`^v${number}\\.${number}\\.${number}(-${identifier}(\\.${identifier})*)?$`);
-  if (!semver.test(tag)) {
-    console.error(`${usage}\nthe version must be a semver tag with a leading v, e.g. v2.4.0`);
-    process.exit(2);
-  }
-  if (run("git", ["branch", "--show-current"], { capture: true }).trim() !== "dev") {
-    console.error("a release is made from dev");
-    process.exit(2);
-  }
-  if (run("git", ["status", "--porcelain"], { capture: true }).trim() !== "") {
-    console.error("the working tree is not clean");
-    process.exit(2);
-  }
 }
 
 // The latest release of each package is installed, across major versions.
@@ -129,8 +104,7 @@ switch (action) {
   case "test":
     run("go", ["test", "./..."], { env });
     break;
-  case "check":
-  case "release": {
+  case "check": {
     const unformatted = run("gofmt", ["-l", "."], { capture: true }).trim();
     if (unformatted !== "") {
       console.error(`these files are not gofmt clean:\n${unformatted}`);
@@ -138,21 +112,6 @@ switch (action) {
     }
     run("go", ["vet", "./..."], { env });
     run("go", ["test", "./..."], { env });
-    if (action === "release") {
-      // The notes are edited with ';' as git's comment character.
-      const previous = run("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "dev"], { capture: true }).trim();
-      const subjects = run("git", ["log", `${previous}..dev`, "--format=- %s"], { capture: true });
-      const notesDir = mkdtempSync(join(tmpdir(), "serve-markdown-"));
-      const notes = join(notesDir, "notes.md");
-      writeFileSync(notes, `## Changed\n\n${subjects}`);
-      const tagged = spawnSync("git", ["-c", "core.commentChar=;", "tag", "-a", tag, "-e", "-F", notes, "dev"], { cwd: root, stdio: "inherit" });
-      rmSync(notesDir, { recursive: true, force: true });
-      if (tagged.status !== 0) {
-        process.exit(tagged.status ?? 1);
-      }
-      run("git", ["fetch", ".", "dev:main"]);
-      run("git", ["push", "--atomic", "origin", "dev", "main", tag]);
-    }
     break;
   }
   case "macos": {

@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -174,6 +173,9 @@ type configuration struct {
 	editorConfig     string
 	editorExclude    []string
 	editorSpellCheck bool
+	// ignoreFile is the file of .gitignore patterns of the paths neither listed, served nor
+	// edited; empty to read ignoreFileName in the served directory.
+	ignoreFile string
 	// stopOnStdinEOF stops the server when its standard input ends.
 	stopOnStdinEOF bool
 }
@@ -247,7 +249,9 @@ func readConfiguration() (configuration, error) {
 	editorTemplates := flag.String("editor-templates", "", "Directory of the templates new documents are created from")
 	editorConfig := flag.String("editor-config", "", "Existing editor configuration file to read instead of editor.json "+
 		"in the served directory")
-	editorExclude := flag.String("editor-exclude", "", "Comma separated list of the path patterns left out of editing")
+	editorExclude := flag.String("editor-exclude", "", "Comma separated list of the .gitignore patterns of the paths left out of editing")
+	ignoreFile := flag.String("ignore-file", "", "Existing file of .gitignore patterns of the paths neither listed, served "+
+		"nor edited, to read instead of "+ignoreFileName+" in the served directory")
 	editorSpellCheck := flag.Bool("editor-spell-check", false, "Show the spell check controls in the editor")
 	stopOnStdinEOF := flag.Bool("stop-on-stdin-eof", false, "Stop the server when its standard input ends")
 	named := flag.String("config", "", "Read the server configuration from the file")
@@ -293,11 +297,10 @@ func readConfiguration() (configuration, error) {
 	if !written["editor-exclude"] && fromFile.EditorExclude != nil {
 		settings.editorExclude = fromFile.EditorExclude.names
 	}
-	for _, pattern := range settings.editorExclude {
-		if _, err := path.Match(pattern, ""); err != nil {
-			return configuration{}, fmt.Errorf("'%s' is not a path pattern of 'editor-exclude' (%v)", pattern, err)
-		}
+	if _, err := readIgnoreRules("", settings.editorExclude); err != nil {
+		return configuration{}, fmt.Errorf("editor-exclude: %v", err)
 	}
+	settings.ignoreFile = choose(written, "ignore-file", *ignoreFile, fromFile.IgnoreFile)
 
 	settings.contentWidth = choose(written, "content-width", *contentWidth, fromFile.ContentWidth)
 	if !slices.Contains(contentWidths, settings.contentWidth) {
@@ -420,6 +423,7 @@ type fileConfig struct {
 	FrontMatter   *string        `yaml:"front-matter"`
 	Search        *namesValue    `yaml:"search"`
 	PDFPage       *settingsValue `yaml:"pdf-page"`
+	IgnoreFile    *string        `yaml:"ignore-file"`
 
 	Editor           *bool       `yaml:"editor"`
 	EditorTemplates  *string     `yaml:"editor-templates"`

@@ -39,7 +39,7 @@ func editorRoot(t *testing.T) (string, *server) {
 	}
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
 		editor: &editor{rootDir: root, templatesDir: filepath.Join(root, "templates"),
-			exclude: []string{"reference", "templates", "docs/drafts/old.*"}}}
+			ignore: ignoring(t, "reference", "templates", "docs/drafts/old.*")}}
 	return root, handler
 }
 
@@ -235,20 +235,23 @@ func TestEditorRefusesRequestsFromOtherOrigins(t *testing.T) {
 }
 
 func TestEditorExcludesByNameAndPath(t *testing.T) {
-	e := &editor{exclude: []string{"build", "docs/reference/", "*.draft.md"}}
+	e := &editor{ignore: ignoring(t, "build", "docs/reference/", "*.draft.md", "**/old/**", "!keep.draft.md")}
 	for relative, want := range map[string]bool{
 		"build/a.md":                 true,
 		"docs/build/a.md":            true,
 		"docs/reference/a.md":        true,
 		"reference/a.md":             false,
 		"docs/notes.draft.md":        true,
+		"docs/keep.draft.md":         false,
 		"docs/notes.md":              false,
 		"docs/reference-guide/a.md":  false,
 		"other/docs/reference/a.md":  false,
 		"docs/reference/deeper/b.md": true,
+		"a/old/b/c.md":               true,
+		"a/older/c.md":               false,
 	} {
-		if got := e.excluded(relative); got != want {
-			t.Errorf("excluded(%q) = %v, want %v", relative, got, want)
+		if got := e.ignore.ignored(relative, false); got != want {
+			t.Errorf("ignored(%q) = %v, want %v", relative, got, want)
 		}
 	}
 }
@@ -301,7 +304,7 @@ func TestEditorReadsItsConfigurationFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler.editor.directories, handler.editor.exclude = config.Directories, config.Exclude
+	handler.editor.directories, handler.editor.ignore = config.Directories, ignoring(t, config.Exclude...)
 
 	_, body := get(t, handler, "/_/editor/api/files")
 	var files []string

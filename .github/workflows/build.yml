@@ -1,12 +1,13 @@
 # Checks the sources on every push to dev, builds them for darwin/arm64 and windows/amd64 as
 # vX.Y.Z-dev-YYYYMMDD, and publishes them as the dev-latest prerelease, replacing the previous
-# one. A semver tag with a leading v on a commit on main is checked, built for every platform
-# it is published for, and published as a release. Each executable is published in a tar.gz,
-# or a zip for Windows, named after its version, without the v, and its platform; the apps are
-# named the same way. The browser assets the executable embeds
-# are built from web/ before any Go step. Both also carry the Windows notification-area app,
-# built on Windows with serve-markdown.exe beside it, and the macOS menu bar app for arm64,
-# built on macOS with serve-markdown inside it and signed ad hoc.
+# one. A semver tag with a leading v on a commit on main, naming the newest CHANGELOG.md entry,
+# is checked, built for every platform it is published for, and published as a release, with
+# the tag's message as its notes and as a prerelease for a prerelease version. Both the
+# prerelease and a release also carry the Windows notification-area app, built on Windows with
+# serve-markdown.exe beside it, and the macOS menu bar app for arm64, built on macOS with
+# serve-markdown inside it and signed ad hoc. Each executable is published in a tar.gz, or a zip
+# for Windows, named after its version, without the v, and its platform; the apps are named the
+# same way. The browser assets the executable embeds are built from web/ before any Go step.
 
 name: build
 
@@ -260,6 +261,15 @@ jobs:
             echo "'$TAG' is not on main" >&2
             exit 1
           fi
+      - name: Tag of the newest CHANGELOG.md entry
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          newest="$(awk '/^## / { print $2; exit }' CHANGELOG.md)"
+          if [ "v$newest" != "$TAG" ]; then
+            echo "'$TAG' is not the version of the newest CHANGELOG.md entry, '$newest'" >&2
+            exit 1
+          fi
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -270,7 +280,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-from-tag
+        run: |
+          prerelease=()
+          if [[ "$TAG" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-from-tag "${prerelease[@]}"
 
   dev-release:
     if: github.ref == 'refs/heads/dev'

@@ -346,19 +346,20 @@ through `build.mjs`, so the script serves a developer's machine and the workflow
 and neither changes for the other.
 
 Each platform's executable is published packed, as
-`serve-markdown-<version>-<goos>-<goarch>.tar.gz`, or `.zip` for Windows, the form each
-platform unpacks without extra tools, holding the
-executable under its plain name, `serve-markdown` or `serve-markdown.exe`. A download keeps the
-executable bit of a tarball, so it runs once unpacked, where a bare executable downloaded from a
-release has to be marked executable first. The archive is uploaded as the artifact without a
-further zip around it (`archive: false`), so a run's artifact downloads as the archive itself.
-Every archive and app zip carries its version without the `v` - the tag's on a release, the dev
-version on `dev` - before the platform, so a downloaded file tells which build it is.
-The release is made with the `gh` CLI the
-runner already carries, rather than with a third-party action, and only for a tag that is
-already pushed. Its notes are the message of the annotated tag, since the repository takes no
-pull requests for GitHub to build notes from. The history is checked out whole for the
-builds, so that Go reads the version from the tag the commit carries.
+`serve-markdown-<version>-<goos>-<goarch>.tar.gz`, or `.zip` for Windows, the form each platform
+unpacks without extra tools, holding the executable under its plain name, `serve-markdown` or
+`serve-markdown.exe`. A download keeps the executable bit of a tarball, so it runs once
+unpacked, where a bare executable downloaded from a release has to be marked executable first.
+The archive is uploaded as the artifact without a further zip around it (`archive: false`), so
+a run's artifact downloads as the archive itself. Every archive and app zip carries its version
+without the `v` - the tag's on a release, the dev version on `dev` - before the platform, so a
+downloaded file tells which build it is.
+
+The release is made with the `gh` CLI the runner already carries, rather than with a
+third-party action, and only for a tag that is already pushed. Its notes are the message of the
+annotated tag, the newest `CHANGELOG.md` entry (see "A release is the newest CHANGELOG.md
+entry, made by release.mjs"). The history is checked out whole for the builds, so that Go reads
+the version from the tag the commit carries.
 
 A release is made for a semver tag with a leading `v` alone, the form Go reads a module
 version in. The workflow's tag filters are globs, which hold a tag to `vMAJOR.MINOR.PATCH` with
@@ -376,10 +377,26 @@ and the UTC build date, since the pseudo-version Go stamps on an untagged commit
 next patch release and does not read as a dev build.
 
 A release is refused for a tag whose commit is not on `main`, since `main` holds the stable
-code and releases are made from it. `./build.mjs release` pushes `dev`, `main` and the tag in
-one atomic push, so the release job never sees a tag ahead of `main`, and moves `main` with
-`git fetch . dev:main`, so the working tree stays on `dev`. Its notes are edited with `;` as
-git's comment character, so the Markdown headings in them survive git's cleanup.
+code and releases are made from it.
+
+## A release is the newest CHANGELOG.md entry, made by release.mjs
+
+`CHANGELOG.md` is the one record of what each release changed, so a release takes its commit
+message, its tag and its notes from the newest entry rather than from anything written at
+release time: the summary line is the commit message, the heading the version, and the whole
+entry the message of the annotated tag, which the workflow publishes as the release notes. The
+tag is written with `--cleanup=whitespace`, so lines starting with `#` stay in the notes. The
+release job refuses a tag that is not the version of the newest entry, so a tag made by hand
+does not publish a release the changelog does not hold, and publishes a prerelease version as a
+GitHub prerelease, which is never marked Latest.
+
+`./release.mjs` is the only way a release is made. It moves `main` with `git fetch . dev:main`,
+so the working tree stays on `dev`, and pushes `dev` and `main` before the tag, waiting for the
+build of the `dev` push to pass: a pushed tag publishes a release that cannot be taken back,
+while a failed branch build costs only a commit, the tag still being on the local machine. A
+tag is `v` and a semver version, the form Go reads a module version in, so an entry is
+`x.y.z` or a semver prerelease; a later release of the same code takes the next patch version,
+since `x.y.z-n` would be a prerelease ordered before `x.y.z`.
 
 A run also builds the desktop apps, each on its own platform; see "The apps are built on their
 own platforms by the workflow".
@@ -493,9 +510,10 @@ it is refused everywhere else.
 Which folders below it are edited and what is left out belong to the documents rather than to
 the server's run, so they are kept beside them in `editor.json`, as the editor this one follows
 kept them: `directories`, relative to the served directory and the whole of it when left out,
-and `exclude`. `--editor-exclude` adds patterns for one run. The patterns are `path.Match` globs
-read the way `.gitignore` reads a pattern with and without a slash, without a gitignore library,
-so `**` and `!` are not read.
+and `exclude`. `--editor-exclude` adds patterns for one run. Both are `.gitignore` patterns
+added after those of the ignore file, to one matcher (see "Ignored files follow .gitignore,
+through a library"), so the editor leaves out what the viewer does and its own paths besides,
+and a `!` of its own can take back, for the editor, a path the ignore file leaves out.
 
 A missing `editor.json`, or one that does not read, is a warning in the banner rather than a
 failure: the server is already serving, and a file that only narrows what is edited is not worth
@@ -509,6 +527,35 @@ documents the reader meant to hold back.
 A request changing a file is answered only without an `Origin` of another host and with a JSON
 body. A page of another site can send a form to the loopback address, but neither JSON nor its
 own origin past those checks, and the listen address stays `127.0.0.1` by default.
+
+## Ignored files follow .gitignore, through a library
+
+What a directory keeps out of sight belongs to the directory, as its `.gitignore` does, so the
+patterns are a file in it, `.serveignore`, rather than a list in the server's configuration;
+`--ignore-file` names another for a directory that cannot hold one. A file of its own, rather
+than the directory's `.gitignore`, since what is kept out of Git and what is kept from readers
+differ: a generated page is ignored by Git and meant to be read.
+
+The patterns are read as Git reads them - `**`, `!`, anchoring, folders alone, a path below an
+ignored folder staying ignored - which is a grammar with corners best left to code tested against
+Git's own. `github.com/git-pkgs/gitignore` follows Git's `wildmatch.c`, is tested against its
+suite, imports the standard library alone, and reports a pattern that does not read with its
+line. Its matcher is made with an empty root, which reads no file of its own: the user's global
+excludes and `.git/info/exclude` would hide paths the served directory never asked to hide.
+
+An ignored path is hidden and not served alike: a list leaving a file out while its URL still
+answered would only hide it from someone who did not know its name. The check stands in
+`resolveRoute`, through which every local page, its content, a picture and the list beside the
+page are found, and it is made on the route as written and on the path it resolves to, so a
+symbolic link does not reach an ignored file under another name. A name beginning with a dot is
+refused there the same way, the lists having always left it out, so `.serveignore` does not tell
+a reader what it hides. A file named as the path is served as named, the server having been
+pointed at it.
+
+A `.serveignore` that is missing ignores nothing, and one that does not read is a warning and set
+aside, as `editor.json` is; the file `--ignore-file` names must read, as `--editor-config`'s
+must, since a warning would leave served what was meant to be held back. The file is read once,
+at startup, as the editor's configuration is.
 
 ## The front matter is edited as a YAML node tree
 
