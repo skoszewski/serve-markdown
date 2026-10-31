@@ -89,8 +89,9 @@ type server struct {
 	// ignore matches the paths of the served directory neither listed nor served, nil
 	// without an ignore file.
 	ignore *ignoreRules
-	// menu is the left pane's menu standing in place of the directory list, nil without one.
-	menu []listEntry
+	// menu is the left pane's menu standing in place of the directory list while its file
+	// defines one, nil without a file to read it from.
+	menu *menuSource
 	// stopInput stops the server once it has been read to its end, nil without
 	// --stop-on-stdin-eof.
 	stopInput io.Reader

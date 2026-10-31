@@ -137,24 +137,23 @@ func run() error {
 		}
 	}
 
-	// A menu stands in place of the list, its links to documents that are not served left out.
+	// A menu stands in place of the list while the configuration file defines one, the file
+	// being read again once it changes.
 	var menuWarnings []string
 	if settings.menuWarning != "" {
 		menuWarnings = append(menuWarnings, settings.menuWarning)
 	}
 	switch {
-	case len(settings.menu) == 0:
 	case handler.defaultSource.kind != kindLocal:
-		menuWarnings = append(menuWarnings, fmt.Sprintf("the menu links local documents and is ignored for %s", sourceDescription))
-	default:
-		menu, warnings := handler.readMenu(settings.menu)
-		handler.menu = []listEntry{}
-		if menu != nil {
-			handler.menu = menu
+		if len(settings.menu) > 0 {
+			menuWarnings = append(menuWarnings, fmt.Sprintf("the menu links local documents and is ignored for %s", sourceDescription))
 		}
-		handler.list = listSettings{Scope: defaultList.Scope, Display: defaultList.Display}
-		menuWarnings = append(menuWarnings, warnings...)
-		if settings.listGiven {
+	case settings.menuFile != "":
+		handler.menu = &menuSource{file: settings.menuFile, entries: settings.menu}
+		if info, err := os.Stat(settings.menuFile); err == nil {
+			handler.menu.modTime = info.ModTime()
+		}
+		if len(settings.menu) > 0 && settings.listGiven {
 			menuWarnings = append(menuWarnings, "the list settings are ignored; the menu stands in place of the list")
 		}
 	}
@@ -219,11 +218,15 @@ func run() error {
 	if ignoreWarning != "" {
 		logInfo("  Ignoring: %sWarning: %s%s", colorYellow, ignoreWarning, colorReset)
 	}
-	if handler.menu != nil {
+	if handler.menu != nil && len(settings.menu) > 0 {
 		logInfo("  Menu:     from '%s'", settings.file)
 	}
 	for _, warning := range menuWarnings {
 		logInfo("  Menu:     %sWarning: %s%s", colorYellow, warning, colorReset)
+	}
+	// The menu's own warnings are logged as it is first resolved, and again whenever they change.
+	if handler.menu != nil {
+		handler.menuFor(handler.defaultSource)
 	}
 	logInfo("  URL:      %shttp://%s%s%s", colorCyan, address, handler.sourceRoute(), colorReset)
 	if handler.editor != nil {
@@ -395,8 +398,9 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 //
 // A query naming any setting draws the sidebar it belongs to, taking the default style when
 // the server was started without one, the way --outline and --list do. A query that does not
-// read leaves the settings alone, and a list takes the outline to the right. A menu stands in
-// place of the list, whatever the query says of it.
+// read leaves the settings alone, and a list takes the outline to the right. A menu the
+// configuration file defines stands in place of the list, whatever the settings and the query
+// say of it.
 func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 	beside := sidebars{Outline: s.outline, List: s.list}
 	query := request.URL.Query()
@@ -410,8 +414,12 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 			beside.Outline = asked
 		}
 	}
+	var menu []listEntry
 	if s.menu != nil {
-		beside.Entries = s.menuFor(src)
+		menu = s.menuFor(src)
+	}
+	if menu != nil {
+		beside.List, beside.Entries, beside.Menu = defaultList, menu, true
 		carryQuery(beside.Entries, request.URL.RawQuery)
 	} else if given := query.Get("list"); given != "" {
 		base := beside.List
@@ -423,7 +431,7 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 		}
 	}
 
-	if s.menu == nil && beside.List.Scope != "" {
+	if menu == nil && beside.List.Scope != "" {
 		beside.Entries, beside.Up = s.documentList(src, beside.List.Scope)
 		carryQuery(beside.Entries, request.URL.RawQuery)
 		beside.Up.Route = withQuery(beside.Up.Route, request.URL.RawQuery)

@@ -89,12 +89,14 @@ type listLink struct {
 }
 
 // sidebars is what stands beside the document: the outline built from its headings, and the
-// list of the documents around it, under a link out of them.
+// list of the documents around it, under a link out of them. Menu tells that the entries are the
+// menu of the configuration file rather than a directory list.
 type sidebars struct {
 	Outline outlineSettings
 	List    listSettings
 	Up      listLink
 	Entries []listEntry
+	Menu    bool
 }
 
 // HoldsList reports whether the page carries a directory list: its entries, the link above

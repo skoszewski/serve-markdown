@@ -452,13 +452,26 @@ chose, and a list scope asked for by a query would undo that choice for one page
 the `list` query are therefore not read beside a menu, and a warning says so rather than
 leaving a setting silently without effect.
 
-The links are checked once, at startup, through `resolveRoute`, so a link reaches only what a
-URL would - no missing file, folder, dot-name or ignored path - and the warnings stand in the
-banner with the rest of what the server was told, as the ignore file's and `editor.json`'s do.
-A link that does not resolve is left out rather than refused, since a menu naming a document
-not yet written should not keep the others from being served. The entries are built once as
-`listEntry` values, so the page template draws them as it draws a list, a group being an entry
-without a route.
+The menu follows the documents as the pages do: the file is read again once its modification
+time changes, and the links are resolved and labelled again on every page, so a menu is written
+beside the documents it names without restarting the server. Of the rest of the file only the
+menu is read again, the other settings belonging to the run. A file that stops reading keeps
+the menu it had, since a half-written edit should not empty the pane, while at startup it stops
+the server as any configuration error does.
+
+A link is resolved through `resolveRoute`, so it reaches only what a URL would - no missing
+file, folder, dot-name or ignored path. A link that does not resolve is left out rather than
+refused, since a menu naming a document not yet written should not keep the others from being
+served, and its warning is logged once each time the warnings change rather than on every page.
+
+A document named alone takes the name its author already gave it: the `title` of its front
+matter, else its first `# ` heading, the title a document without front matter shows, and its
+file name without either, as the list shows it. The front matter is read without
+`readFrontMatter`, which logs what it finds of every document it reads, and the heading is
+looked for outside fenced code blocks, so a heading shown as an example is not taken. The label
+is kept with the document's modification time, so a page reads it again only once it changes.
+The entries are built as `listEntry` values, so the page template draws them as it draws a
+list, a group being an entry without a route.
 
 ## A PDF is printed by headless Chrome from the page itself
 

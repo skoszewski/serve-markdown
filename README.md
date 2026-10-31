@@ -346,24 +346,32 @@ page, and no folder is explored.
 
 ```yaml
 menu:
-  - Home: README.md
+  - README.md
   - Guides:
       - Install: guides/install.md
-      - Upgrade: guides/upgrade.md
+      - guides/upgrade.md
   - API reference: reference/api.md
 ```
 
-An entry is a label and either the path of a document, relative to the served directory, or a
-list of entries, which the label heads as a group; groups nest to any depth. The entries stand
-in the order written, and the entry of the document on the page is marked, the served
-directory's own route marking the document it is read as. Browsing keeps the query the page was
-opened with, as the list does.
+An entry is the path of a document, relative to the served directory, with a label or alone,
+or a label heading a list of entries as a group; groups nest to any depth. A document's label
+is, in this order, the label written in the menu, the `title` of its front matter, the text of
+its first `# ` heading outside a code block, and its file name. A
+group's label is drawn as a bold heading, largest at the top of the menu and smaller at each
+level down, and the first entry is the menu's title, drawn bold and larger than any other. The
+entries stand in the order written, and the entry of the document on the page is marked, the
+served directory's own route marking the document it is read as. Browsing keeps the query the
+page was opened with, as the list does.
 
-The menu is read and checked at startup. An entry linking what is not a document served - a
-file that is not there, a folder, a path outside the served directory, a name beginning with a
-dot, or an [ignored](#ignored-files) path - is left out, as is a group left without entries,
-each with a warning in the banner. An entry that does not read as a label and a path or a list
-stops the server with a message naming its line.
+The menu is read again from its file whenever the file changes, and its entries are checked
+and labelled again on every page, a document's title read again once the document changes; a
+menu added to the file shows on the next page, and one removed from it brings the list back.
+An entry linking what is not a document served - a file that is not there, a folder, a path
+outside the served directory, a name beginning with a dot, or an [ignored](#ignored-files)
+path - is left out, as is a group left without entries, each with a warning in the server's
+output, given again only once the warnings change. At startup, an entry that does not read as
+a path, a label and a path, or a group stops the server with a message naming its line; later,
+a file that no longer reads keeps the menu it had, with a warning.
 
 With a menu, `--list`, its `list` key and the `list` query parameter are not read, and a warning
 in the banner says so when the command line or the file names them. The list button shows and

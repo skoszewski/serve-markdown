@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.4.0
+
+feature: the menu follows its file and the documents' titles, and is drawn with a title and headings.
+
+- A menu entry may name a document alone, `- docs/usage.md`. Its label is, in this order, the
+  label written in the menu, the `title` of the document's front matter, the text of its first
+  `# ` heading outside a code block, and its file name.
+- The menu is read again whenever its file changes, and checked and labelled again on every
+  page, a document's title read again once the document changes: a menu added to the file shows
+  on the next page, and one removed from it brings the list back. A file that no longer reads
+  keeps the menu it had, with a warning.
+- A link to a document that is not served is warned of in the server's output once each time
+  the warnings change, rather than in the startup banner alone.
+- The first entry of the menu is its title, drawn bold and larger than any other entry.
+- A menu group's label is drawn as a bold heading above its entries: largest for a group at the
+  top of the menu, smaller for a group within it, and smaller again below that.
+
 ## 3.3.0
 
 feature: a menu in the configuration file stands in place of the directory list.

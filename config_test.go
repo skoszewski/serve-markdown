@@ -407,7 +407,7 @@ func TestEditorConfigFlagNeedsTheEditor(t *testing.T) {
 func TestReadConfigMenu(t *testing.T) {
 	root := documentRoot(t)
 	name := writeConfig(t, root, "menu.yaml", "menu:\n  - Home: README.md\n  - Guides:\n"+
-		"      - Guide: /docs/guide.md\n      - Deeper:\n          - Index: docs/index.md\n")
+		"      - Guide: /docs/guide.md\n      - Deeper:\n          - docs/index.md\n")
 	config, _, err := readConfigFile(name)
 	if err != nil {
 		t.Fatal(err)
@@ -421,7 +421,7 @@ func TestReadConfigMenu(t *testing.T) {
 		}
 		return names
 	}
-	want := "Home=README.md Guides= Guides/Guide=docs/guide.md Guides/Deeper= Guides/Deeper/Index=docs/index.md"
+	want := "Home=README.md Guides= Guides/Guide=docs/guide.md Guides/Deeper= Guides/Deeper/=docs/index.md"
 	if got := strings.Join(flatten(config.Menu, ""), " "); got != want {
 		t.Errorf("menu = %q, want %q", got, want)
 	}
@@ -431,7 +431,7 @@ func TestReadConfigMenu(t *testing.T) {
 		"menu:\n  - Home: 3\n":                              "line 2: 'Home' needs a document path",
 		"menu:\n  - Guides: []\n":                           "line 2: 'Guides' needs a document path",
 		"menu:\n  - Home:\n":                                "line 2: 'Home' needs a document path",
-		"menu:\n  - README.md\n":                            "line 2: expected a menu entry",
+		"menu:\n  - 42\n":                                   "line 2: expected a menu entry",
 		"menu:\n  - '': README.md\n":                        "line 2: a menu entry needs a label",
 	} {
 		name := writeConfig(t, root, "bad.yaml", content)
@@ -460,9 +460,10 @@ func TestReadConfigReadsTheMenuOfTheStartingDirectoryAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.menu != nil || !strings.Contains(settings.menuWarning, "is ignored") || !settings.listGiven {
-		t.Errorf("menu = %v, warning = %q, listGiven = %v; want no menu, a warning, and the list given",
-			settings.menu, settings.menuWarning, settings.listGiven)
+	if settings.menu != nil || settings.menuFile != "" || !strings.Contains(settings.menuWarning, "is ignored") ||
+		!settings.listGiven {
+		t.Errorf("menu = %v, file = %q, warning = %q, listGiven = %v; want no menu, a warning, and the list given",
+			settings.menu, settings.menuFile, settings.menuWarning, settings.listGiven)
 	}
 
 	// The file in the starting directory, and one --config names, keep theirs.
@@ -474,9 +475,9 @@ func TestReadConfigReadsTheMenuOfTheStartingDirectoryAlone(t *testing.T) {
 		if settings, err = readConfiguration(); err != nil {
 			t.Fatal(err)
 		}
-		if len(settings.menu) != 1 || settings.menuWarning != "" || settings.listGiven {
-			t.Errorf("%q: menu = %v, warning = %q, listGiven = %v; want the menu alone",
-				args, settings.menu, settings.menuWarning, settings.listGiven)
+		if len(settings.menu) != 1 || settings.menuFile != settings.file || settings.menuWarning != "" || settings.listGiven {
+			t.Errorf("%q: menu = %v, file = %q, warning = %q, listGiven = %v; want the menu alone, read from its file",
+				args, settings.menu, settings.menuFile, settings.menuWarning, settings.listGiven)
 		}
 	}
 }

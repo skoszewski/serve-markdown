@@ -164,9 +164,11 @@ type configuration struct {
 	// listGiven tells that the command line or the file names the list settings.
 	listGiven bool
 	// menu is the left pane's menu the file defines, standing in place of the list; empty
-	// without one, and menuWarning says why a menu the file holds is not used.
+	// without one, and menuWarning says why a menu the file holds is not used. menuFile is the
+	// file the menu is read again from once it changes, empty for the user's own file.
 	menu        []menuEntry
 	menuWarning string
+	menuFile    string
 	ado         adoSettings
 	showVersion bool
 	watch       float64
@@ -352,10 +354,13 @@ func readConfiguration() (configuration, error) {
 	// A menu belongs to the documents it links, so the file in the user's configuration
 	// directory, read for every directory served, holds none.
 	settings.menu = fromFile.Menu
-	if len(settings.menu) > 0 && *named == "" && file != configName {
+	switch {
+	case *named == "" && file != configName && len(settings.menu) > 0:
 		settings.menu = nil
 		settings.menuWarning = fmt.Sprintf("the menu of '%s' is ignored; a menu is read from %s "+
 			"in the directory the server is started in, or from the file --config names", file, configName)
+	case *named != "" || file == configName:
+		settings.menuFile = file
 	}
 	if settings.ado, err = chooseSettings(*ado, written["ado"], fromFile.ADO,
 		adoSettings{}, adoSettings{}, parseADO); err != nil {
@@ -505,8 +510,9 @@ func (v *settingsValue) UnmarshalYAML(node *yaml.Node) error {
 	return fmt.Errorf("line %d: expected true, false or a mapping of settings", node.Line)
 }
 
-// menuEntry is one entry of the menu a file defines: a label and the path of a document below
-// the served directory, or a label heading the entries of a group.
+// menuEntry is one entry of the menu a file defines: the path of a document below the served
+// directory, with a label or labelled by the document's own title, or a label heading the
+// entries of a group.
 type menuEntry struct {
 	Label   string
 	Path    string
@@ -514,16 +520,20 @@ type menuEntry struct {
 	line    int
 }
 
-// UnmarshalYAML reads an entry from a mapping of its label to a document path or to a sequence
-// of the group's entries.
+// UnmarshalYAML reads an entry from a document path alone, or from a mapping of its label to a
+// document path or to a sequence of the group's entries.
 func (e *menuEntry) UnmarshalYAML(node *yaml.Node) error {
-	expected := fmt.Errorf("line %d: expected a menu entry, '<label>: <document>' or '<label>:' "+
-		"followed by a list of entries", node.Line)
+	expected := fmt.Errorf("line %d: expected a menu entry, '<document>', '<label>: <document>' or "+
+		"'<label>:' followed by a list of entries", node.Line)
+	e.line = node.Line
+	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" && strings.Trim(node.Value, "/ ") != "" {
+		e.Path = strings.TrimLeft(strings.TrimSpace(node.Value), "/")
+		return nil
+	}
 	if node.Kind != yaml.MappingNode || len(node.Content) != 2 {
 		return expected
 	}
 	key, value := node.Content[0], node.Content[1]
-	e.line = node.Line
 	if key.Kind != yaml.ScalarNode || strings.TrimSpace(key.Value) == "" {
 		return fmt.Errorf("line %d: a menu entry needs a label", key.Line)
 	}
