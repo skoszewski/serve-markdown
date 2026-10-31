@@ -137,6 +137,28 @@ func run() error {
 		}
 	}
 
+	// A menu stands in place of the list, its links to documents that are not served left out.
+	var menuWarnings []string
+	if settings.menuWarning != "" {
+		menuWarnings = append(menuWarnings, settings.menuWarning)
+	}
+	switch {
+	case len(settings.menu) == 0:
+	case handler.defaultSource.kind != kindLocal:
+		menuWarnings = append(menuWarnings, fmt.Sprintf("the menu links local documents and is ignored for %s", sourceDescription))
+	default:
+		menu, warnings := handler.readMenu(settings.menu)
+		handler.menu = []listEntry{}
+		if menu != nil {
+			handler.menu = menu
+		}
+		handler.list = listSettings{Scope: defaultList.Scope, Display: defaultList.Display}
+		menuWarnings = append(menuWarnings, warnings...)
+		if settings.listGiven {
+			menuWarnings = append(menuWarnings, "the list settings are ignored; the menu stands in place of the list")
+		}
+	}
+
 	// The editor writes the files of the served directory, so it needs a local one.
 	editorConfigFile, editorWarning := "", ""
 	if settings.editor {
@@ -196,6 +218,12 @@ func run() error {
 	}
 	if ignoreWarning != "" {
 		logInfo("  Ignoring: %sWarning: %s%s", colorYellow, ignoreWarning, colorReset)
+	}
+	if handler.menu != nil {
+		logInfo("  Menu:     from '%s'", settings.file)
+	}
+	for _, warning := range menuWarnings {
+		logInfo("  Menu:     %sWarning: %s%s", colorYellow, warning, colorReset)
 	}
 	logInfo("  URL:      %shttp://%s%s%s", colorCyan, address, handler.sourceRoute(), colorReset)
 	if handler.editor != nil {
@@ -367,7 +395,8 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 //
 // A query naming any setting draws the sidebar it belongs to, taking the default style when
 // the server was started without one, the way --outline and --list do. A query that does not
-// read leaves the settings alone, and a list takes the outline to the right.
+// read leaves the settings alone, and a list takes the outline to the right. A menu stands in
+// place of the list, whatever the query says of it.
 func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 	beside := sidebars{Outline: s.outline, List: s.list}
 	query := request.URL.Query()
@@ -381,7 +410,10 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 			beside.Outline = asked
 		}
 	}
-	if given := query.Get("list"); given != "" {
+	if s.menu != nil {
+		beside.Entries = s.menuFor(src)
+		carryQuery(beside.Entries, request.URL.RawQuery)
+	} else if given := query.Get("list"); given != "" {
 		base := beside.List
 		if base.Scope == "" {
 			base.Scope = defaultList.Scope
@@ -391,7 +423,7 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 		}
 	}
 
-	if beside.List.Scope != "" {
+	if s.menu == nil && beside.List.Scope != "" {
 		beside.Entries, beside.Up = s.documentList(src, beside.List.Scope)
 		carryQuery(beside.Entries, request.URL.RawQuery)
 		beside.Up.Route = withQuery(beside.Up.Route, request.URL.RawQuery)

@@ -161,7 +161,9 @@ is refused for the same reasons a command line is, with the same words.
 `--css` is a flag for that reason too, though CSS is mostly written in a file: a document's
 default styling is a setting like any other, and a key no flag is named after would be one
 more thing to learn. A document's own front matter `css` replaces it rather than adding to
-it, so a document styled for itself keeps exactly the styling it was written with.
+it, so a document styled for itself keeps exactly the styling it was written with. `menu` is
+the one key without a flag, a nested structure having no command-line form (see "A menu in the
+configuration file stands in place of the directory list").
 
 The command line stands above the file: a file belongs to a directory and is read by everyone
 who serves it, while a flag belongs to one run. Which flags were written is read from the flag
@@ -435,6 +437,28 @@ The folder above is listed with `subfolders` whatever scope was asked for, since
 the page is one of its entries and `current` leaves folders out. The served directory has
 nothing above it the server may show, so it keeps its own list, and `tree` already lists
 everything.
+
+## A menu in the configuration file stands in place of the directory list
+
+A folder's layout says where documents are kept, not the order a reader should meet them in,
+so a site with a reading order defines its own menu. It is a `menu` key of the configuration
+file, the one key with no flag, since a nested list of labels and paths has no command-line
+form. It is read from `serve-markdown.yaml` in the starting directory or from the file
+`--config` names, and refused from the user's own configuration file, which is read for every
+directory served while a menu names the documents of one.
+
+The menu replaces the list rather than adding a scope to it: a menu is the structure the author
+chose, and a list scope asked for by a query would undo that choice for one page. `--list` and
+the `list` query are therefore not read beside a menu, and a warning says so rather than
+leaving a setting silently without effect.
+
+The links are checked once, at startup, through `resolveRoute`, so a link reaches only what a
+URL would - no missing file, folder, dot-name or ignored path - and the warnings stand in the
+banner with the rest of what the server was told, as the ignore file's and `editor.json`'s do.
+A link that does not resolve is left out rather than refused, since a menu naming a document
+not yet written should not keep the others from being served. The entries are built once as
+`listEntry` values, so the page template draws them as it draws a list, a group being an entry
+without a route.
 
 ## A PDF is printed by headless Chrome from the page itself
 

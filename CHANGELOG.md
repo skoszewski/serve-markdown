@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.3.0
+
+feature: a menu in the configuration file stands in place of the directory list.
+
+- A `menu` in `serve-markdown.yaml`, or in the file `--config` names, defines the left pane: labels
+  linking documents of the served directory, and groups of them nested to any depth. It stands
+  on every page in the order written, the document on the page marked, and no folder is explored.
+- The menu is checked at startup: an entry linking a missing document, a folder, a path outside
+  the served directory, a dot-name or an ignored path is left out, as is a group left empty, each
+  with a warning in the banner. An entry that does not read stops the server, naming its line.
+- With a menu, `--list`, the `list` key and the `list` query parameter are not read; the banner
+  warns when the command line or the file names them.
+- A menu in the user's own configuration file, or for an `ado://` source, is ignored with a
+  warning in the banner.
+
 ## 3.2.0
 
 feature: a .serveignore file hides paths from the pages and the editor, and release.mjs makes releases.

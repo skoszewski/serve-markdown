@@ -191,6 +191,9 @@ A key no flag is named after, a setting a flag does not know, or a value of the 
 stops the server with a message naming it and the line it stands on. The file that was read is
 printed at startup.
 
+`menu` is the one key with no flag: it defines the menu of the left pane, see
+[Menu](#menu).
+
 ## Ignored files
 
 A `.serveignore` in the served directory holds `.gitignore` patterns of the paths the server
@@ -324,10 +327,10 @@ a dot are left out, as are the paths of [Ignored files](#ignored-files).
 A folder below the served directory holding nothing but the document on the page - or nothing
 at all - is listed as the folder above it, with the folder itself marked and `..` leading
 further up, in the `current` and `subfolders` scopes alike. The served directory keeps its own
-list, however short, and `tree` lists the whole tree as it is. Browsing keeps the query the page was opened with: every list entry, and
-every link in the document itself that points back at the server, carries it on. A page
-carrying a list always carries its outline on the right, whatever `justify` says. A page takes
-a `list` query parameter of the same settings:
+list, however short, and `tree` lists the whole tree as it is. Browsing keeps the query the page
+was opened with: every list entry, and every link in the document itself that points back at
+the server, carries it on. A page carrying a list always carries its outline on the right,
+whatever `justify` says. A page takes a `list` query parameter of the same settings:
 
 ```
 http://127.0.0.1:8000/guides/install.md?list=scope:tree
@@ -335,6 +338,41 @@ http://127.0.0.1:8000/guides/install.md?list=scope:none
 ```
 
 It stands before the fragment, as every query parameter does.
+
+### Menu
+
+A `menu` in the configuration file stands in place of the list: the left pane shows it on every
+page, and no folder is explored.
+
+```yaml
+menu:
+  - Home: README.md
+  - Guides:
+      - Install: guides/install.md
+      - Upgrade: guides/upgrade.md
+  - API reference: reference/api.md
+```
+
+An entry is a label and either the path of a document, relative to the served directory, or a
+list of entries, which the label heads as a group; groups nest to any depth. The entries stand
+in the order written, and the entry of the document on the page is marked, the served
+directory's own route marking the document it is read as. Browsing keeps the query the page was
+opened with, as the list does.
+
+The menu is read and checked at startup. An entry linking what is not a document served - a
+file that is not there, a folder, a path outside the served directory, a name beginning with a
+dot, or an [ignored](#ignored-files) path - is left out, as is a group left without entries,
+each with a warning in the banner. An entry that does not read as a label and a path or a list
+stops the server with a message naming its line.
+
+With a menu, `--list`, its `list` key and the `list` query parameter are not read, and a warning
+in the banner says so when the command line or the file names them. The list button shows and
+hides the menu as it does the list.
+
+A menu is read from `serve-markdown.yaml` in the directory the server is started in, or from the
+file `--config` names, since it belongs to the documents it links. The one in
+`serve-markdown/config.yaml` of the user's configuration directory, read for every directory
+served, is ignored with a warning, as is a menu for an `ado://` source.
 
 ## Routes
 

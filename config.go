@@ -161,10 +161,16 @@ type configuration struct {
 	search        indexSearch
 	outline       outlineSettings
 	list          listSettings
-	ado           adoSettings
-	showVersion   bool
-	watch         float64
-	file          string
+	// listGiven tells that the command line or the file names the list settings.
+	listGiven bool
+	// menu is the left pane's menu the file defines, standing in place of the list; empty
+	// without one, and menuWarning says why a menu the file holds is not used.
+	menu        []menuEntry
+	menuWarning string
+	ado         adoSettings
+	showVersion bool
+	watch       float64
+	file        string
 	// editor runs the Markdown editor of the served directory, with the templates in
 	// editorTemplates, the configuration file editorConfig names, the paths editorExclude
 	// matches left out, and the spell check controls shown with editorSpellCheck.
@@ -341,6 +347,16 @@ func readConfiguration() (configuration, error) {
 		listSettings{Display: defaultList.Display}, defaultList, parseList); err != nil {
 		return configuration{}, err
 	}
+	settings.listGiven = written["list"] || fromFile.List != nil
+
+	// A menu belongs to the documents it links, so the file in the user's configuration
+	// directory, read for every directory served, holds none.
+	settings.menu = fromFile.Menu
+	if len(settings.menu) > 0 && *named == "" && file != configName {
+		settings.menu = nil
+		settings.menuWarning = fmt.Sprintf("the menu of '%s' is ignored; a menu is read from %s "+
+			"in the directory the server is started in, or from the file --config names", file, configName)
+	}
 	if settings.ado, err = chooseSettings(*ado, written["ado"], fromFile.ADO,
 		adoSettings{}, adoSettings{}, parseADO); err != nil {
 		return configuration{}, err
@@ -424,6 +440,7 @@ type fileConfig struct {
 	Search        *namesValue    `yaml:"search"`
 	PDFPage       *settingsValue `yaml:"pdf-page"`
 	IgnoreFile    *string        `yaml:"ignore-file"`
+	Menu          []menuEntry    `yaml:"menu"`
 
 	Editor           *bool       `yaml:"editor"`
 	EditorTemplates  *string     `yaml:"editor-templates"`
@@ -486,6 +503,40 @@ func (v *settingsValue) UnmarshalYAML(node *yaml.Node) error {
 		return node.Decode(&v.settings)
 	}
 	return fmt.Errorf("line %d: expected true, false or a mapping of settings", node.Line)
+}
+
+// menuEntry is one entry of the menu a file defines: a label and the path of a document below
+// the served directory, or a label heading the entries of a group.
+type menuEntry struct {
+	Label   string
+	Path    string
+	Entries []menuEntry
+	line    int
+}
+
+// UnmarshalYAML reads an entry from a mapping of its label to a document path or to a sequence
+// of the group's entries.
+func (e *menuEntry) UnmarshalYAML(node *yaml.Node) error {
+	expected := fmt.Errorf("line %d: expected a menu entry, '<label>: <document>' or '<label>:' "+
+		"followed by a list of entries", node.Line)
+	if node.Kind != yaml.MappingNode || len(node.Content) != 2 {
+		return expected
+	}
+	key, value := node.Content[0], node.Content[1]
+	e.line = node.Line
+	if key.Kind != yaml.ScalarNode || strings.TrimSpace(key.Value) == "" {
+		return fmt.Errorf("line %d: a menu entry needs a label", key.Line)
+	}
+	e.Label = strings.TrimSpace(key.Value)
+	switch {
+	case value.Kind == yaml.ScalarNode && value.Tag == "!!str" && strings.Trim(value.Value, "/ ") != "":
+		e.Path = strings.TrimLeft(strings.TrimSpace(value.Value), "/")
+	case value.Kind == yaml.SequenceNode && len(value.Content) > 0:
+		return value.Decode(&e.Entries)
+	default:
+		return fmt.Errorf("line %d: '%s' needs a document path or a list of entries", value.Line, e.Label)
+	}
+	return nil
 }
 
 // readConfigFile reads the configuration file the command line names or, when it names none,

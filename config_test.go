@@ -404,6 +404,83 @@ func TestEditorConfigFlagNeedsTheEditor(t *testing.T) {
 	}
 }
 
+func TestReadConfigMenu(t *testing.T) {
+	root := documentRoot(t)
+	name := writeConfig(t, root, "menu.yaml", "menu:\n  - Home: README.md\n  - Guides:\n"+
+		"      - Guide: /docs/guide.md\n      - Deeper:\n          - Index: docs/index.md\n")
+	config, _, err := readConfigFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var flatten func(entries []menuEntry, prefix string) []string
+	flatten = func(entries []menuEntry, prefix string) []string {
+		var names []string
+		for _, entry := range entries {
+			names = append(names, prefix+entry.Label+"="+entry.Path)
+			names = append(names, flatten(entry.Entries, prefix+entry.Label+"/")...)
+		}
+		return names
+	}
+	want := "Home=README.md Guides= Guides/Guide=docs/guide.md Guides/Deeper= Guides/Deeper/Index=docs/index.md"
+	if got := strings.Join(flatten(config.Menu, ""), " "); got != want {
+		t.Errorf("menu = %q, want %q", got, want)
+	}
+
+	for content, want := range map[string]string{
+		"menu:\n  - Home: README.md\n    Other: notes.md\n": "line 2: expected a menu entry",
+		"menu:\n  - Home: 3\n":                              "line 2: 'Home' needs a document path",
+		"menu:\n  - Guides: []\n":                           "line 2: 'Guides' needs a document path",
+		"menu:\n  - Home:\n":                                "line 2: 'Home' needs a document path",
+		"menu:\n  - README.md\n":                            "line 2: expected a menu entry",
+		"menu:\n  - '': README.md\n":                        "line 2: a menu entry needs a label",
+	} {
+		name := writeConfig(t, root, "bad.yaml", content)
+		if _, _, err := readConfigFile(name); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: error = %v, want one holding %q", content, err, want)
+		}
+	}
+}
+
+func TestReadConfigReadsTheMenuOfTheStartingDirectoryAlone(t *testing.T) {
+	root := documentRoot(t)
+	user := userConfigDir(t)
+	t.Chdir(root)
+	menu := "list: true\nmenu:\n  - Home: README.md\n"
+	writeConfig(t, filepath.Join(user, filepath.Dir(userConfigName)), filepath.Base(userConfigName), menu)
+
+	command := flag.CommandLine
+	defer func() { flag.CommandLine = command }()
+	arguments := os.Args
+	defer func() { os.Args = arguments }()
+
+	// The user's own file is read for every directory, so its menu is not used.
+	flag.CommandLine = flag.NewFlagSet("serve-markdown", flag.ContinueOnError)
+	os.Args = []string{"serve-markdown"}
+	settings, err := readConfiguration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.menu != nil || !strings.Contains(settings.menuWarning, "is ignored") || !settings.listGiven {
+		t.Errorf("menu = %v, warning = %q, listGiven = %v; want no menu, a warning, and the list given",
+			settings.menu, settings.menuWarning, settings.listGiven)
+	}
+
+	// The file in the starting directory, and one --config names, keep theirs.
+	writeConfig(t, root, configName, "menu:\n  - Home: README.md\n")
+	named := writeConfig(t, root, "named.yaml", "menu:\n  - Home: README.md\n")
+	for _, args := range [][]string{{"serve-markdown"}, {"serve-markdown", "--config", named}} {
+		flag.CommandLine = flag.NewFlagSet("serve-markdown", flag.ContinueOnError)
+		os.Args = args
+		if settings, err = readConfiguration(); err != nil {
+			t.Fatal(err)
+		}
+		if len(settings.menu) != 1 || settings.menuWarning != "" || settings.listGiven {
+			t.Errorf("%q: menu = %v, warning = %q, listGiven = %v; want the menu alone",
+				args, settings.menu, settings.menuWarning, settings.listGiven)
+		}
+	}
+}
+
 func TestReadConfigIgnoreFileAndEditorExclude(t *testing.T) {
 	root := documentRoot(t)
 	userConfigDir(t)
