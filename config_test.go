@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/skoszewski/serve-markdown/v3/render"
 )
 
 // writeConfig writes a configuration file into directory and returns its path.
@@ -225,35 +227,6 @@ func TestSplitNames(t *testing.T) {
 	}
 }
 
-func TestBodyClass(t *testing.T) {
-	outline := sidebars{Outline: outlineSettings{Style: "plain", Justify: "right"}}
-
-	tests := map[string]struct {
-		settings pageSettings
-		want     string
-	}{
-		// The window needs no rule capping it, so it carries no class of its own.
-		"the width it is given unasked": {pageSettings{ContentWidth: defaultContentWidth}, ""},
-		"a width nobody set":            {pageSettings{}, ""},
-		"a capped width":                {pageSettings{ContentWidth: "medium"}, "width-medium"},
-		"a capped width beside an outline": {pageSettings{ContentWidth: "small", Sidebars: outline},
-			"width-small with-sidebar outline-right"},
-		"the window beside an outline": {pageSettings{ContentWidth: widthFull, Sidebars: outline},
-			"with-sidebar outline-right"},
-		"no separators":           {pageSettings{Separators: "hidden"}, "separators-hidden"},
-		"the top separator alone": {pageSettings{Separators: "top"}, "separators-top"},
-		"the side separators":     {pageSettings{Separators: "side"}, "separators-side"},
-		"every separator":         {pageSettings{Separators: "all"}, ""},
-	}
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-			if got := test.settings.bodyClass(); got != test.want {
-				t.Errorf("bodyClass = %q, want %q", got, test.want)
-			}
-		})
-	}
-}
-
 func TestWatchInterval(t *testing.T) {
 	// A page reading Azure Repos checks for nothing, whatever seconds were asked for; a local
 	// page checks at the seconds it was given, or at the default.
@@ -276,34 +249,34 @@ func TestWatchInterval(t *testing.T) {
 }
 
 func TestChooseSettings(t *testing.T) {
-	off := outlineSettings{Justify: "left", Display: "shown"}
+	off := render.OutlineSettings{Justify: "left", Display: "shown"}
 
 	tests := map[string]struct {
 		given         string
 		onCommandLine bool
 		fromFile      *settingsValue
-		want          outlineSettings
+		want          render.OutlineSettings
 	}{
 		"neither says anything": {"", false, nil, off},
 		"the command line alone": {"style:nh", true,
-			nil, outlineSettings{Style: "numbered-hierarchical", Justify: "left", Display: "shown"}},
+			nil, render.OutlineSettings{Style: "numbered-hierarchical", Justify: "left", Display: "shown"}},
 		"the file alone": {"", false,
 			&settingsValue{on: true, settings: map[string]string{"style": "plain", "display": "hidden"}},
-			outlineSettings{Style: "plain", Justify: "left", Display: "hidden"}},
+			render.OutlineSettings{Style: "plain", Justify: "left", Display: "hidden"}},
 		"the file drawing it with its own settings": {"", false,
-			&settingsValue{on: true}, defaultOutline},
+			&settingsValue{on: true}, render.DefaultOutline},
 		"the file turning it off": {"", false, &settingsValue{}, off},
 		// The command line stands above the file, written or written empty.
 		"the command line over the file": {"style:numbered", true,
 			&settingsValue{on: true, settings: map[string]string{"style": "plain"}},
-			outlineSettings{Style: "numbered", Justify: "left", Display: "shown"}},
+			render.OutlineSettings{Style: "numbered", Justify: "left", Display: "shown"}},
 		"the command line turning it off": {"", true,
 			&settingsValue{on: true, settings: map[string]string{"style": "plain"}}, off},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := chooseSettings(test.given, test.onCommandLine, test.fromFile,
-				off, defaultOutline, parseOutline)
+				off, render.DefaultOutline, parseOutline)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -315,18 +288,18 @@ func TestChooseSettings(t *testing.T) {
 
 	// A setting a file names is refused for the same reasons the command line's is.
 	asked := &settingsValue{on: true, settings: map[string]string{"scope": "current"}}
-	if _, err := chooseSettings("", false, asked, off, defaultOutline, parseOutline); err == nil {
+	if _, err := chooseSettings("", false, asked, off, render.DefaultOutline, parseOutline); err == nil {
 		t.Error("a setting the flag does not know was read from a file")
 	}
 
 	// A list written in a file takes its display the way the outline does.
 	fromFile := &settingsValue{on: true, settings: map[string]string{"display": "hidden"}}
-	list, err := chooseSettings("", false, fromFile, listSettings{Display: defaultList.Display},
-		defaultList, parseList)
+	list, err := chooseSettings("", false, fromFile, render.ListSettings{Display: render.DefaultList.Display},
+		render.DefaultList, parseList)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (listSettings{Scope: "current", Display: "hidden"}); list != want {
+	if want := (render.ListSettings{Scope: "current", Display: "hidden"}); list != want {
 		t.Errorf("list = %+v, want %+v", list, want)
 	}
 }
@@ -412,8 +385,8 @@ func TestReadConfigMenu(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var flatten func(entries []menuEntry, prefix string) []string
-	flatten = func(entries []menuEntry, prefix string) []string {
+	var flatten func(entries []render.MenuEntry, prefix string) []string
+	flatten = func(entries []render.MenuEntry, prefix string) []string {
 		var names []string
 		for _, entry := range entries {
 			names = append(names, prefix+entry.Label+"="+entry.Path)

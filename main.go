@@ -18,23 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-// contentPayload is the JSON the page polls for. Its mtime, text, css, base and info are null
-// when the document could not be read.
-//
-// base is the route the document's relative links are resolved against, which the page cannot
-// work out for itself: a route naming a folder resolves to a document inside it, and the
-// browser would resolve the links beside the folder instead. info is what the front matter
-// says of the document, its author and date left out under --front-matter title-only.
-type contentPayload struct {
-	MTime *string       `json:"mtime"`
-	Text  *string       `json:"text"`
-	CSS   *string       `json:"css"`
-	Base  *string       `json:"base"`
-	Info  *documentInfo `json:"info"`
-	Error *string       `json:"error"`
-}
+	"github.com/skoszewski/serve-markdown/v3/render"
+)
 
 // buildVersion is the version a dev build is given at link time with
 // -ldflags "-X main.buildVersion=...", empty otherwise.
@@ -86,11 +72,11 @@ func run() error {
 	if settings.pdf != "" {
 		local := handler.defaultSource.kind == kindLocal && handler.defaultFile != ""
 		remote := handler.defaultSource.kind == kindADO && handler.defaultSource.repository != "" &&
-			markdownExtensions[strings.ToLower(filepath.Ext(handler.defaultSource.path))]
+			render.MarkdownExtensions[strings.ToLower(filepath.Ext(handler.defaultSource.path))]
 		if !local && !remote {
 			return fmt.Errorf("%s is not a Markdown document; --pdf prints one", sourceDescription)
 		}
-		handler.outline, handler.list, handler.print = outlineSettings{}, listSettings{}, true
+		handler.outline, handler.list, handler.print = render.OutlineSettings{}, render.ListSettings{}, true
 
 		// The document's front matter names the page it is printed on, between what the file
 		// and the command line say.
@@ -328,13 +314,15 @@ func (s *server) serve(listener net.Listener) error {
 // that does not read leaves them. A page holding a directory list carries its outline on the
 // right.
 func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	if strings.HasPrefix(request.URL.Path, pageAssetRoute) {
-		pageFiles.ServeHTTP(writer, request)
-		return
+	// The editor's built files stand beside the page's under assetRoute.
+	if name, found := strings.CutPrefix(request.URL.Path, assetRoute); found && fs.ValidPath(name) {
+		if _, err := fs.Stat(editorBuild, name); err == nil {
+			buildFiles.ServeHTTP(writer, request)
+			return
+		}
 	}
-
-	if strings.HasPrefix(request.URL.Path, assetRoute) {
-		buildFiles.ServeHTTP(writer, request)
+	if strings.HasPrefix(request.URL.Path, pageAssetRoute) || strings.HasPrefix(request.URL.Path, assetRoute) {
+		pageFiles.ServeHTTP(writer, request)
 		return
 	}
 
@@ -357,7 +345,7 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 	src, ok := resolveSource(request.URL.Path, s.defaultSource)
 	src = s.adoVersion(src, request.URL.Query().Get("ado"))
-	if ok && isRawAsset(request.URL.Path) {
+	if ok && render.IsRawAsset(request.URL.Path) {
 		s.sendRawAsset(writer, request, src)
 		return
 	}
@@ -386,7 +374,8 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	watch := watchIntervalFor(src.kind, s.watchInterval)
-	page := renderPage(title, query, int(math.Round(watch*1000)), pageSettings{
+	page := render.Page(title, "/content"+query, int(math.Round(watch*1000)), render.PageSettings{
+		AssetPrefix: assetPrefix, Banner: "Serve Markdown " + version(),
 		Sidebars: s.sidebarsFor(request, src), ContentWidth: s.contentWidth, Separators: s.separators,
 		Mermaid: s.mermaid, Versions: readVersions(src), Print: s.print, PrintFontSize: s.printFontSize})
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -401,30 +390,30 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 // read leaves the settings alone, and a list takes the outline to the right. A menu the
 // configuration file defines stands in place of the list, whatever the settings and the query
 // say of it.
-func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
-	beside := sidebars{Outline: s.outline, List: s.list}
+func (s *server) sidebarsFor(request *http.Request, src source) render.Sidebars {
+	beside := render.Sidebars{Outline: s.outline, List: s.list}
 	query := request.URL.Query()
 
 	if given := query.Get("outline"); given != "" {
 		base := beside.Outline
 		if base.Style == "" {
-			base.Style = defaultOutline.Style
+			base.Style = render.DefaultOutline.Style
 		}
 		if asked, err := parseOutline(given, base); err == nil {
 			beside.Outline = asked
 		}
 	}
-	var menu []listEntry
+	var menu []render.ListEntry
 	if s.menu != nil {
 		menu = s.menuFor(src)
 	}
 	if menu != nil {
-		beside.List, beside.Entries, beside.Menu = defaultList, menu, true
-		carryQuery(beside.Entries, request.URL.RawQuery)
+		beside.List, beside.Entries, beside.Menu = render.DefaultList, menu, true
+		render.CarryQuery(beside.Entries, request.URL.RawQuery)
 	} else if given := query.Get("list"); given != "" {
 		base := beside.List
 		if base.Scope == "" {
-			base.Scope = defaultList.Scope
+			base.Scope = render.DefaultList.Scope
 		}
 		if asked, err := parseList(given, base); err == nil {
 			beside.List = asked
@@ -433,8 +422,8 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 
 	if menu == nil && beside.List.Scope != "" {
 		beside.Entries, beside.Up = s.documentList(src, beside.List.Scope)
-		carryQuery(beside.Entries, request.URL.RawQuery)
-		beside.Up.Route = withQuery(beside.Up.Route, request.URL.RawQuery)
+		render.CarryQuery(beside.Entries, request.URL.RawQuery)
+		beside.Up.Route = render.WithQuery(beside.Up.Route, request.URL.RawQuery)
 	}
 	if beside.HoldsList() {
 		beside.Outline.Justify = "right"
@@ -449,7 +438,7 @@ func (s *server) sidebarsFor(request *http.Request, src source) sidebars {
 // the version to read Azure Repos at in its "ado" parameter. A document whose front matter
 // declares no CSS is styled with what --css says.
 func (s *server) sendContent(writer http.ResponseWriter, request *http.Request) {
-	payload := contentPayload{}
+	payload := render.Content{}
 	route := request.URL.Query().Get("path")
 
 	src, ok := resolveSource(route, s.defaultSource)
@@ -461,7 +450,7 @@ func (s *server) sendContent(writer http.ResponseWriter, request *http.Request) 
 		message := err.Error()
 		payload.Error = &message
 	} else {
-		base := documentBase(route, read.name)
+		base := render.DocumentBase(route, read.name)
 		if s.frontMatter == frontMatterTitleOnly {
 			read.info.Author, read.info.Date = "", ""
 		}

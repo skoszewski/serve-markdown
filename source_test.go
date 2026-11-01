@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/skoszewski/serve-markdown/v3/render"
 )
 
 // The bytes of the files served as raw assets rather than as documents.
@@ -116,12 +118,12 @@ func TestRenderDirectoryListing(t *testing.T) {
 		"- [beta.markdown](beta.markdown)\n" +
 		"- [notes.md](notes.md)\n" +
 		"- [README.md](README.md)\n"
-	if listing := renderDirectoryListing(root, names); listing != want {
+	if listing := render.DirectoryListing(filepath.Base(root), names); listing != want {
 		t.Errorf("listing = %q, want %q", listing, want)
 	}
 
 	// --index-only asks for the listing with no names, having stopped looking for them.
-	if listing := renderDirectoryListing(root, nil); listing != "# "+filepath.Base(root)+"\n\nNo Markdown files found.\n" {
+	if listing := render.DirectoryListing(filepath.Base(root), nil); listing != "# "+filepath.Base(root)+"\n\nNo Markdown files found.\n" {
 		t.Errorf("listing = %q, want the one saying none were found", listing)
 	}
 }
@@ -133,7 +135,7 @@ func TestRenderDirectoryListingWithoutDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if listing := renderDirectoryListing(empty, names); listing != "# empty\n\nNo Markdown files found.\n" {
+	if listing := render.DirectoryListing(filepath.Base(empty), names); listing != "# empty\n\nNo Markdown files found.\n" {
 		t.Errorf("listing = %q, want the one saying none were found", listing)
 	}
 }
@@ -268,15 +270,15 @@ func TestLoadDocumentReadsTheSearchedDocument(t *testing.T) {
 
 	// The search says which document a folder is read as, and in what order they are tried.
 	tests := map[string]struct {
-		search indexSearch
+		search render.IndexSearch
 		name   string
 		text   string
 	}{
-		"README.md,index.md": {indexSearch{"README.md", "index.md"}, "README.md", "# Both readme\n"},
-		"index.md,README.md": {indexSearch{"index.md", "README.md"}, "index.md", "# Both index\n"},
-		"index.md":           {indexSearch{"index.md"}, "index.md", "# Both index\n"},
+		"README.md,index.md": {render.IndexSearch{"README.md", "index.md"}, "README.md", "# Both readme\n"},
+		"index.md,README.md": {render.IndexSearch{"index.md", "README.md"}, "index.md", "# Both index\n"},
+		"index.md":           {render.IndexSearch{"index.md"}, "index.md", "# Both index\n"},
 		// A folder holding none of them is listed, whatever else it holds.
-		"guide.md": {indexSearch{"guide.md"}, "", "# both\n\n- [index.md](index.md)\n- [README.md](README.md)\n"},
+		"guide.md": {render.IndexSearch{"guide.md"}, "", "# both\n\n- [index.md](index.md)\n- [README.md](README.md)\n"},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -293,60 +295,8 @@ func TestLoadDocumentReadsTheSearchedDocument(t *testing.T) {
 
 	// A server built without a search reads the documents named by default.
 	plain := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
-	if got := plain.searched(); strings.Join(got, ",") != strings.Join(defaultSearch, ",") {
-		t.Errorf("searched = %v, want %v", got, defaultSearch)
-	}
-}
-
-func TestIndexSearch(t *testing.T) {
-	search := indexSearch{"README.md", "index.md"}
-
-	if !search.holds("readme.md") || !search.holds("INDEX.MD") {
-		t.Error("a document of the search is not held, its letters' case aside")
-	}
-	if search.holds("guide.md") {
-		t.Error("a document the search does not name is held")
-	}
-	if search.rank("README.md") >= search.rank("index.md") {
-		t.Error("the search does not rank its documents in the order they are looked for")
-	}
-	if search.rank("guide.md") != len(search) {
-		t.Errorf("rank of a document outside the search = %d, want %d", search.rank("guide.md"), len(search))
-	}
-	if want := "README.md or index.md"; search.named() != want {
-		t.Errorf("named = %q, want %q", search.named(), want)
-	}
-}
-
-func TestDocumentBase(t *testing.T) {
-	tests := []struct {
-		route string
-		name  string
-		want  string
-	}{
-		// A route ending in the document's own name reads its links from the folder above it.
-		{"/_/ado/org/project/repo/pool/README.md", "README.md", "/_/ado/org/project/repo/pool/"},
-		{"/_/ado/org/project/repo/README.md", "README.md", "/_/ado/org/project/repo/"},
-		{"/docs/guide.md", "guide.md", "/docs/"},
-		// A route naming a folder resolved to a document within it, however it was written.
-		{"/_/ado/org/project/repo", "README.md", "/_/ado/org/project/repo/"},
-		{"/_/ado/org/project/repo/", "README.md", "/_/ado/org/project/repo/"},
-		{"/_/ado/org/project/repo/subdir", "index.md", "/_/ado/org/project/repo/subdir/"},
-		{"/docs", "index.md", "/docs/"},
-		{"/", "README.md", "/"},
-		{"", "README.md", "/"},
-		// An escaped route names the same document as the name it was read from.
-		{"/docs/my%20guide.md", "my guide.md", "/docs/"},
-		// A listing the server wrote has no file of its own.
-		{"/docs", "", "/docs/"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.route, func(t *testing.T) {
-			if got := documentBase(test.route, test.name); got != test.want {
-				t.Errorf("documentBase(%q, %q) = %q, want %q", test.route, test.name, got, test.want)
-			}
-		})
+	if got := plain.searched(); strings.Join(got, ",") != strings.Join(render.DefaultSearch, ",") {
+		t.Errorf("searched = %v, want %v", got, render.DefaultSearch)
 	}
 }
 
@@ -374,7 +324,7 @@ func TestDocumentTreeListsALocalDirectory(t *testing.T) {
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root}
 	src := source{kind: kindLocal, route: "/docs/guide.md"}
 
-	names := func(entries []listEntry) []string {
+	names := func(entries []render.ListEntry) []string {
 		var read []string
 		for _, entry := range entries {
 			read = append(read, entry.Name)

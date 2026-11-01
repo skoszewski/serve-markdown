@@ -6,7 +6,7 @@ The shell was two Go string constants assembled with `fmt.Sprintf`, whose positi
 arguments had to be kept in step by hand. The outline and the diagram support roughly tripled
 the script.
 
-The shell is now `assets/page/page.html` and `page.css`, embedded with `go:embed`, and the
+The shell is now `render/page/page.html` and `page.css`, embedded with `go:embed`, and the
 script built from `web/src/page.js`. The HTML is rendered with `html/template` and the
 settings the script needs are written into the page as one `pageConfig` object, which
 `html/template` escapes for a script context. The styling is served under `/_/page/` and the
@@ -691,3 +691,25 @@ warns about the unsigned Windows app in the same way.
 The `release` and `dev-release` jobs download every artifact of the run, the executables and
 the app zips alike, with `skip-decompress`: `download-artifact` unpacks an artifact served as a
 zip, so without it a release would carry the files of the app zip rather than the zip.
+
+## The page is drawn by a package other programs import
+
+The page shell, the front matter, the outline and list settings, the directory tree and the
+menu are the package `render`, so another Go program, such as one serving its own guides at
+`/docs/`, draws them as the server does. The server's own sources - local directories,
+`.serveignore`, Azure Repos, the editor and the PDF export - stay in `main` and use the package.
+
+`render.Site` serves the documents of an `fs.FS`, which an `embed.FS` of a program's guides is,
+under a route prefix of its own; its assets and the document the page fetches stand below
+`<prefix>_/`, so it takes no route of the program beside it. The page is told the URL it fetches
+its document from, and the server keeps `/content` for its own pages. A file without a
+modification time, as in an `embed.FS`, is marked by its text, so the page still renders a
+document once. The package logs nothing: what the front matter holds is returned, and the
+server logs it as before.
+
+The built browser files stay out of the repository, so `render` embeds only the page shell and
+its styling, which are sources, and takes the built files as an `fs.FS`. The program importing
+it supplies them: the sub package `render/assets` embeds them for a build from a clone, which
+the server is, and each release publishes them as `serve-markdown-assets-<version>.tar.gz` for
+a program built from the module, which `go` fetches without them. The editor's built files stay
+in `assets/build/`, beside the page's under `/_/assets/`.

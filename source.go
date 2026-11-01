@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-	"hash/fnv"
 	"io"
 	"io/fs"
-	"mime"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/skoszewski/serve-markdown/v3/render"
 )
 
 // Routes under this first path segment name the kind of source to read, e.g. "/_/ado/...".
@@ -66,13 +65,13 @@ type server struct {
 	rootDir       string
 	defaultFile   string
 	watchInterval float64
-	outline       outlineSettings
-	list          listSettings
+	outline       render.OutlineSettings
+	list          render.ListSettings
 	ado           adoSettings
 	contentWidth  string
 	separators    string
 	frontMatter   string
-	search        indexSearch
+	search        render.IndexSearch
 	mermaid       bool
 	indexOnly     bool
 	// css styles every document whose front matter declares no CSS of its own.
@@ -83,7 +82,7 @@ type server struct {
 	printFontSize string
 	// versions reads the branches and tags a page offers, and is Azure Repos' own answer
 	// unless a test gives another.
-	versions func(source) *versionPicker
+	versions func(source) *render.VersionPicker
 	// editor serves the Markdown editor under editorRoute, nil without --editor.
 	editor *editor
 	// ignore matches the paths of the served directory neither listed nor served, nil
@@ -99,9 +98,9 @@ type server struct {
 
 // searched returns the documents a folder is read as: the ones --search names, and the ones
 // it names by default for a server built without them.
-func (s *server) searched() indexSearch {
+func (s *server) searched() render.IndexSearch {
 	if len(s.search) == 0 {
-		return defaultSearch
+		return render.DefaultSearch
 	}
 	return s.search
 }
@@ -119,35 +118,6 @@ func (s *server) adoVersion(src source, given string) source {
 	}
 	src.version, src.versionType = settings.Version, settings.VersionType
 	return src
-}
-
-// Files with these suffixes are served as the bytes they hold rather than read as documents.
-var rawAssetExtensions = map[string]bool{
-	".avif": true, ".bmp": true, ".gif": true, ".ico": true, ".jpeg": true,
-	".jpg": true, ".pdf": true, ".png": true, ".svg": true, ".webp": true,
-}
-
-// isRawAsset reports whether path names a file served as its own bytes.
-func isRawAsset(path string) bool {
-	return rawAssetExtensions[strings.ToLower(filepath.Ext(path))]
-}
-
-// contentTypeFor returns the media type path's suffix names, falling back to a byte stream.
-func contentTypeFor(path string) string {
-	if mediaType := mime.TypeByExtension(strings.ToLower(filepath.Ext(path))); mediaType != "" {
-		return mediaType
-	}
-	return "application/octet-stream"
-}
-
-// unescapePath decodes the percent escapes in a URL path, leaving it unchanged when it holds
-// an invalid escape.
-func unescapePath(path string) string {
-	decoded, err := url.PathUnescape(path)
-	if err != nil {
-		return path
-	}
-	return decoded
 }
 
 // containedPath joins relative onto rootDir and returns the result only when it stays inside
@@ -182,13 +152,9 @@ func isDir(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// indexSearch is what --search names: the documents a folder is read as, in the order they
-// are looked for, for a local directory and an Azure Repos folder alike.
-type indexSearch []string
-
-// indexFile returns the first document of the search that exists as a file under directory
-// and is not ignored, or "" when none does.
-func (search indexSearch) indexFile(directory string, ignore *ignoreRules) string {
+// indexFile returns the first document of search, what --search names, that exists as a file
+// under directory and is not ignored, or "" when none does.
+func indexFile(search render.IndexSearch, directory string, ignore *ignoreRules) string {
 	for _, candidate := range search {
 		path := filepath.Join(directory, candidate)
 		if isFile(path) && !ignore.ignoredPath(path, false) {
@@ -198,28 +164,6 @@ func (search indexSearch) indexFile(directory string, ignore *ignoreRules) strin
 	return ""
 }
 
-// holds reports whether name is one of the documents a folder is read as, whatever its
-// letters' case, a repository answering paths without regard to it.
-func (search indexSearch) holds(name string) bool {
-	return search.rank(name) < len(search)
-}
-
-// rank returns how early name stands among the documents a folder is read as, and the length
-// of the search for a name that is not among them, so that the earlier of two wins.
-func (search indexSearch) rank(name string) int {
-	for rank, candidate := range search {
-		if strings.EqualFold(name, candidate) {
-			return rank
-		}
-	}
-	return len(search)
-}
-
-// named writes the documents a folder is read as, for the pages and errors that name them.
-func (search indexSearch) named() string {
-	return strings.Join(search, " or ")
-}
-
 // resolveRoute resolves a URL route to the file or directory under rootDir it addresses, or
 // "" when it reaches neither, or reaches it through a name beginning with a dot or a path
 // ignore matches, as routed or as resolved.
@@ -227,7 +171,7 @@ func (search indexSearch) named() string {
 // defaultFile is the file the "/" route serves; without one the route reads rootDir itself.
 // A directory is returned as itself, and resolved to the document within it when one is read.
 func resolveRoute(route, rootDir, defaultFile string, ignore *ignoreRules) string {
-	relative := strings.TrimLeft(unescapePath(route), "/")
+	relative := strings.TrimLeft(render.UnescapePath(route), "/")
 	if relative == "" && defaultFile != "" {
 		return defaultFile
 	}
@@ -269,7 +213,7 @@ func markdownFilesIn(directory string, ignore *ignoreRules) ([]string, error) {
 
 	var names []string
 	for _, entry := range entries {
-		if entry.IsDir() || !markdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] ||
+		if entry.IsDir() || !render.MarkdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] ||
 			ignore.ignoredPath(filepath.Join(directory, entry.Name()), false) {
 			continue
 		}
@@ -279,22 +223,6 @@ func markdownFilesIn(directory string, ignore *ignoreRules) ([]string, error) {
 		return strings.ToLower(names[i]) < strings.ToLower(names[j])
 	})
 	return names, nil
-}
-
-// renderDirectoryListing returns the Markdown document listing names as the files directory
-// holds, or saying that it holds none.
-//
-// It is the document of a directory holding none of the documents --search names;
-// --index-only asks for it with no names at all, having stopped looking for the rest.
-func renderDirectoryListing(directory string, names []string) string {
-	lines := []string{"# " + filepath.Base(directory), ""}
-	if len(names) == 0 {
-		lines = append(lines, "No Markdown files found.")
-	}
-	for _, name := range names {
-		lines = append(lines, fmt.Sprintf("- [%s](%s)", name, name))
-	}
-	return strings.Join(lines, "\n") + "\n"
 }
 
 // readLocalFile reads a local file as the document it holds.
@@ -332,27 +260,18 @@ func resolveSource(route string, defaultSource source) (source, bool) {
 	return source{kind: kindLocal, route: route}, true
 }
 
-// escapeRoute escapes each segment of a slash separated path, for a route that addresses it.
-func escapeRoute(path string) string {
-	segments := strings.Split(path, "/")
-	for index, segment := range segments {
-		segments[index] = url.PathEscape(segment)
-	}
-	return strings.Join(segments, "/")
-}
-
 // documentList returns the directory list for the document src addresses: the entries beside
 // it, and the link leading out of them.
 //
 // A local folder below the server's directory holding nothing but the document on the page is
 // listed as the folder above it, the folder itself marked; the whole tree is listed as it is.
-func (s *server) documentList(src source, scope string) ([]listEntry, listLink) {
+func (s *server) documentList(src source, scope string) ([]render.ListEntry, render.ListLink) {
 	switch src.kind {
 	case kindLocal:
 		resolved := resolveRoute(src.route, s.rootDir, s.defaultFile, s.ignore)
 		root, contained := containedPath(s.rootDir, "")
 		if resolved == "" || !contained {
-			return nil, listLink{}
+			return nil, render.ListLink{}
 		}
 		tree := localTree{rootDir: root, folderPath: resolved, ignore: s.ignore}
 		if isFile(resolved) {
@@ -360,21 +279,21 @@ func (s *server) documentList(src source, scope string) ([]listEntry, listLink) 
 			tree.folderPath = filepath.Dir(resolved)
 		}
 
-		entries := documentTree(tree, scope)
-		if scope != "tree" && tree.folderPath != root && holdsNothingToBrowse(entries, s.searched()) {
-			here := tree.route(tree.folderPath)
-			entries = documentTree(localTree{rootDir: root, folderPath: filepath.Dir(tree.folderPath), ignore: s.ignore},
+		entries := render.DocumentTree(tree, scope)
+		if scope != "tree" && tree.folderPath != root && render.HoldsNothingToBrowse(entries, s.searched()) {
+			here := tree.Route(tree.folderPath)
+			entries = render.DocumentTree(localTree{rootDir: root, folderPath: filepath.Dir(tree.folderPath), ignore: s.ignore},
 				"subfolders")
 			for index := range entries {
 				entries[index].Current = entries[index].Route == here
 			}
 		}
-		return entries, listLink{}
+		return entries, render.ListLink{}
 
 	case kindADO:
 		return adoList(src, scope, s.indexOnly, s.searched())
 	}
-	return nil, listLink{}
+	return nil, render.ListLink{}
 }
 
 // localTree reads a local directory as the tree the directory list is built from.
@@ -386,14 +305,14 @@ type localTree struct {
 	ignore *ignoreRules
 }
 
-func (t localTree) root() string     { return t.rootDir }
-func (t localTree) folder() string   { return t.folderPath }
-func (t localTree) document() string { return t.documentPath }
+func (t localTree) Root() string     { return t.rootDir }
+func (t localTree) Folder() string   { return t.folderPath }
+func (t localTree) Document() string { return t.documentPath }
 
-func (t localTree) parent(folder string) string { return filepath.Dir(folder) }
+func (t localTree) Parent(folder string) string { return filepath.Dir(folder) }
 
-// route addresses a local path as the route below the server's directory that reaches it.
-func (t localTree) route(path string) string {
+// Route addresses a local path as the route below the server's directory that reaches it.
+func (t localTree) Route(path string) string {
 	relative, err := filepath.Rel(t.rootDir, path)
 	if err != nil {
 		return ""
@@ -401,11 +320,11 @@ func (t localTree) route(path string) string {
 	if relative == "." {
 		relative = ""
 	}
-	return "/" + escapeRoute(filepath.ToSlash(relative))
+	return "/" + render.EscapeRoute(filepath.ToSlash(relative))
 }
 
-func (t localTree) read(folder string, recursive bool) []treeItem {
-	var items []treeItem
+func (t localTree) Read(folder string, recursive bool) []render.TreeItem {
+	var items []render.TreeItem
 	err := filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
 		switch {
 		case err != nil:
@@ -417,12 +336,12 @@ func (t localTree) read(folder string, recursive bool) []treeItem {
 				return fs.SkipDir
 			}
 		case entry.IsDir():
-			items = append(items, treeItem{path: path, name: entry.Name(), isFolder: true})
+			items = append(items, render.TreeItem{Path: path, Name: entry.Name(), IsFolder: true})
 			if !recursive {
 				return fs.SkipDir
 			}
-		case markdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))]:
-			items = append(items, treeItem{path: path, name: entry.Name()})
+		case render.MarkdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))]:
+			items = append(items, render.TreeItem{Path: path, Name: entry.Name()})
 		}
 		return nil
 	})
@@ -443,7 +362,7 @@ func (s *server) sendRawAsset(writer http.ResponseWriter, request *http.Request,
 			http.Error(writer, err.Error(), http.StatusNotFound)
 			return
 		}
-		writer.Header().Set("Content-Type", contentTypeFor(src.path))
+		writer.Header().Set("Content-Type", render.ContentType(src.path))
 		writer.Write(content)
 		return
 	}
@@ -504,7 +423,7 @@ func (s *server) documentTitle(src source) string {
 	if path == "" {
 		return ""
 	}
-	if index := s.searched().indexFile(path, s.ignore); isDir(path) && index != "" {
+	if index := indexFile(s.searched(), path, s.ignore); isDir(path) && index != "" {
 		return filepath.Base(index)
 	}
 	return filepath.Base(path)
@@ -521,7 +440,7 @@ type document struct {
 	name   string
 	text   string
 	css    string
-	info   documentInfo
+	info   render.DocumentInfo
 }
 
 // loadDocument reads the document source addresses.
@@ -541,7 +460,7 @@ func (s *server) loadDocument(src source) (document, error) {
 	if !isDir(path) {
 		return readLocalFile(path)
 	}
-	if index := s.searched().indexFile(path, s.ignore); index != "" {
+	if index := indexFile(s.searched(), path, s.ignore); index != "" {
 		return readLocalFile(index)
 	}
 
@@ -556,28 +475,5 @@ func (s *server) loadDocument(src source) (document, error) {
 		}
 	}
 	return document{marker: strconv.FormatInt(info.ModTime().UnixNano(), 10),
-		text: renderDirectoryListing(path, names)}, nil
-}
-
-// documentBase returns the route relative links in the document are resolved against: the
-// route of the folder holding it, ending in a slash.
-//
-// name is the file the document was read from; a route ending in it names the document
-// itself, and any other route names the folder it lies in.
-func documentBase(route, name string) string {
-	if route == "" {
-		route = "/"
-	}
-	if name != "" && unescapePath(path.Base(route)) == name {
-		route = path.Dir(route)
-	}
-	return strings.TrimSuffix(route, "/") + "/"
-}
-
-// textMarker returns the change marker of a document the server wrote itself, which has no
-// modification time or object ID of its own.
-func textMarker(text string) string {
-	sum := fnv.New64a()
-	sum.Write([]byte(text))
-	return strconv.FormatUint(sum.Sum64(), 16)
+		text: render.DirectoryListing(filepath.Base(path), names)}, nil
 }

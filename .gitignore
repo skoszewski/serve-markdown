@@ -8,5 +8,6 @@
 /windows/obj/
 /web/node_modules/
 /assets/build/
+/render/assets/build/
 /tmp/
 .env

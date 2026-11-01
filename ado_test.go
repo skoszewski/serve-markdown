@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/skoszewski/serve-markdown/v3/render"
 )
 
 func TestParseADOLocation(t *testing.T) {
@@ -143,7 +145,7 @@ func TestADONothingRead(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			read := adoNothingRead(test.src, test.indexOnly, defaultSearch)
+			read := adoNothingRead(test.src, test.indexOnly, render.DefaultSearch)
 			if read.text != test.want {
 				t.Errorf("text = %q, want %q", read.text, test.want)
 			}
@@ -161,7 +163,7 @@ func TestNamedEntries(t *testing.T) {
 			project: src.project, repository: name}, "")
 	})
 
-	want := []listEntry{
+	want := []render.ListEntry{
 		{Name: "first", Route: "/_/ado/org/proj/first"},
 		{Name: "my repo", Route: "/_/ado/org/proj/my%20repo", Current: true},
 		{Name: "Second", Route: "/_/ado/org/proj/Second"},
@@ -289,7 +291,7 @@ func TestADOItemsURLCarriesTheVersion(t *testing.T) {
 func TestADOListLink(t *testing.T) {
 	src := source{kind: kindADO, organization: "org", project: "my proj", repository: "repo"}
 
-	tests := map[string]listLink{
+	tests := map[string]render.ListLink{
 		// At the repository's root the way out is the repositories of its project.
 		"/":                 {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
 		"":                  {Label: "Browse to repositories", Route: "/_/ado/org/my%20proj"},
@@ -319,15 +321,15 @@ func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
 		{Path: "/picture.png"},
 	}
 
-	names := func(items []treeItem) []string {
+	names := func(items []render.TreeItem) []string {
 		var read []string
 		for _, item := range items {
-			read = append(read, item.name)
+			read = append(read, item.Name)
 		}
 		return read
 	}
 
-	all := adoTree{src: src, search: defaultSearch}.items(found, "/")
+	all := adoTree{src: src, search: render.DefaultSearch}.items(found, "/")
 	if got := strings.Join(names(all), ","); got != "docs,index.md,README.md,CHANGELOG.md" {
 		t.Errorf("items = %s, want the folders and every document", got)
 	}
@@ -335,7 +337,7 @@ func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
 	// Under --index-only a document the page will never open is left out, and a folder holds
 	// the one document it is read as - the README.md of an Azure Repos folder - and no other,
 	// so a repository holding those two documents lists nothing to browse.
-	indexed := adoTree{src: src, indexOnly: true, search: defaultSearch}.items(found, "/")
+	indexed := adoTree{src: src, indexOnly: true, search: render.DefaultSearch}.items(found, "/")
 	if got := strings.Join(names(indexed), ","); got != "docs,README.md" {
 		t.Errorf("items = %s, want the folders and the one document each is read as", got)
 	}
@@ -349,10 +351,10 @@ func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
 		{Path: "/notes", IsFolder: true},
 		{Path: "/notes/index.md"},
 	}
-	tree := adoTree{src: src, indexOnly: true, search: defaultSearch}
+	tree := adoTree{src: src, indexOnly: true, search: render.DefaultSearch}
 	held := map[string]bool{}
 	for _, item := range tree.items(nested, "/") {
-		held[item.path] = true
+		held[item.Path] = true
 	}
 	want := []string{"/docs", "/docs/README.md", "/notes", "/notes/index.md"}
 	if len(held) != len(want) {
@@ -367,28 +369,28 @@ func TestADOTreeReadsOnlyTheIndexDocuments(t *testing.T) {
 
 func TestHoldsNothingToBrowse(t *testing.T) {
 	tests := map[string]struct {
-		entries []listEntry
+		entries []render.ListEntry
 		want    bool
 	}{
-		"the document on the page alone": {[]listEntry{{Name: "README.md", Current: true}}, true},
-		"another document beside it":     {[]listEntry{{Name: "README.md", Current: true}, {Name: "notes.md"}}, false},
-		"the document beside the parent": {[]listEntry{{Name: ".."}, {Name: "README.md", Current: true}}, true},
+		"the document on the page alone": {[]render.ListEntry{{Name: "README.md", Current: true}}, true},
+		"another document beside it":     {[]render.ListEntry{{Name: "README.md", Current: true}, {Name: "notes.md"}}, false},
+		"the document beside the parent": {[]render.ListEntry{{Name: ".."}, {Name: "README.md", Current: true}}, true},
 		// A repository's own route addresses the README.md within it without naming it, so the
 		// entry is not marked and the name is what says it is the document on the page.
-		"an unmarked README.md":        {[]listEntry{{Name: "README.md"}}, true},
-		"an unmarked index.md":         {[]listEntry{{Name: "index.md"}}, true},
-		"an unmarked Readme.md":        {[]listEntry{{Name: "Readme.md"}}, true},
-		"one document, not the page's": {[]listEntry{{Name: "notes.md"}}, false},
-		"a folder holding documents": {[]listEntry{{Name: "docs", Current: true,
-			Children: []listEntry{{Name: "guide.md"}}}}, false},
+		"an unmarked README.md":        {[]render.ListEntry{{Name: "README.md"}}, true},
+		"an unmarked index.md":         {[]render.ListEntry{{Name: "index.md"}}, true},
+		"an unmarked Readme.md":        {[]render.ListEntry{{Name: "Readme.md"}}, true},
+		"one document, not the page's": {[]render.ListEntry{{Name: "notes.md"}}, false},
+		"a folder holding documents": {[]render.ListEntry{{Name: "docs", Current: true,
+			Children: []render.ListEntry{{Name: "guide.md"}}}}, false},
 		// A repository holding no Markdown at all lists nothing, which leads nowhere either.
 		"nothing at all":   {nil, true},
-		"an empty listing": {[]listEntry{}, true},
+		"an empty listing": {[]render.ListEntry{}, true},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := holdsNothingToBrowse(test.entries, defaultSearch); got != test.want {
+			if got := render.HoldsNothingToBrowse(test.entries, render.DefaultSearch); got != test.want {
 				t.Errorf("holdsNothingToBrowse = %v, want %v", got, test.want)
 			}
 		})
@@ -428,8 +430,8 @@ func TestADOTreeFolder(t *testing.T) {
 		t.Run(given, func(t *testing.T) {
 			tree := adoTree{src: source{kind: kindADO, organization: "org", project: "proj",
 				repository: "repo", path: given}, isFolder: isFolder}
-			if got := tree.folder(); got != want {
-				t.Errorf("folder() = %q, want %q", got, want)
+			if got := tree.Folder(); got != want {
+				t.Errorf("Folder() = %q, want %q", got, want)
 			}
 		})
 	}
@@ -438,7 +440,7 @@ func TestADOTreeFolder(t *testing.T) {
 func TestADORoute(t *testing.T) {
 	src := source{kind: kindADO, organization: "my org", project: "proj", repository: "repo"}
 	tree := adoTree{src: src}
-	if got, want := tree.route("/docs/my guide.md"), "/_/ado/my%20org/proj/repo/docs/my%20guide.md"; got != want {
+	if got, want := tree.Route("/docs/my guide.md"), "/_/ado/my%20org/proj/repo/docs/my%20guide.md"; got != want {
 		t.Errorf("route = %q, want %q", got, want)
 	}
 }

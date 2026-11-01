@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/skoszewski/serve-markdown/v3/render"
 )
 
 // Azure DevOps AAD resource ID used to acquire access tokens for the REST API.
@@ -195,7 +197,7 @@ func accessTokenFromAZ() (string, error) {
 // second result is false when location names not even an organization.
 func parseADOLocation(location string) (source, bool) {
 	var parts []string
-	for _, part := range strings.Split(unescapePath(location), "/") {
+	for _, part := range strings.Split(render.UnescapePath(location), "/") {
 		if part != "" {
 			parts = append(parts, part)
 		}
@@ -446,7 +448,7 @@ func refName(ref string) string {
 // The branches and the tags are both read, so that the page can offer either without asking
 // again; a repository whose branches cannot be read carries no picker rather than a broken
 // one.
-func versionsOf(src source) *versionPicker {
+func versionsOf(src source) *render.VersionPicker {
 	if src.kind != kindADO || src.repository == "" {
 		return nil
 	}
@@ -466,7 +468,7 @@ func versionsOf(src source) *versionPicker {
 		logInfo("  %scannot read the default branch of %s: %v%s", colorYellow, src.repository, err, colorReset)
 	}
 
-	return &versionPicker{DefaultBranch: defaultBranch, Branches: branches, Tags: tags,
+	return &render.VersionPicker{DefaultBranch: defaultBranch, Branches: branches, Tags: tags,
 		Kind: src.versionType, Version: src.version}
 }
 
@@ -481,7 +483,7 @@ func adoRoute(src source, itemPath string) string {
 	if src.repository == "" {
 		return route
 	}
-	return route + "/" + url.PathEscape(src.repository) + escapeRoute(itemPath)
+	return route + "/" + url.PathEscape(src.repository) + render.EscapeRoute(itemPath)
 }
 
 // adoTree reads an Azure Repos repository as the tree the directory list is built from.
@@ -493,24 +495,24 @@ func adoRoute(src source, itemPath string) string {
 type adoTree struct {
 	src        source
 	folderPath string
-	search     indexSearch
+	search     render.IndexSearch
 	indexOnly  bool
 	isFolder   func(source, string) bool
 }
 
-func (t adoTree) root() string { return "/" }
+func (t adoTree) Root() string { return "/" }
 
-// folder returns the folder the addressed path lies in, which is the path itself when it
+// Folder returns the folder the addressed path lies in, which is the path itself when it
 // names a folder rather than a document.
 //
 // A path ending in a slash, or carrying a Markdown suffix, says which it is on its own; any
 // other is looked up, since a route reaching a folder is written without a trailing slash.
-func (t adoTree) folder() string {
+func (t adoTree) Folder() string {
 	if t.folderPath != "" {
 		return t.folderPath
 	}
 	suffix := strings.ToLower(path.Ext(t.src.path))
-	if strings.HasSuffix(t.src.path, "/") || markdownExtensions[suffix] {
+	if strings.HasSuffix(t.src.path, "/") || render.MarkdownExtensions[suffix] {
 		return path.Dir(t.src.path)
 	}
 	answer := t.isFolder
@@ -523,13 +525,13 @@ func (t adoTree) folder() string {
 	return path.Dir(t.src.path)
 }
 
-func (t adoTree) document() string { return t.src.path }
+func (t adoTree) Document() string { return t.src.path }
 
-func (t adoTree) parent(folder string) string { return path.Dir(folder) }
+func (t adoTree) Parent(folder string) string { return path.Dir(folder) }
 
-func (t adoTree) route(itemPath string) string { return adoRoute(t.src, itemPath) }
+func (t adoTree) Route(itemPath string) string { return adoRoute(t.src, itemPath) }
 
-func (t adoTree) read(folder string, recursive bool) []treeItem {
+func (t adoTree) Read(folder string, recursive bool) []render.TreeItem {
 	found, err := readADOItems(t.src, folder, recursive)
 	if err != nil {
 		logInfo("  %scannot list %s: %v%s", colorYellow, folder, err, colorReset)
@@ -543,8 +545,8 @@ func (t adoTree) read(folder string, recursive bool) []treeItem {
 //
 // Under --index-only a folder holds the one document it is read as and no other, so a folder
 // naming several of the documents --search names contributes the one that is read first.
-func (t adoTree) items(found []gitItem, folder string) []treeItem {
-	var items []treeItem
+func (t adoTree) items(found []gitItem, folder string) []render.TreeItem {
+	var items []render.TreeItem
 	documents := map[string]gitItem{}
 
 	for _, found := range found {
@@ -552,21 +554,21 @@ func (t adoTree) items(found []gitItem, folder string) []treeItem {
 		switch {
 		case found.Path == "" || found.Path == folder || strings.HasPrefix(name, "."):
 		case found.IsFolder:
-			items = append(items, treeItem{path: found.Path, name: name, isFolder: true})
-		case !markdownExtensions[strings.ToLower(path.Ext(found.Path))]:
+			items = append(items, render.TreeItem{Path: found.Path, Name: name, IsFolder: true})
+		case !render.MarkdownExtensions[strings.ToLower(path.Ext(found.Path))]:
 		case !t.indexOnly:
-			items = append(items, treeItem{path: found.Path, name: name})
-		case t.search.holds(name):
+			items = append(items, render.TreeItem{Path: found.Path, Name: name})
+		case t.search.Holds(name):
 			within := path.Dir(found.Path)
 			held, taken := documents[within]
-			if !taken || t.search.rank(name) < t.search.rank(path.Base(held.Path)) {
+			if !taken || t.search.Rank(name) < t.search.Rank(path.Base(held.Path)) {
 				documents[within] = found
 			}
 		}
 	}
 
 	for _, document := range documents {
-		items = append(items, treeItem{path: document.Path, name: path.Base(document.Path)})
+		items = append(items, render.TreeItem{Path: document.Path, Name: path.Base(document.Path)})
 	}
 	return items
 }
@@ -592,7 +594,7 @@ var errNoIndexDocument = errors.New("no index document")
 //
 // A folder holding none of them raises errNoIndexDocument, which the caller answers as the
 // scope holding no Markdown at all.
-func readADODocument(src source, search indexSearch) (itemPath, content, objectID string, err error) {
+func readADODocument(src source, search render.IndexSearch) (itemPath, content, objectID string, err error) {
 	itemPath = src.path
 	if !strings.HasSuffix(itemPath, "/") {
 		item, readErr := readADOItem(src, itemPath, true)
@@ -625,7 +627,7 @@ func readADODocument(src source, search indexSearch) (itemPath, content, objectI
 //
 // With indexOnly, a folder holding neither of the documents a folder is read as is answered
 // as one holding no Markdown at all, rather than with the error the read raised.
-func readADOSource(src source, indexOnly bool, search indexSearch) (document, error) {
+func readADOSource(src source, indexOnly bool, search render.IndexSearch) (document, error) {
 	switch {
 	case src.project == "":
 		names, err := readADOProjects(src)
@@ -663,7 +665,7 @@ func readADOSource(src source, indexOnly bool, search indexSearch) (document, er
 //
 // Under --index-only nothing else was looked for; otherwise the documents the folder does
 // hold are named by the list beside the page.
-func adoNothingRead(src source, indexOnly bool, search indexSearch) document {
+func adoNothingRead(src source, indexOnly bool, search render.IndexSearch) document {
 	folder := strings.TrimSuffix(src.path, "/")
 	if folder == "" || folder == "/" {
 		folder = src.repository
@@ -673,7 +675,7 @@ func adoNothingRead(src source, indexOnly bool, search indexSearch) document {
 	if indexOnly {
 		return listingDocument(title, "Markdown files", nil)
 	}
-	return textDocument(fmt.Sprintf("# %s\n\nNo %s found here.\n", title, search.named()))
+	return textDocument(fmt.Sprintf("# %s\n\nNo %s found here.\n", title, search.Named()))
 }
 
 // listingDocument returns the document listing what an organization or a project holds, each
@@ -699,7 +701,7 @@ func listingDocument(title, held string, names []string) document {
 // textDocument returns a document the server wrote itself, marked by the text it holds, since
 // it has no modification time or object ID of its own.
 func textDocument(text string) document {
-	return document{marker: textMarker(text), text: text}
+	return document{marker: render.TextMarker(text), text: text}
 }
 
 // adoList returns the directory list beside a page of an Azure DevOps source.
@@ -715,17 +717,17 @@ func textDocument(text string) document {
 // marked. The link above them leads where it always does, under the label that names
 // what the list now holds. A folder below the root keeps its own list, however short, since
 // the folder above it is where the way out lies.
-func adoList(src source, scope string, indexOnly bool, search indexSearch) ([]listEntry, listLink) {
+func adoList(src source, scope string, indexOnly bool, search render.IndexSearch) ([]render.ListEntry, render.ListLink) {
 	if src.repository == "" {
-		return adoProjectEntries(src, scope), listLink{}
+		return adoProjectEntries(src, scope), render.ListLink{}
 	}
 
 	tree := adoTree{src: src, indexOnly: indexOnly, search: search}
-	tree.folderPath = tree.folder()
+	tree.folderPath = tree.Folder()
 
-	entries := documentTree(tree, scope)
+	entries := render.DocumentTree(tree, scope)
 	up := adoListLink(src, tree.folderPath)
-	if tree.folderPath == tree.root() && holdsNothingToBrowse(entries, search) {
+	if tree.folderPath == tree.Root() && render.HoldsNothingToBrowse(entries, search) {
 		entries = adoRepositoryEntries(src, src.project)
 		up.Label = "Back to projects"
 	}
@@ -735,9 +737,9 @@ func adoList(src source, scope string, indexOnly bool, search indexSearch) ([]li
 // adoListLink returns the link standing above a repository's documents: the folder above the
 // one the page stands in, or the repositories of the project once the page stands at the
 // repository's root.
-func adoListLink(src source, folder string) listLink {
+func adoListLink(src source, folder string) render.ListLink {
 	if folder != "" && folder != "/" {
-		return listLink{Label: "Up", Route: adoRoute(src, path.Dir(folder))}
+		return render.ListLink{Label: "Up", Route: adoRoute(src, path.Dir(folder))}
 	}
 	return adoUpLink(src)
 }
@@ -747,7 +749,7 @@ func adoListLink(src source, folder string) listLink {
 //
 // The scope reaches the project on the page below "subfolders", and every project below
 // "tree", which reads the repositories of each in turn.
-func adoProjectEntries(src source, scope string) []listEntry {
+func adoProjectEntries(src source, scope string) []render.ListEntry {
 	names, err := readADOProjects(src)
 	if err != nil {
 		logInfo("  %scannot list the projects of %s: %v%s", colorYellow, src.organization, err, colorReset)
@@ -767,7 +769,7 @@ func adoProjectEntries(src source, scope string) []listEntry {
 
 // adoRepositoryEntries lists the Git repositories of one project of the organization source
 // names, the repository on the page marked.
-func adoRepositoryEntries(src source, project string) []listEntry {
+func adoRepositoryEntries(src source, project string) []render.ListEntry {
 	within := source{kind: kindADO, organization: src.organization, project: project}
 	names, err := readADORepositories(within)
 	if err != nil {
@@ -782,21 +784,21 @@ func adoRepositoryEntries(src source, project string) []listEntry {
 
 // namedEntries turns names into list entries addressing the route each name names, marking
 // the one the page stands at.
-func namedEntries(names []string, current string, route func(string) string) []listEntry {
-	entries := make([]listEntry, 0, len(names))
+func namedEntries(names []string, current string, route func(string) string) []render.ListEntry {
+	entries := make([]render.ListEntry, 0, len(names))
 	for _, name := range names {
-		entries = append(entries, listEntry{Name: name, Route: route(name), Current: name == current})
+		entries = append(entries, render.ListEntry{Name: name, Route: route(name), Current: name == current})
 	}
-	sortEntries(entries)
+	render.SortEntries(entries)
 	return entries
 }
 
 // adoUpLink returns the link standing above a repository's documents, leading back to the
 // repositories of the project it belongs to.
-func adoUpLink(src source) listLink {
+func adoUpLink(src source) render.ListLink {
 	if src.repository == "" {
-		return listLink{}
+		return render.ListLink{}
 	}
 	project := source{kind: kindADO, organization: src.organization, project: src.project}
-	return listLink{Label: "Browse to repositories", Route: adoRoute(project, "")}
+	return render.ListLink{Label: "Browse to repositories", Route: adoRoute(project, "")}
 }

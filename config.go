@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/skoszewski/serve-markdown/v3/render"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -47,23 +48,10 @@ var frontMatterKinds = []string{defaultFrontMatter, frontMatterTitleOnly}
 // frontMatterTitleOnly shows a document's title alone.
 const frontMatterTitleOnly = "title-only"
 
-// defaultSearch names the documents a folder is read as, in the order they are looked for.
-var defaultSearch = []string{"README.md", "index.md"}
-
-// widthFull is the width that caps the document at nothing, giving it the window.
-const widthFull = "full"
-
 // contentWidths are the widths --content-width takes, the styling holding what each measures:
 // 780px of prose, the 980px github-markdown-css is written for, the 1280px a 1080p screen
 // leaves beside both sidebars, and the window itself, which is what a page is given unasked.
-var contentWidths = []string{"small", "medium", "large", widthFull}
-
-// defaultOutline is what an outline is drawn with before --outline or a page names anything
-// else, and defaultList the same for a directory list.
-var (
-	defaultOutline = outlineSettings{Style: "plain", Justify: "left", Display: "shown"}
-	defaultList    = listSettings{Scope: "current", Display: "shown"}
-)
+var contentWidths = []string{"small", "medium", "large", render.WidthFull}
 
 // outlineStyles are the styles --outline takes, each with the shorthand that also names it:
 // entries without numbers, entries numbered within each level, and entries numbered as 1.,
@@ -83,19 +71,13 @@ const outlineNone = "none"
 // listScopes how much of the source the directory list reaches.
 var (
 	outlineJustifications = []string{"left", "right"}
-	outlineDisplays       = []string{"shown", outlineHidden}
+	outlineDisplays       = []string{"shown", render.Hidden}
 	listScopes            = []string{"current", "subfolders", "tree"}
 )
 
-// outlineHidden is the display that hides the outline or the list until the reader shows it.
-const outlineHidden = "hidden"
-
 // separatorsKinds are the lines --separators draws: none, the one under the top row, the ones
 // along the sidebars, or all of them.
-var separatorsKinds = []string{"hidden", "top", "side", separatorsAll}
-
-// separatorsAll draws every line, which the page does without a class of its own.
-const separatorsAll = "all"
+var separatorsKinds = []string{"hidden", "top", "side", render.SeparatorsAll}
 
 var debugLevel int
 
@@ -158,15 +140,15 @@ type configuration struct {
 	contentWidth  string
 	separators    string
 	frontMatter   string
-	search        indexSearch
-	outline       outlineSettings
-	list          listSettings
+	search        render.IndexSearch
+	outline       render.OutlineSettings
+	list          render.ListSettings
 	// listGiven tells that the command line or the file names the list settings.
 	listGiven bool
 	// menu is the left pane's menu the file defines, standing in place of the list; empty
 	// without one, and menuWarning says why a menu the file holds is not used. menuFile is the
 	// file the menu is read again from once it changes, empty for the user's own file.
-	menu        []menuEntry
+	menu        []render.MenuEntry
 	menuWarning string
 	menuFile    string
 	ado         adoSettings
@@ -238,7 +220,7 @@ func readConfiguration() (configuration, error) {
 		"Lines separating the top row, the sidebars and the document: %s", strings.Join(separatorsKinds, "|")))
 	frontMatter := flag.String("front-matter", defaultFrontMatter, fmt.Sprintf(
 		"What the top row shows of the document's front matter: %s", strings.Join(frontMatterKinds, "|")))
-	search := flag.String("search", strings.Join(defaultSearch, ","),
+	search := flag.String("search", strings.Join(render.DefaultSearch, ","),
 		"Comma separated list of the documents a folder is read as")
 	mermaid := flag.Bool("mermaid", false, "Render fenced 'mermaid' blocks as diagrams")
 	indexOnly := flag.Bool("index-only", false, "Read a folder as its index document alone")
@@ -334,19 +316,19 @@ func readConfiguration() (configuration, error) {
 	}
 	if len(settings.search) == 0 {
 		return configuration{}, fmt.Errorf("'search' names no document; expected one or more, as %s",
-			strings.Join(defaultSearch, ","))
+			strings.Join(render.DefaultSearch, ","))
 	}
 
 	// Without an outline the style is empty and the side and display still stand, for a query
 	// to turn the outline on without naming them; without a list the scope is empty and the
 	// display stands the same way.
 	if settings.outline, err = chooseSettings(*outline, written["outline"], fromFile.Outline,
-		outlineSettings{Justify: defaultOutline.Justify, Display: defaultOutline.Display},
-		defaultOutline, parseOutline); err != nil {
+		render.OutlineSettings{Justify: render.DefaultOutline.Justify, Display: render.DefaultOutline.Display},
+		render.DefaultOutline, parseOutline); err != nil {
 		return configuration{}, err
 	}
 	if settings.list, err = chooseSettings(*list, written["list"], fromFile.List,
-		listSettings{Display: defaultList.Display}, defaultList, parseList); err != nil {
+		render.ListSettings{Display: render.DefaultList.Display}, render.DefaultList, parseList); err != nil {
 		return configuration{}, err
 	}
 	settings.listGiven = written["list"] || fromFile.List != nil
@@ -430,22 +412,22 @@ func chooseSettings[T any](given string, onCommandLine bool, fromFile *settingsV
 // A key left out keeps what the command line says, so a pointer tells a setting the file
 // carries from one it says nothing about.
 type fileConfig struct {
-	ListenAddress *string        `yaml:"listen-address"`
-	Port          *int           `yaml:"port"`
-	WatchInterval *float64       `yaml:"watch-interval"`
-	Outline       *settingsValue `yaml:"outline"`
-	List          *settingsValue `yaml:"list"`
-	ADO           *settingsValue `yaml:"ado"`
-	Mermaid       *bool          `yaml:"mermaid"`
-	IndexOnly     *bool          `yaml:"index-only"`
-	CSS           *string        `yaml:"css"`
-	ContentWidth  *string        `yaml:"content-width"`
-	Separators    *string        `yaml:"separators"`
-	FrontMatter   *string        `yaml:"front-matter"`
-	Search        *namesValue    `yaml:"search"`
-	PDFPage       *settingsValue `yaml:"pdf-page"`
-	IgnoreFile    *string        `yaml:"ignore-file"`
-	Menu          []menuEntry    `yaml:"menu"`
+	ListenAddress *string            `yaml:"listen-address"`
+	Port          *int               `yaml:"port"`
+	WatchInterval *float64           `yaml:"watch-interval"`
+	Outline       *settingsValue     `yaml:"outline"`
+	List          *settingsValue     `yaml:"list"`
+	ADO           *settingsValue     `yaml:"ado"`
+	Mermaid       *bool              `yaml:"mermaid"`
+	IndexOnly     *bool              `yaml:"index-only"`
+	CSS           *string            `yaml:"css"`
+	ContentWidth  *string            `yaml:"content-width"`
+	Separators    *string            `yaml:"separators"`
+	FrontMatter   *string            `yaml:"front-matter"`
+	Search        *namesValue        `yaml:"search"`
+	PDFPage       *settingsValue     `yaml:"pdf-page"`
+	IgnoreFile    *string            `yaml:"ignore-file"`
+	Menu          []render.MenuEntry `yaml:"menu"`
 
 	Editor           *bool       `yaml:"editor"`
 	EditorTemplates  *string     `yaml:"editor-templates"`
@@ -508,45 +490,6 @@ func (v *settingsValue) UnmarshalYAML(node *yaml.Node) error {
 		return node.Decode(&v.settings)
 	}
 	return fmt.Errorf("line %d: expected true, false or a mapping of settings", node.Line)
-}
-
-// menuEntry is one entry of the menu a file defines: the path of a document below the served
-// directory, with a label or labelled by the document's own title, or a label heading the
-// entries of a group.
-type menuEntry struct {
-	Label   string
-	Path    string
-	Entries []menuEntry
-	line    int
-}
-
-// UnmarshalYAML reads an entry from a document path alone, or from a mapping of its label to a
-// document path or to a sequence of the group's entries.
-func (e *menuEntry) UnmarshalYAML(node *yaml.Node) error {
-	expected := fmt.Errorf("line %d: expected a menu entry, '<document>', '<label>: <document>' or "+
-		"'<label>:' followed by a list of entries", node.Line)
-	e.line = node.Line
-	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" && strings.Trim(node.Value, "/ ") != "" {
-		e.Path = strings.TrimLeft(strings.TrimSpace(node.Value), "/")
-		return nil
-	}
-	if node.Kind != yaml.MappingNode || len(node.Content) != 2 {
-		return expected
-	}
-	key, value := node.Content[0], node.Content[1]
-	if key.Kind != yaml.ScalarNode || strings.TrimSpace(key.Value) == "" {
-		return fmt.Errorf("line %d: a menu entry needs a label", key.Line)
-	}
-	e.Label = strings.TrimSpace(key.Value)
-	switch {
-	case value.Kind == yaml.ScalarNode && value.Tag == "!!str" && strings.Trim(value.Value, "/ ") != "":
-		e.Path = strings.TrimLeft(strings.TrimSpace(value.Value), "/")
-	case value.Kind == yaml.SequenceNode && len(value.Content) > 0:
-		return value.Decode(&e.Entries)
-	default:
-		return fmt.Errorf("line %d: '%s' needs a document path or a list of entries", value.Line, e.Label)
-	}
-	return nil
 }
 
 // readConfigFile reads the configuration file the command line names or, when it names none,
@@ -678,7 +621,7 @@ func outlineStyleList() string {
 
 // parseOutline reads the "style", "justify" and "display" settings onto the ones it is given, and
 // returns the outline the list asks for.
-func parseOutline(given string, settings outlineSettings) (outlineSettings, error) {
+func parseOutline(given string, settings render.OutlineSettings) (render.OutlineSettings, error) {
 	err := parseSettings(given, map[string]func(string) error{
 		"style": func(value string) error {
 			style, known := outlineStyle(value)
@@ -697,7 +640,7 @@ func parseOutline(given string, settings outlineSettings) (outlineSettings, erro
 
 // parseList reads the "scope" and "display" settings onto the ones it is given, and returns the
 // list the settings ask for. A scope of outlineNone leaves no list at all.
-func parseList(given string, settings listSettings) (listSettings, error) {
+func parseList(given string, settings render.ListSettings) (render.ListSettings, error) {
 	scopes := append(slices.Clone(listScopes), outlineNone)
 	err := parseSettings(given, map[string]func(string) error{
 		"scope": func(value string) error {

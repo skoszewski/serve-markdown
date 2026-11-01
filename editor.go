@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skoszewski/serve-markdown/v3/render"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -400,7 +401,7 @@ func (e *editor) listFiles() ([]string, error) {
 			}
 			return nil
 		}
-		if entry.Type().IsRegular() && markdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] &&
+		if entry.Type().IsRegular() && render.MarkdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] &&
 			e.inDirectories(relative) {
 			files = append(files, relative)
 		}
@@ -425,7 +426,7 @@ func (e *editor) listTemplates() ([]editorTemplate, error) {
 		return nil, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !markdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] {
+		if entry.IsDir() || !render.MarkdownExtensions[strings.ToLower(filepath.Ext(entry.Name()))] {
 			continue
 		}
 		frontMatter, _, err := readEditorDocument(filepath.Join(e.templatesDir, entry.Name()))
@@ -619,7 +620,7 @@ func readEditorDocument(file string) (*yaml.Node, string, error) {
 	}
 	text := strings.ReplaceAll(string(content), "\r\n", "\n")
 	mapping := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	match := frontMatterPattern.FindStringSubmatchIndex(text)
+	match := render.FrontMatterPattern.FindStringSubmatchIndex(text)
 	if match == nil {
 		return mapping, strings.TrimLeft(text, "\n"), nil
 	}

@@ -23,7 +23,11 @@ RUN go mod download
 # The sources and the assets embedded in the executable.
 COPY *.go ./
 COPY assets/page ./assets/page
+COPY render/*.go ./render/
+COPY render/page ./render/page
+COPY render/assets/*.go ./render/assets/
 COPY --from=assets /src/assets/build ./assets/build
+COPY --from=assets /src/render/assets/build ./render/assets/build
 
 # The platform the image is built for, named by the builder.
 ARG TARGETOS

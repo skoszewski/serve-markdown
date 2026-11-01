@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.5.0
+
+feature: the render package draws documents as the server's pages for other Go programs, and releases carry the page's assets.
+
+- `github.com/skoszewski/serve-markdown/v3/render` holds the page shell, the front matter, the
+  outline and list settings, the directory tree and the menu, and `render.New` serves the
+  Markdown documents of an `fs.FS` under a route prefix, with the page's assets and the document
+  it fetches below `<prefix>_/`.
+- The program importing `render` gives it the built browser files as an `fs.FS`; the package
+  `render/assets` embeds them for a build from a clone.
+- A release and `dev-latest` carry `serve-markdown-assets-<version>.tar.gz`: `page.js`, the
+  Markdown and highlight stylesheets and `mermaid.min.js`, with their licences.
+- `web/build.mjs` writes the page's assets to `render/assets/build/` and the editor's to
+  `assets/build/`.
+
 ## 3.4.0
 
 feature: the menu follows its file and the documents' titles, and is drawn with a title and headings.

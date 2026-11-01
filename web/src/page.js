@@ -233,7 +233,7 @@ function buildOutline() {
  * @param {string} base the route the document's relative links are read from.
  */
 function resolveLinks(base) {
-  const from = new URL(base || "/", location.href);
+  const from = new URL(base || location.href, location.href);
 
   content.querySelectorAll("a[href]").forEach((link) => {
     const href = link.getAttribute("href");
@@ -296,7 +296,7 @@ function render(text, css, base, info) {
 async function poll() {
   let data;
   try {
-    data = await (await fetch("/content" + pageConfig.contentQuery)).json();
+    data = await (await fetch(pageConfig.contentURL)).json();
   } catch (error) {
     return;
   }
@@ -304,7 +304,7 @@ async function poll() {
     lastMtime = data.mtime;
     render(data.text, data.css, data.base, data.info);
   } else if (data.mtime === null) {
-    render("(file not found: " + data.error + ")", "", "/", null);
+    render("(file not found: " + data.error + ")", "", "", null);
   }
 }
 

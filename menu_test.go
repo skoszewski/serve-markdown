@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/skoszewski/serve-markdown/v3/render"
 )
 
 func TestMenuLeavesOutWhatIsNotServed(t *testing.T) {
@@ -15,15 +17,15 @@ func TestMenuLeavesOutWhatIsNotServed(t *testing.T) {
 	rules.rootDir = root
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, ignore: rules}
 
-	menu, warnings := (&menuSource{}).resolve(handler, []menuEntry{
-		{Label: "Home", Path: "README.md", line: 2},
-		{Label: "Missing", Path: "nowhere.md", line: 3},
-		{Label: "Folder", Path: "docs", line: 4},
-		{Label: "Guides", line: 5, Entries: []menuEntry{
-			{Label: "Guide", Path: "docs/guide.md", line: 6},
-			{Label: "Draft", Path: "drafts/draft.md", line: 7},
+	menu, warnings := (&menuSource{}).resolve(handler, []render.MenuEntry{
+		{Label: "Home", Path: "README.md", Line: 2},
+		{Label: "Missing", Path: "nowhere.md", Line: 3},
+		{Label: "Folder", Path: "docs", Line: 4},
+		{Label: "Guides", Line: 5, Entries: []render.MenuEntry{
+			{Label: "Guide", Path: "docs/guide.md", Line: 6},
+			{Label: "Draft", Path: "drafts/draft.md", Line: 7},
 		}},
-		{Label: "Empty", line: 8, Entries: []menuEntry{{Label: "Outside", Path: "../secret.md", line: 9}}},
+		{Label: "Empty", Line: 8, Entries: []render.MenuEntry{{Label: "Outside", Path: "../secret.md", Line: 9}}},
 	})
 	if len(menu) != 2 || menu[0].Route != "/README.md" || menu[1].Name != "Guides" || menu[1].Route != "" ||
 		len(menu[1].Children) != 1 || menu[1].Children[0].Route != "/docs/guide.md" {
@@ -46,7 +48,7 @@ func TestMenuLabelsADocumentByItsTitle(t *testing.T) {
 
 	writeFile(t, filepath.Join(root, "fenced.md"), "```md\n# Not a heading\n```\n\nText.\n\n# Fenced Out\n")
 	writeFile(t, filepath.Join(root, "plain.md"), "Text alone.\n")
-	menu, _ := source.resolve(handler, []menuEntry{{Path: "docs/guide.md"}, {Path: "notes.md"},
+	menu, _ := source.resolve(handler, []render.MenuEntry{{Path: "docs/guide.md"}, {Path: "notes.md"},
 		{Path: "fenced.md"}, {Path: "plain.md"}, {Label: "Written", Path: "docs/index.md"}})
 	var names []string
 	for _, entry := range menu {
@@ -63,7 +65,7 @@ func TestMenuLabelsADocumentByItsTitle(t *testing.T) {
 	if err := os.Chtimes(guide, later, later); err != nil {
 		t.Fatal(err)
 	}
-	if menu, _ := source.resolve(handler, []menuEntry{{Path: "docs/guide.md"}}); menu[0].Name != "The New Guide" {
+	if menu, _ := source.resolve(handler, []render.MenuEntry{{Path: "docs/guide.md"}}); menu[0].Name != "The New Guide" {
 		t.Errorf("label = %q, want the changed title", menu[0].Name)
 	}
 }
@@ -73,7 +75,7 @@ func TestServePageShellCarriesTheMenu(t *testing.T) {
 	file := writeConfig(t, root, "menu.yaml", "menu:\n  - Home: README.md\n  - Guides:\n"+
 		"      - The guide: docs/guide.md\n")
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		list: listSettings{Scope: "current", Display: "shown"}, menu: &menuSource{file: file}}
+		list: render.ListSettings{Scope: "current", Display: "shown"}, menu: &menuSource{file: file}}
 
 	_, page := get(t, handler, "/docs/guide.md?list=scope:tree")
 	for _, want := range []string{

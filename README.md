@@ -63,8 +63,8 @@ sources; on Windows it is run as `node build.mjs`. It takes the action as its ar
   has approved it.
 
 Every action but `clean` first installs the packages pinned in `web/package-lock.json` and
-builds the browser assets into `assets/build/`, since the executable embeds them. A plain
-`go build` or `go test` works once they have been built.
+builds the browser assets into `render/assets/build/` and `assets/build/`, since the executable
+embeds them. A plain `go build` or `go test` works once they have been built.
 
 A second argument names the destination platform as `<goos>/<goarch>`, building for it rather
 than for the host and writing `serve-markdown-<goos>-<goarch>`. Go needs no extra toolchain to
@@ -627,24 +627,61 @@ host and the server needs no network of its own.
 
 The assets are built from `web/`: `web/package.json` names the libraries, `web/package-lock.json`
 pins their versions, and `web/build.mjs` builds them with [esbuild](https://esbuild.github.io)
-into `assets/build/`:
+into `render/assets/build/`, the page's, and `assets/build/`, the editor's:
 
 | File | Built from |
 |---|---|
-| `page.js` | `web/src/page.js` bundled with marked, DOMPurify and highlight.js |
-| `github-markdown-light.css`, `github-markdown-dark.css` | github-markdown-css's light and dark themes |
-| `highlight-light.css`, `highlight-dark.css` | highlight.js's GitHub themes |
-| `mermaid.min.js` | mermaid's single-file bundle, copied as it is |
-| `editor.js`, `editor.css` | `web/src/editor/` bundled with React, MDXEditor and Headless UI, type checked first with `web/tsconfig.json` |
-| `LICENSES.md` | the name, version and licence of every package above |
+| `render/assets/build/page.js` | `web/src/page.js` bundled with marked, DOMPurify and highlight.js |
+| `render/assets/build/github-markdown-light.css`, `github-markdown-dark.css` | github-markdown-css's light and dark themes |
+| `render/assets/build/highlight-light.css`, `highlight-dark.css` | highlight.js's GitHub themes |
+| `render/assets/build/mermaid.min.js` | mermaid's single-file bundle, copied as it is |
+| `assets/build/editor.js`, `editor.css` | `web/src/editor/` bundled with React, MDXEditor and Headless UI, type checked first with `web/tsconfig.json` |
+| `LICENSES.md`, in each directory | the name, version and licence of every package bundled into it |
 
 `web/src/highlight.js` chooses the languages code is highlighted in: highlight.js's common set
 and PowerShell (`powershell`, `pwsh`, `ps`, `ps1`). Another language is one import and one
 `registerLanguage` line there.
 
-`assets/build/` is not kept in the repository: `./build.mjs` builds it before the executable,
+Neither directory is kept in the repository: `./build.mjs` builds them before the executable,
 the `build` workflow before every check and build, and the `Dockerfile` in a Node.js stage of
-its own.
+its own. A release and `dev-latest` also carry `serve-markdown-assets-<version>.tar.gz`, the
+contents of `render/assets/build/`, for programs drawing pages with the
+[render package](#the-render-package).
+
+### The render package
+
+`github.com/skoszewski/serve-markdown/v3/render` draws documents as the pages of the server,
+for another Go program. `render.New` returns an `http.Handler` serving the Markdown documents
+of an `fs.FS`, such as an `embed.FS`, under a route prefix:
+
+```go
+site := render.New(docs, render.Options{
+	Prefix: "/docs/",
+	Assets: pageAssets,
+	Banner: "My program 1.0",
+	Search: render.IndexSearch{"guide.md"},
+	Menu:   []render.MenuEntry{{Path: "guide.md"}, {Label: "Examples", Path: "examples.md"}},
+	List:   render.DefaultList,
+})
+mux.Handle("/docs/", site)
+```
+
+- `Assets` is an `fs.FS` of the files of `render/assets/build/`, which the program supplies: from
+  the `serve-markdown-assets` archive of the release of the version it imports, or, built from a
+  clone, the package `render/assets`, which embeds them. Without `mermaid.min.js`, `Mermaid` draws
+  no diagrams.
+- Below the prefix, `_/content` answers the page's fetch of its document, `_/assets/` and
+  `_/page/` serve the assets, a picture is served as its bytes, and a document or folder as a
+  page. A folder reads as the first document of `Search`, `README.md` or `index.md` by default,
+  else as the listing of its Markdown files; names beginning with a dot are not served.
+- `Menu` stands in place of the directory list, its entries written as those of a
+  [menu](#menu); `Outline`, `List`, `ContentWidth`, `Separators`, `Mermaid` and `CSS` draw the
+  page as the options of the same names do. `WatchInterval` is how often a page fetches its
+  document again, never by default.
+
+The package also holds the parts the handler is made of, `Page`, `FrontMatter`,
+`DocumentTree`, `Menu` and `AssetHandler` among them, which the server itself draws its pages
+with.
 
 ## Editor
 

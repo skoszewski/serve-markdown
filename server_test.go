@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/skoszewski/serve-markdown/v3/render"
 )
 
 // get performs one request against handler and returns the response and its body.
@@ -40,7 +42,7 @@ func TestServeRootReturnsThePageShell(t *testing.T) {
 	if contentType := response.Header.Get("Content-Type"); contentType != "text/html; charset=utf-8" {
 		t.Errorf("Content-Type = %q", contentType)
 	}
-	for _, want := range []string{"<title>README.md</title>", pageAssets.PageJS, `"?path=%2F"`, `"watchIntervalMS":1000`, pageAssetRoute + "page.css"} {
+	for _, want := range []string{"<title>README.md</title>", assetRoute + "page.js", `"/content?path=%2F"`, `"watchIntervalMS":1000`, pageAssetRoute + "page.css"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page does not hold %q", want)
 		}
@@ -59,7 +61,7 @@ func TestServeContentReturnsTheDocument(t *testing.T) {
 		t.Errorf("Content-Type = %q", contentType)
 	}
 
-	var payload contentPayload
+	var payload render.Content
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +84,7 @@ func TestServeContentReportsAMissingDocument(t *testing.T) {
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	_, body := get(t, handler, "/content?path=/nowhere.md")
-	var payload contentPayload
+	var payload render.Content
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +102,7 @@ func TestServeContentCarriesTheFrontMatterCSS(t *testing.T) {
 	writeFile(t, filepath.Join(root, "styled.md"), "---\ncss: 'p { margin: 0; }'\n---\n# Styled\n")
 
 	_, body := get(t, handler, "/content?path=/styled.md")
-	var payload contentPayload
+	var payload render.Content
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +129,7 @@ func TestServeContentCarriesTheServersCSSUnlessTheDocumentHasItsOwn(t *testing.T
 	for target, want := range tests {
 		t.Run(target, func(t *testing.T) {
 			_, body := get(t, handler, target)
-			var payload contentPayload
+			var payload render.Content
 			if err := json.Unmarshal([]byte(body), &payload); err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +146,7 @@ func TestServeContentCarriesWhatTheFrontMatterSays(t *testing.T) {
 	writeFile(t, filepath.Join(root, "described.md"), "---\ntitle: Notes\nauthor: Ann\ndate: 2024-05-01\n---\n# Notes\n")
 
 	// The author and the date are left out when the title is to stand alone.
-	tests := map[string]documentInfo{
+	tests := map[string]render.DocumentInfo{
 		defaultFrontMatter:   {Title: "Notes", Author: "Ann", Date: "2024-05-01"},
 		frontMatterTitleOnly: {Title: "Notes"},
 	}
@@ -152,7 +154,7 @@ func TestServeContentCarriesWhatTheFrontMatterSays(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			handler.frontMatter = kind
 			_, body := get(t, handler, "/content?path=/described.md")
-			var payload contentPayload
+			var payload render.Content
 			if err := json.Unmarshal([]byte(body), &payload); err != nil {
 				t.Fatal(err)
 			}
@@ -226,7 +228,7 @@ func TestServeDirectoryReadsItsDocumentOrListsIt(t *testing.T) {
 	for target, want := range tests {
 		t.Run(target, func(t *testing.T) {
 			_, body := get(t, handler, target)
-			var payload contentPayload
+			var payload render.Content
 			if err := json.Unmarshal([]byte(body), &payload); err != nil {
 				t.Fatal(err)
 			}
@@ -252,7 +254,7 @@ func TestServeContentCarriesTheDocumentBase(t *testing.T) {
 	for target, want := range tests {
 		t.Run(target, func(t *testing.T) {
 			_, body := get(t, handler, target)
-			var payload contentPayload
+			var payload render.Content
 			if err := json.Unmarshal([]byte(body), &payload); err != nil {
 				t.Fatal(err)
 			}
@@ -268,7 +270,7 @@ func TestServeFileNamespaceReachesAFileFromADirSource(t *testing.T) {
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1}
 
 	_, body := get(t, handler, "/content?path=/docs/guide.md")
-	var payload contentPayload
+	var payload render.Content
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +304,7 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 	}
 
 	for _, style := range outlineStyles {
-		handler.outline = outlineSettings{Style: style.name, Justify: "left"}
+		handler.outline = render.OutlineSettings{Style: style.name, Justify: "left"}
 		_, page := get(t, handler, "/")
 		if !strings.Contains(page, `<nav id="_outline" class="sidebar style-`+style.name+`">`) {
 			t.Errorf("the %s page does not hold its outline: %q", style.name, page)
@@ -315,7 +317,7 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 		}
 	}
 
-	handler.outline = outlineSettings{Style: "plain", Justify: "right"}
+	handler.outline = render.OutlineSettings{Style: "plain", Justify: "right"}
 	if _, page := get(t, handler, "/"); !strings.Contains(page, `<body class="with-sidebar outline-right">`) {
 		t.Errorf("the page does not put the outline on the right: %q", page)
 	}
@@ -336,7 +338,7 @@ func TestServePageShellCarriesTheOutlineStyle(t *testing.T) {
 func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		outline: outlineSettings{Style: "numbered", Justify: "left"}}
+		outline: render.OutlineSettings{Style: "numbered", Justify: "left"}}
 
 	tests := map[string]string{
 		"/?outline=style:plain":           `class="sidebar style-plain"`,
@@ -363,8 +365,8 @@ func TestServePageShellTakesTheOutlineFromTheQuery(t *testing.T) {
 func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		outline: outlineSettings{Style: "numbered", Justify: "left"},
-		list:    listSettings{Scope: "current"}}
+		outline: render.OutlineSettings{Style: "numbered", Justify: "left"},
+		list:    render.ListSettings{Scope: "current"}}
 
 	_, page := get(t, handler, "/docs/guide.md")
 	for _, want := range []string{
@@ -397,8 +399,8 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 	// An ado source the server cannot read holds no list, so its outline keeps its own side.
 	ado := &server{defaultSource: source{kind: kindADO, organization: "org", project: "proj",
 		repository: "repo", path: "/README.md"}, rootDir: root, watchInterval: 1,
-		outline: outlineSettings{Style: "numbered", Justify: "left"},
-		list:    listSettings{Scope: "current"}}
+		outline: render.OutlineSettings{Style: "numbered", Justify: "left"},
+		list:    render.ListSettings{Scope: "current"}}
 	if _, page := get(t, ado, "/notes.md"); !strings.Contains(page, `id="_list"`) {
 		t.Errorf("the local namespace holds no list under an ado source: %q", page)
 	}
@@ -419,7 +421,7 @@ func TestServePageShellCarriesTheDirectoryList(t *testing.T) {
 func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		outline: outlineSettings{Justify: "left"}}
+		outline: render.OutlineSettings{Justify: "left"}}
 
 	// The server was started without either sidebar; a query naming any setting draws the one
 	// it belongs to, with the default style, the way the flags do.
@@ -444,7 +446,7 @@ func TestServePageShellTakesASidebarFromTheQueryAlone(t *testing.T) {
 }
 
 func TestParseOutline(t *testing.T) {
-	tests := map[string]outlineSettings{
+	tests := map[string]render.OutlineSettings{
 		"style:plain":           {Style: "plain", Justify: "left"},
 		"style:nh":              {Style: "numbered-hierarchical", Justify: "left"},
 		"justify:right":         {Style: "numbered", Justify: "right"},
@@ -455,7 +457,7 @@ func TestParseOutline(t *testing.T) {
 		"display:hidden":        {Style: "numbered", Justify: "left", Display: "hidden"},
 		"display:shown":         {Style: "numbered", Justify: "left", Display: "shown"},
 	}
-	given := outlineSettings{Style: "numbered", Justify: "left"}
+	given := render.OutlineSettings{Style: "numbered", Justify: "left"}
 
 	for list, want := range tests {
 		t.Run(list, func(t *testing.T) {
@@ -479,14 +481,14 @@ func TestParseOutline(t *testing.T) {
 }
 
 func TestParseList(t *testing.T) {
-	tests := map[string]listSettings{
+	tests := map[string]render.ListSettings{
 		"scope:tree":                     {Scope: "tree", Display: "shown"},
 		"scope:none":                     {Scope: "", Display: "shown"},
 		"display:hidden":                 {Scope: "current", Display: "hidden"},
 		"scope:subfolders,display:shown": {Scope: "subfolders", Display: "shown"},
 		"":                               {Scope: "current", Display: "shown"},
 	}
-	given := listSettings{Scope: "current", Display: "shown"}
+	given := render.ListSettings{Scope: "current", Display: "shown"}
 
 	for list, want := range tests {
 		t.Run(list, func(t *testing.T) {
@@ -624,7 +626,7 @@ func TestServePageShellCarriesMermaidOnlyWhenAsked(t *testing.T) {
 	}
 
 	handler.mermaid = true
-	if _, page := get(t, handler, "/"); !strings.Contains(page, pageAssets.MermaidJS) {
+	if _, page := get(t, handler, "/"); !strings.Contains(page, assetRoute+"mermaid.min.js") {
 		t.Errorf("the page does not name the mermaid bundle: %q", page)
 	}
 }
@@ -697,7 +699,7 @@ func TestServeRejectsTraversal(t *testing.T) {
 	}
 
 	_, body := get(t, handler, "/content?path=/../notes.md")
-	var payload contentPayload
+	var payload render.Content
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -713,7 +715,7 @@ func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
 	writeFile(t, filepath.Join(filepath.Dir(root), "secret.png"), pictureContent)
 
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		list: listSettings{Scope: "tree"}}
+		list: render.ListSettings{Scope: "tree"}}
 
 	// A '..' that stays inside the root is followed, the way a link in a document writes it.
 	inside := map[string]string{
@@ -727,7 +729,7 @@ func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
 	for route, want := range inside {
 		t.Run("inside "+route, func(t *testing.T) {
 			_, body := get(t, handler, "/content?path="+url.QueryEscape(route))
-			var payload contentPayload
+			var payload render.Content
 			if err := json.Unmarshal([]byte(body), &payload); err != nil {
 				t.Fatal(err)
 			}
@@ -757,7 +759,7 @@ func TestServeRefusesTraversalFromEveryRoute(t *testing.T) {
 			}
 
 			_, body := get(t, handler, "/content?path="+url.QueryEscape(route))
-			var payload contentPayload
+			var payload render.Content
 			if err := json.Unmarshal([]byte(body), &payload); err != nil {
 				t.Fatal(err)
 			}
@@ -828,7 +830,7 @@ func TestServeADOOrganizationAndProjectPages(t *testing.T) {
 
 // noVersions stands for Azure Repos where a test has no business asking it what a repository
 // holds.
-func noVersions(source) *versionPicker { return nil }
+func noVersions(source) *render.VersionPicker { return nil }
 
 func TestServePageShellChecksLocalDocumentsAlone(t *testing.T) {
 	root := documentRoot(t)
@@ -849,11 +851,11 @@ func TestServePageShellCarriesTheVersions(t *testing.T) {
 	root := documentRoot(t)
 	// The branches and the tags stand for what Azure Repos would answer.
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		versions: func(src source) *versionPicker {
+		versions: func(src source) *render.VersionPicker {
 			if src.kind != kindADO || src.repository == "" {
 				return nil
 			}
-			return &versionPicker{DefaultBranch: "main", Branches: []string{"main", "release/2.1"},
+			return &render.VersionPicker{DefaultBranch: "main", Branches: []string{"main", "release/2.1"},
 				Tags: []string{"v1.0"}, Kind: src.versionType, Version: src.version}
 		}}
 
@@ -889,7 +891,7 @@ func TestServePageShellCarriesTheADOVersion(t *testing.T) {
 	_, page := get(t, handler, "/_/ado/myorg/myproject/repo?ado=tag:v1.0")
 	// The parameters are read apart, the separator between them being escaped as JSON in HTML.
 	for _, want := range []string{
-		`"contentQuery":"?path=%2F_%2Fado%2Fmyorg%2Fmyproject%2Frepo`,
+		`"contentURL":"/content?path=%2F_%2Fado%2Fmyorg%2Fmyproject%2Frepo`,
 		`ado=tag%3Av1.0"`,
 	} {
 		if !strings.Contains(page, want) {
@@ -920,19 +922,19 @@ func TestServePageShellCarriesTheADOVersion(t *testing.T) {
 func TestServePageShellCarriesTheListLink(t *testing.T) {
 	root := documentRoot(t)
 	handler := &server{defaultSource: source{kind: kindLocal}, rootDir: root, watchInterval: 1,
-		list: listSettings{Scope: "current"}}
+		list: render.ListSettings{Scope: "current"}}
 
 	// The link above a repository's documents leads back to the repositories of its project,
 	// carrying the settings the page was opened with.
-	beside := sidebars{List: listSettings{Scope: "current"},
+	beside := render.Sidebars{List: render.ListSettings{Scope: "current"},
 		Up: adoUpLink(source{kind: kindADO, organization: "my org", project: "my proj",
 			repository: "repo", path: "/docs/guide.md"})}
 	if !beside.HoldsList() {
 		t.Error("a list holding only the link above it is left out of the page")
 	}
 
-	page := string(renderPage("guide.md", "?path=/", 1000,
-		pageSettings{Sidebars: beside, ContentWidth: defaultContentWidth}))
+	page := string(render.Page("guide.md", "/content?path=/", 1000,
+		render.PageSettings{Sidebars: beside, ContentWidth: defaultContentWidth}))
 	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Browse to repositories</a>`; !strings.Contains(page, want) {
 		t.Errorf("the page does not hold %q: %q", want, page)
 	}
@@ -941,8 +943,8 @@ func TestServePageShellCarriesTheListLink(t *testing.T) {
 	up := adoUpLink(source{kind: kindADO, organization: "my org", project: "my proj",
 		repository: "repo"})
 	up.Label = "Back to projects"
-	page = string(renderPage("README.md", "?path=/", 1000, pageSettings{
-		Sidebars:     sidebars{List: listSettings{Scope: "current"}, Up: up},
+	page = string(render.Page("README.md", "/content?path=/", 1000, render.PageSettings{
+		Sidebars:     render.Sidebars{List: render.ListSettings{Scope: "current"}, Up: up},
 		ContentWidth: defaultContentWidth}))
 	if want := `<a class="up" href="/_/ado/my%20org/my%20proj">Back to projects</a>`; !strings.Contains(page, want) {
 		t.Errorf("the page does not hold %q: %q", want, page)
