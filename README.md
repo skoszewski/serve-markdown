@@ -20,21 +20,14 @@ tar -xzf serve-markdown-3.1.3-darwin-arm64.tar.gz
 ./serve-markdown --version
 ```
 
-The `build` workflow in `.github/workflows/build.yml` builds the browser assets,
-checks the formatting, vets and tests the sources on every push to `dev`, builds the
-executables for `darwin/arm64` and `windows/amd64`, and publishes them as the `dev-latest`
-prerelease, replacing the previous one, so they download from
-`https://github.com/skoszewski/serve-markdown/releases/download/dev-latest/serve-markdown-X.Y.Z-dev-YYYYMMDD-<goos>-<goarch>.tar.gz`
-(`.zip` for Windows).
-Such a build names itself `vX.Y.Z-dev-YYYYMMDD`: the latest release before it and its UTC
-build date; its files carry that version without the `v`. Pushing a semver tag with a leading
-`v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on `main` checks the sources, builds all six and
-publishes them as the release of that tag, with the tag's message as its notes; `main` is
-pushed before the tag, as `./release.mjs` does (see [Releasing](#releasing)). The tag must be
-the version of the newest `CHANGELOG.md` entry, and a prerelease version such as `v1.3.0-rc.1`
-is published as a GitHub prerelease.
+The `build` workflow in `.github/workflows/build.yml` runs for a pushed semver tag with a
+leading `v` - `v1.2.0`, `v1.3.0-rc.1` - on a commit on `main`, as `./release.mjs` pushes it (see
+[Releasing](#releasing)). It builds the browser assets, checks the formatting, vets and tests
+the sources, builds all six executables and publishes them as the release of that tag, with the
+tag's message as its notes. The tag must be the version of the newest `CHANGELOG.md` entry, and
+a prerelease version such as `v1.3.0-rc.1` is published as a GitHub prerelease.
 
-A release and `dev-latest` also carry `ServeMarkdown-<version>-windows-amd64.zip`: the Windows
+A release also carries `ServeMarkdown-<version>-windows-amd64.zip`: the Windows
 notification-area app `ServeMarkdown.exe` with `serve-markdown.exe` beside it, for Windows x64.
 The app is self-contained, carrying its own .NET runtime, so it is unzipped and run with nothing
 else installed. It is built on a Windows runner. They also carry
@@ -666,7 +659,7 @@ and PowerShell (`powershell`, `pwsh`, `ps`, `ps1`). Another language is one impo
 
 Neither directory is kept in the repository: `./build.mjs` builds them before the executable,
 the `build` workflow before every check and build, and the `Dockerfile` in a Node.js stage of
-its own. A release and `dev-latest` also carry `serve-markdown-assets-<version>.tar.gz`, the
+its own. A release also carries `serve-markdown-assets-<version>.tar.gz`, the
 contents of `render/assets/build/`, for programs drawing pages with the
 [render package](#the-render-package).
 
@@ -929,27 +922,29 @@ the app is rebuilt or moved. The app is registered from where it runs, so it is 
 blank lines, and the changes as a list. The newest entry not yet tagged collects the changes
 made since the last release.
 
-`./release.mjs`, run on `dev`, releases that entry:
+The repository holds `main` and a branch for each feature in progress; a feature is merged into
+`main` once it is done, and releases are made from `main`.
+
+`./release.mjs`, run on `main`, releases that entry:
 
 1. runs `./build.mjs check`;
 2. commits everything with the entry's summary line as the message, when anything is left to
    commit;
 3. makes the annotated tag `vx.y.z` with the entry as its message, which the workflow publishes
    as the release notes;
-4. fast-forwards `main` to `dev` and pushes both;
-5. waits for the build of the `dev` push, and pushes the tag once it has passed, which builds and
-   publishes the release.
+4. pushes `main` and the tag in one atomic push; the tag builds and publishes the release.
 
 ```sh
 ./release.mjs                  # release the newest CHANGELOG.md entry
 ./release.mjs -m "message"     # commit with another message
 ./release.mjs -n               # print the commands instead of running them
-./release.mjs --no-push        # commit, tag and move main, but push nothing
+./release.mjs --no-push        # commit and tag, but push nothing
 ```
 
 It refuses when the tag exists, locally or on GitHub, so a released entry is never released
-again; the next change needs a new entry. A failed build of `dev` stops it before the tag is
-pushed, the tag left on the local machine alone.
+again; the next change needs a new entry. A failed check of the tag's build publishes no
+release; the tag is deleted with `git push origin :vx.y.z` and `git tag -d vx.y.z` before
+releasing again.
 
 ## Licence
 

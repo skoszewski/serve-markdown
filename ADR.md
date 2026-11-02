@@ -353,9 +353,8 @@ unpacks without extra tools, holding the executable under its plain name, `serve
 `serve-markdown.exe`. A download keeps the executable bit of a tarball, so it runs once
 unpacked, where a bare executable downloaded from a release has to be marked executable first.
 The archive is uploaded as the artifact without a further zip around it (`archive: false`), so
-a run's artifact downloads as the archive itself. Every archive and app zip carries its version
-without the `v` - the tag's on a release, the dev version on `dev` - before the platform, so a
-downloaded file tells which build it is.
+a run's artifact downloads as the archive itself. Every archive and app zip carries the tag's
+version without the `v` before the platform, so a downloaded file tells which release it is.
 
 The release is made with the `gh` CLI the runner already carries, rather than with a
 third-party action, and only for a tag that is already pushed. Its notes are the message of the
@@ -369,14 +368,9 @@ an optional pre-release but cannot refuse leading zeros or empty identifiers, so
 job holds the tag to the semver grammar before publishing. Build metadata is refused, since Go
 does not take it in a version.
 
-A push to `dev` is built for `darwin/arm64` and `windows/amd64` alone, the platforms it is
-tried on, and published as one prerelease under the fixed tag `dev-latest`, so its release
-page never moves. The tag is not `dev`, which would make the name ambiguous with the branch.
-The prerelease is deleted with its tag and made again rather than moved, so the tag always
-points at the commit built, and it is never marked Latest. A dev build is given its version
-at link time with `-X main.buildVersion`, as `vX.Y.Z-dev-YYYYMMDD` from the latest release tag
-and the UTC build date, since the pseudo-version Go stamps on an untagged commit names the
-next patch release and does not read as a dev build.
+The workflow runs for a release tag alone. A push to a branch builds and publishes nothing: the
+only builds on GitHub are releases, and a build between releases is made on a developer's
+machine with `./build.mjs`.
 
 A release is refused for a tag whose commit is not on `main`, since `main` holds the stable
 code and releases are made from it.
@@ -392,10 +386,12 @@ release job refuses a tag that is not the version of the newest entry, so a tag 
 does not publish a release the changelog does not hold, and publishes a prerelease version as a
 GitHub prerelease, which is never marked Latest.
 
-`./release.mjs` is the only way a release is made. It moves `main` with `git fetch . dev:main`,
-so the working tree stays on `dev`, and pushes `dev` and `main` before the tag, waiting for the
-build of the `dev` push to pass: a pushed tag publishes a release that cannot be taken back,
-while a failed branch build costs only a commit, the tag still being on the local machine. A
+`./release.mjs` is the only way a release is made. The repository has no integration branch
+between the features and the releases: a feature is worked on in a branch of its own and merged
+into `main`, and the script releases from `main`, pushing it and the tag in one atomic push, so
+`main` does not move on GitHub without its tag. It runs `./build.mjs check` before committing, and
+the tag's build checks the sources again before publishing, so a check that fails there
+publishes nothing and costs only the tag. A
 tag is `v` and a semver version, the form Go reads a module version in, so an entry is
 `x.y.z` or a semver prerelease; a later release of the same code takes the next patch version,
 since `x.y.z-n` would be a prerelease ordered before `x.y.z`.
@@ -678,7 +674,7 @@ it will always launch a console window) and won't have an icon embedded", and th
 should be built on Windows. The job builds `serve-markdown.exe` beside the app and publishes
 the app self-contained, as a compressed single file carrying its own .NET runtime, so a user
 unzips `ServeMarkdown-<version>-windows-amd64.zip` and runs it with nothing installed. Like the
-executables, it is versioned from the tag, or as a dev build of the latest release on `dev`.
+executables, it is versioned from the tag.
 
 The macOS app is built by the `macos-app` job on an Apple silicon runner, which assembles and
 signs the bundle as `./build.mjs macos` does without `MACOS_SIGN_IDENTITY`: inside-out, ad hoc,
@@ -688,7 +684,7 @@ a yearly fee. Gatekeeper blocks an ad-hoc signed app that was downloaded through
 until the user allows it in System Settings or removes its quarantine attribute; SmartScreen
 warns about the unsigned Windows app in the same way.
 
-The `release` and `dev-release` jobs download every artifact of the run, the executables and
+The `release` job downloads every artifact of the run, the executables and
 the app zips alike, with `skip-decompress`: `download-artifact` unpacks an artifact served as a
 zip, so without it a release would carry the files of the app zip rather than the zip.
 

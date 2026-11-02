@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.5.2
+
+update: releases are made from main alone, and GitHub builds and publishes tagged releases alone.
+
+- The `dev` branch is gone: features are worked on in branches of their own and merged into
+  `main`.
+- The `build` workflow runs for a pushed release tag alone; the `dev-latest` prerelease is no
+  longer built.
+- `./release.mjs` is run on `main` and pushes `main` and the tag in one atomic push, instead of
+  moving `main` to `dev` and waiting for a build of `dev` before pushing the tag.
+
 ## 3.5.1
 
 fix: the page is drawn for tablets and phones, with the list and the outline as pop-overs.

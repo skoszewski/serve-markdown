@@ -376,7 +376,7 @@ html[data-theme="dark"] #_theme-toggle svg.dark {
 
 /* On a tablet the document is drawn with less room around it and smaller headings, and the
    sidebars are pop-overs over it, below the top row, each opened by its button for this page
-   alone. Their entries are drawn larger, to be touched. */
+   alone, and their entries are drawn larger. */
 @media screen and (max-width: 1023.98px) {
   body.with-sidebar #_columns {
     display: block;

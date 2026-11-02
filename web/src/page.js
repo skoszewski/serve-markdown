@@ -337,8 +337,8 @@ function closePopovers() {
   }
 }
 
-// A pop-over closes on a link followed in it, on a click outside it and on Escape, and when
-// the window grows wide enough for the sidebars.
+// A pop-over closes on a link followed in it, on a click outside it, on Escape, and when the
+// window is 1024px wide or wider.
 document.addEventListener("click", (event) => {
   if (event.target.closest("#_outline-toggle, #_list-toggle")) {
     return;

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-// Releases the newest CHANGELOG.md entry: checks the sources, commits everything on dev with the
-// entry's summary line, tags the commit vX.Y.Z with the entry as the release notes, moves main to
-// it, pushes dev and main, waits for their build, and pushes the tag once it has passed.
+// Releases the newest CHANGELOG.md entry: checks the sources, commits everything on main with the
+// entry's summary line, tags the commit vX.Y.Z with the entry as the release notes, and pushes
+// main and the tag together.
 
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -17,11 +17,11 @@ const usage = `Usage: release.mjs [-h|--help] [-n|--dry-run] [--no-push] [-m|--m
   -m, --message  commit message; default: the summary line of the newest CHANGELOG.md entry,
                  the line between blank lines right after its "## x.y.z" heading
   -n, --dry-run  print the commands instead of running them
-  --no-push      commit, tag and move main, but do not push
+  --no-push      commit and tag, but do not push
 
 The tag is v and the version of the heading, x.y.z or a semver prerelease such as x.y.z-rc.1; its
 message, and so the GitHub release notes, is the entry below the heading. The release is made from
-dev: dev and main are pushed first, and the tag only once the build of the dev push has passed.`;
+main: main and the tag are pushed in one atomic push.`;
 
 const { values } = parseArgs({
   options: {
@@ -82,7 +82,7 @@ if (!message) {
   fail(`no commit message: pass -m, or put a summary line between blank lines right after the newest heading of ${CHANGELOG}`);
 }
 
-if (read('git', 'branch', '--show-current') !== 'dev') fail('a release is made from dev');
+if (read('git', 'branch', '--show-current') !== 'main') fail('a release is made from main');
 if (spawnSync('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`], { cwd: import.meta.dirname }).status === 0 ||
   read('git', 'ls-remote', '--tags', 'origin', `refs/tags/${tag}`) !== '') {
   fail(`tag ${tag} exists; add a new CHANGELOG.md entry first`);
@@ -103,26 +103,6 @@ try {
 } finally {
   rmSync(notesDir, { recursive: true, force: true });
 }
-run('git', 'fetch', '.', 'dev:main');
 if (values['no-push']) process.exit(0);
 
-run('git', 'push', '--atomic', 'origin', 'dev', 'main');
-
-// The build of the dev push is found by its commit, and the tag waits for it to pass.
-if (values['dry-run']) {
-  console.log('gh run watch <the run of the dev push> --exit-status');
-} else {
-  const commit = read('git', 'rev-parse', 'HEAD');
-  let id = '';
-  for (let attempt = 0; attempt < 60 && id === ''; attempt++) {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000);
-    id = read('gh', 'run', 'list', '--commit', commit, '--branch', 'dev', '--json', 'databaseId', '--jq', '.[0].databaseId // ""');
-  }
-  if (id === '') fail(`no build started for ${commit} on dev; the tag ${tag} is on this machine alone`);
-  console.log(`release: waiting for the build of dev, run ${id}`);
-  if (spawnSync('gh', ['run', 'watch', id, '--exit-status', '--compact', '--interval', '30'], { cwd: import.meta.dirname, stdio: 'inherit' }).status !== 0) {
-    fail(`the build of dev failed (gh run view ${id} --log-failed); the tag ${tag} is on this machine alone: ` +
-      `fix it, delete the tag with "git tag -d ${tag}" and release again`);
-  }
-}
-run('git', 'push', 'origin', tag);
+run('git', 'push', '--atomic', 'origin', 'main', tag);
