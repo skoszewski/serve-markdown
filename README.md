@@ -265,7 +265,8 @@ http://127.0.0.1:8000/docs/guide.md?outline=style:nh,justify:right
 http://127.0.0.1:8000/docs/guide.md?outline=style:none
 ```
 
-The outline follows the document as it is re-read, and moves above it on a narrow window.
+The outline follows the document as it is re-read. On a tablet or a phone it is a pop-over
+over the document (see [Tablets and phones](#tablets-and-phones)).
 
 Every page carries a top row above the sidebars and the document, holding the control buttons
 on its right, after the server's name and version, `Serve Markdown v2.3.0`: the list button first, on a page with a directory list (see
@@ -610,10 +611,31 @@ the configuration file; a page takes no query parameter for it.
 |---|---|
 | `all` | the line under the top row and the lines along the sidebars |
 | `top` | the line under the top row alone |
-| `side` | the lines along the sidebars alone, and between them on a narrow window |
+| `side` | the lines along the sidebars alone |
 | `hidden` | none |
 
 A line left out keeps its room, so nothing moves between the values.
+
+### Tablets and phones
+
+The page is drawn at three sizes, by the width of the browser's window:
+
+| Window | Drawn as | Document padding | Headings `h1` / `h2` / `h3` |
+|---|---|---|---|
+| 1024px and wider | a desktop | 45px | 2em / 1.5em / 1.25em |
+| 768px to 1023px | a tablet, such as an iPad held upright | 30px | 1.875em / 1.4375em / 1.25em |
+| under 768px | a phone | 15px | 1.75em / 1.375em / 1.125em |
+
+The document's text is 16px at every size. On a tablet and a phone the list and the outline
+are pop-overs over the document, below the top row. The list opens from the left, and the
+outline opens from the side `justify` gives it. On a phone a pop-over takes the whole width.
+Each sidebar's button opens and closes its pop-over, and opening one closes the other. A
+pop-over closes when a link in it is followed, on a click outside it, and on Escape. Every page
+starts with both closed, and the shown or hidden choice made on a wider window is kept for when
+the window is wide again. On a phone the top row holds the document's title on its left and
+leaves out the server's name and version.
+
+A page printed, or exported with `--pdf`, is drawn as on a desktop, whatever the paper's width.
 
 With `--mermaid`, a fenced `mermaid` block is drawn as a diagram by
 [mermaid](https://github.com/mermaid-js/mermaid), in the theme that preference asks for. The

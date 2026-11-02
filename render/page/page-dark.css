@@ -57,8 +57,9 @@ body.outline-right #_outline {
   color: #c9d1d9;
 }
 
-@media (max-width: 900px) {
+@media screen and (max-width: 1023.98px) {
   nav.sidebar {
-    border-bottom-color: #30363d;
+    background-color: #0d1117;
+    box-shadow: 0 8px 24px #010409;
   }
 }

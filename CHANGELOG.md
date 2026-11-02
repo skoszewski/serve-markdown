@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.5.1
+
+fix: the page is drawn for tablets and phones, with the list and the outline as pop-overs.
+
+- A phone draws the page at its own width instead of shrinking a desktop page.
+- Under 1024px the document's padding and headings are smaller, and again under 768px; the
+  text stays 16px.
+- Under 1024px the list and the outline are pop-overs over the document, opened by their
+  buttons, one at a time, and closed by a link followed in them, a click outside them or
+  Escape. Every page starts with both closed, and the choice made on a wide window is kept.
+- On a phone the top row holds the title on its left and leaves out the server's name and
+  version.
+- A printed page and a `--pdf` export are drawn as on a desktop.
+
 ## 3.5.0
 
 feature: the render package draws documents as the server's pages for other Go programs, and releases carry the page's assets.

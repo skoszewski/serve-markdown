@@ -1,6 +1,8 @@
 html {
   --top-height: 40px;
   scroll-padding-top: var(--top-height);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -372,21 +374,123 @@ html[data-theme="dark"] #_theme-toggle svg.dark {
   display: block;
 }
 
-/* Too narrow to stand beside the document, the sidebars go above it. */
-@media (max-width: 900px) {
+/* On a tablet the document is drawn with less room around it and smaller headings, and the
+   sidebars are pop-overs over it, below the top row, each opened by its button for this page
+   alone. Their entries are drawn larger, to be touched. */
+@media screen and (max-width: 1023.98px) {
   body.with-sidebar #_columns {
     display: block;
   }
 
-  nav.sidebar,
-  body.outline-right #_outline {
-    position: static;
-    flex: none;
+  nav.sidebar {
+    position: fixed;
+    top: var(--top-height);
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    display: none;
+    width: 320px;
+    max-width: 85vw;
     max-height: none;
     padding: 20px;
-    border-right: none;
-    border-left: none;
-    border-bottom: 1px solid #d0d7de;
+    background-color: #ffffff;
+    box-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+    font-size: 1rem;
+  }
+
+  body.outline-right #_outline {
+    right: 0;
+    left: auto;
+  }
+
+  html.list-open #_list,
+  html.outline-open #_outline {
+    display: block;
+  }
+
+  nav.sidebar li > a {
+    display: inline-block;
+    padding: 8px 0;
+  }
+
+  #_list-toggle .panel,
+  #_outline-toggle .panel {
+    display: none;
+  }
+
+  html.list-open #_list-toggle .panel,
+  html.outline-open #_outline-toggle .panel {
+    display: inline;
+  }
+
+  #_heading {
+    font-size: 1.125rem;
+  }
+
+  .markdown-body {
+    padding: 30px;
+  }
+
+  #_versions {
+    padding: 20px 30px 0;
+  }
+
+  .markdown-body h1 {
+    font-size: 1.875em;
+  }
+
+  .markdown-body h2 {
+    font-size: 1.4375em;
+  }
+}
+
+/* On a phone the document has the least room around it and the smallest headings, the top
+   row holds the title on its left and the buttons alone on its right, and a sidebar takes the
+   whole width. */
+@media screen and (max-width: 767.98px) {
+  #_top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    padding: 0 12px;
+  }
+
+  #_heading {
+    grid-column: 1;
+    font-size: 1rem;
+    text-align: left;
+  }
+
+  #_controls {
+    grid-column: 2;
+  }
+
+  #_banner {
+    display: none;
+  }
+
+  nav.sidebar {
+    width: 100%;
+    max-width: none;
+  }
+
+  .markdown-body {
+    padding: 15px;
+  }
+
+  #_versions {
+    padding: 15px 15px 0;
+  }
+
+  .markdown-body h1 {
+    font-size: 1.75em;
+  }
+
+  .markdown-body h2 {
+    font-size: 1.375em;
+  }
+
+  .markdown-body h3 {
+    font-size: 1.125em;
   }
 }
 

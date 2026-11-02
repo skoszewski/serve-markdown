@@ -38,6 +38,7 @@ func TestPageNamesItsAssetsUnderThePrefix(t *testing.T) {
 	page := string(Page("guide.md", "/docs/_/content?path=%2Fdocs%2F", 0,
 		PageSettings{AssetPrefix: "/docs/_/", Banner: "Docs", Mermaid: true}))
 	for _, want := range []string{
+		`<meta name="viewport" content="width=device-width, initial-scale=1">`,
 		`href="/docs/_/assets/github-markdown-light.css"`,
 		`href="/docs/_/page/page.css"`,
 		`src="/docs/_/assets/page.js"`,

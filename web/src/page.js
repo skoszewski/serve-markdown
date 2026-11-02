@@ -319,11 +319,52 @@ new ResizeObserver(() => {
 drawVersions();
 poll();
 
+// On a tablet or a phone the sidebars are pop-overs over the document, opened on this page
+// alone and one at a time.
+const root = document.documentElement;
+const narrow = window.matchMedia("(max-width: 1023.98px)");
+
+/**
+ * Closes the open pop-over, and has each sidebar's button tell whether the sidebar is shown.
+ */
+function closePopovers() {
+  root.classList.remove("outline-open", "list-open");
+  if (outlineToggle !== null) {
+    outlineToggle.setAttribute("aria-expanded", String(!narrow.matches && !root.classList.contains("outline-hidden")));
+  }
+  if (listToggle !== null) {
+    listToggle.setAttribute("aria-expanded", String(!narrow.matches && !root.classList.contains("list-hidden")));
+  }
+}
+
+// A pop-over closes on a link followed in it, on a click outside it and on Escape, and when
+// the window grows wide enough for the sidebars.
+document.addEventListener("click", (event) => {
+  if (event.target.closest("#_outline-toggle, #_list-toggle")) {
+    return;
+  }
+  if (!event.target.closest("nav.sidebar") || event.target.closest("nav.sidebar a")) {
+    closePopovers();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closePopovers();
+  }
+});
+narrow.addEventListener("change", closePopovers);
+
 // The outline is shown or hidden on every page of this server alike, as it was last left.
 if (outlineToggle !== null) {
-  const root = document.documentElement;
-  outlineToggle.setAttribute("aria-expanded", String(!root.classList.contains("outline-hidden")));
+  outlineToggle.setAttribute("aria-expanded", String(!narrow.matches && !root.classList.contains("outline-hidden")));
   outlineToggle.addEventListener("click", () => {
+    if (narrow.matches) {
+      const open = !root.classList.contains("outline-open");
+      closePopovers();
+      root.classList.toggle("outline-open", open);
+      outlineToggle.setAttribute("aria-expanded", String(open));
+      return;
+    }
     const hidden = root.classList.toggle("outline-hidden");
     outlineToggle.setAttribute("aria-expanded", String(!hidden));
     try {
@@ -333,9 +374,15 @@ if (outlineToggle !== null) {
 }
 // The list is shown or hidden on every page of this server alike, as it was last left.
 if (listToggle !== null) {
-  const root = document.documentElement;
-  listToggle.setAttribute("aria-expanded", String(!root.classList.contains("list-hidden")));
+  listToggle.setAttribute("aria-expanded", String(!narrow.matches && !root.classList.contains("list-hidden")));
   listToggle.addEventListener("click", () => {
+    if (narrow.matches) {
+      const open = !root.classList.contains("list-open");
+      closePopovers();
+      root.classList.toggle("list-open", open);
+      listToggle.setAttribute("aria-expanded", String(open));
+      return;
+    }
     const hidden = root.classList.toggle("list-hidden");
     listToggle.setAttribute("aria-expanded", String(!hidden));
     try {

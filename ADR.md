@@ -713,3 +713,26 @@ it supplies them: the sub package `render/assets` embeds them for a build from a
 the server is, and each release publishes them as `serve-markdown-assets-<version>.tar.gz` for
 a program built from the module, which `go` fetches without them. The editor's built files stay
 in `assets/build/`, beside the page's under `/_/assets/`.
+
+## The page is drawn for desktops, tablets and phones by CSS breakpoints
+
+The page is one shell for every device, drawn at three sizes by `media` queries rather than
+served as a separate page picked by the browser's user agent. A window reports its own width,
+a narrow desktop window is drawn as a phone would be, and `render` keeps one template. The page
+declares the device's width as its viewport, so a phone draws it at its own width rather than
+as a desktop shrunk down.
+
+The breakpoints are the ones Bootstrap and Tailwind use, 768px and 1024px, which put an iPad
+held upright among the tablets and every iPhone among the phones. The document's text stays
+16px at every size: Apple's and Google's guidelines read nothing smaller as body text, and iOS
+zooms in on smaller text. The padding and the headings step down instead, as Bootstrap's
+responsive font sizes do, and the padding on a phone is the 15px github-markdown-css gives for
+that width. The rules apply to `screen` alone, since a page printed to paper narrower than
+768px would otherwise be drawn as a phone.
+
+Below 1024px a 320px sidebar leaves too little of the width to the document, so the list and
+the outline are pop-overs over it, below the top row, with entries large enough to touch. A
+pop-over is open for that page alone and is never stored, so a page opened from its link does
+not start covered. The reader's shown or hidden choice for a wide window is kept apart from it,
+in the classes and `localStorage` it already had, so it stands again once the window is wide.
+The page script reads the same 1024px breakpoint to tell which of the two a button acts on.
