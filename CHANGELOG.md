@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.5.4
+
+fix: the page is built with DOMPurify 3.4.17, which fixes three published advisories, and a release carries the SHA-256 of its assets archive.
+
+- The browser files of the page bundle DOMPurify 3.4.17 in place of 3.4.16, for the advisories
+  GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and GHSA-c6gr-qvv4-5v3f.
+- A release has the file `serve-markdown-assets-<version>.tar.gz.sha256`, the SHA-256 of the
+  assets archive as `sha256sum` writes it.
+
 ## 3.5.3
 
 fix: the label of a top-level group of the menu stands out from its entries.

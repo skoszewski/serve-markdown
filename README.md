@@ -661,7 +661,8 @@ Neither directory is kept in the repository: `./build.mjs` builds them before th
 the `build` workflow before every check and build, and the `Dockerfile` in a Node.js stage of
 its own. A release also carries `serve-markdown-assets-<version>.tar.gz`, the
 contents of `render/assets/build/`, for programs drawing pages with the
-[render package](#the-render-package).
+[render package](#the-render-package), and `serve-markdown-assets-<version>.tar.gz.sha256`, its
+SHA-256 as `sha256sum` writes it, which `sha256sum -c` checks.
 
 ### The render package
 

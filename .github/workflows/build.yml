@@ -114,10 +114,16 @@ jobs:
           archive="serve-markdown-assets-$version.tar.gz"
           mkdir -p dist
           tar -czf "dist/$archive" -C render/assets/build .
+          (cd dist && sha256sum "$archive" > "$archive.sha256")
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
           path: dist/${{ steps.archive.outputs.archive }}
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/${{ steps.archive.outputs.archive }}.sha256
           archive: false
           if-no-files-found: error
 
