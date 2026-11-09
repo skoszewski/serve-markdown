@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.5.3
+
+fix: the label of a top-level group of the menu stands out from its entries.
+
+- The label of a group at the top level of the menu is 1.3 times the size of the text, in place
+  of 1.15, still below the title, the menu's first entry.
+
 ## 3.5.2
 
 update: releases are made from main alone, and GitHub builds and publishes tagged releases alone.
